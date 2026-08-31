@@ -22,9 +22,10 @@ export interface VistoriaItem {
   hospital: string
   categoria: string
   possuiSistema?: 'Sim' | 'Não' | '' | null
+  servicoPeriodico?: 'Sim' | 'Não' | '' | null
   prestadorServico?: string
   numeroArt?: string
-  comprovanteEntregue?: 'Sim' | 'Não' | '' | null
+  fotos?: string[]
   dataUltimaVerificacao?: string | null
   situacaoCalculada?: SituacaoChecklist
   created: string
@@ -37,32 +38,42 @@ export interface VistoriaItem {
 
 export interface VistoriaItemFormData {
   possuiSistema?: 'Sim' | 'Não' | '' | null
+  servicoPeriodico?: 'Sim' | 'Não' | '' | null
   prestadorServico?: string
   numeroArt?: string
-  comprovanteEntregue?: 'Sim' | 'Não' | '' | null
+  fotos?: string[]
   dataUltimaVerificacao?: string | null
 }
 
 /**
- * Calculates checklist item situation with exact precedence:
- * Precedência clara:
+ * Helper to get public URL for a photo file on a record
+ */
+export function getVistoriaItemPhotoUrl(
+  record: { id: string; collectionId?: string; collectionName?: string },
+  filename: string,
+): string {
+  return pb.files.getURL(record, filename)
+}
+
+/**
+ * Calculates checklist item situation:
+ * Precedência:
  * 1. "Não" -> "não se aplica"
- * 2. Se não respondeu ("Sim" ou "Não"), retorna null (não avaliado)
+ * 2. Se não respondeu possuiSistema ("Sim" ou "Não"), retorna null (não avaliado)
  * 3. Se possui ("Sim"):
- *    a. "pendente" - se falta ART exigida (exigeArt=true e !numeroArt?.trim()) OU se comprovante não foi entregue (comprovanteEntregue !== 'Sim')
- *    b. "vencido" - se a categoria tem periodicidadeDias e a data da última verificação não foi informada ou passou da periodicidade (dias passados > periodicidadeDias)
- *    c. "conforme" - se passou por todas as verificações acima com sucesso
+ *    a. "vencido" - se a categoria ou serviço é periódico com periodicidadeDias > 0 e a data da última verificação passou da periodicidade ou não foi informada
+ *    b. "conforme" - preenchido e regular
  */
 export function calculateItemSituacao(
   data: {
     possuiSistema?: 'Sim' | 'Não' | '' | null
+    servicoPeriodico?: 'Sim' | 'Não' | '' | null
     prestadorServico?: string
     numeroArt?: string
-    comprovanteEntregue?: 'Sim' | 'Não' | '' | null
     dataUltimaVerificacao?: string | null
   },
   categoria: {
-    exigeArt: boolean
+    exigeArt?: boolean
     periodicidadeDias?: number | null
   },
 ): SituacaoChecklist {
@@ -75,22 +86,14 @@ export function calculateItemSituacao(
   }
 
   // Hospital possui o sistema ("Sim")
+  // Se a categoria tem periodicidade fixa definida (> 0) OU se o usuário marcou que o serviço é feito periodicamente
+  const periodicidadeExigida = Boolean(
+    categoria.periodicidadeDias && categoria.periodicidadeDias > 0,
+  )
 
-  // Check pendente:
-  // - Falta ART exigida
-  const faltaArt = categoria.exigeArt && (!data.numeroArt || data.numeroArt.trim().length === 0)
-  // - Comprovante não foi entregue no ato da fiscalização
-  const comprovanteNaoEntregue = data.comprovanteEntregue !== 'Sim'
-
-  if (faltaArt || comprovanteNaoEntregue) {
-    return 'pendente'
-  }
-
-  // Check vencido:
-  // Se a categoria tiver periodicidadeDias preenchido (> 0)
-  if (categoria.periodicidadeDias && categoria.periodicidadeDias > 0) {
+  if (periodicidadeExigida) {
     if (!data.dataUltimaVerificacao) {
-      // Periodicidade exigida mas data não informada
+      // Periodicidade exigida pela categoria técnica mas data não informada
       return 'vencido'
     }
 
@@ -100,11 +103,10 @@ export function calculateItemSituacao(
     }
 
     const today = new Date()
-    // Difference in milliseconds
     const diffMs = today.getTime() - verificacaoDate.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-    if (diffDays > categoria.periodicidadeDias) {
+    if (categoria.periodicidadeDias && diffDays > categoria.periodicidadeDias) {
       return 'vencido'
     }
   }
@@ -181,26 +183,117 @@ export const vistoriasService = {
   },
 
   /**
-   * Save or update a checklist item
+   * Create a new vistoria for a hospital (allows multiple vistorias over time or for a specific inspection)
+   */
+  async createVistoria(hospitalId: string, observacoes?: string): Promise<Vistoria> {
+    return await pb.collection('vistorias').create<Vistoria>(
+      {
+        hospital: hospitalId,
+        status: 'em_andamento',
+        observacoes: observacoes || '',
+      },
+      {
+        expand: 'hospital',
+      },
+    )
+  },
+
+  /**
+   * Get all open vistorias with expanded hospital data
+   */
+  async getOpenVistorias(): Promise<Vistoria[]> {
+    return await pb.collection('vistorias').getFullList<Vistoria>({
+      filter: 'status = "em_andamento"',
+      sort: '-created',
+      expand: 'hospital',
+    })
+  },
+
+  /**
+   * Save or update a checklist item, with support for File upload (FormData)
    */
   async saveItem(
     vistoriaId: string,
     hospitalId: string,
     categoriaId: string,
     formData: VistoriaItemFormData,
-    categoria: { exigeArt: boolean; periodicidadeDias?: number | null },
+    categoria: { exigeArt?: boolean; periodicidadeDias?: number | null },
     existingItemId?: string,
+    newFiles?: File[],
+    deletedFileNames?: string[],
   ): Promise<VistoriaItem> {
     const situacao = calculateItemSituacao(formData, categoria)
 
+    // If newFiles or deletedFileNames are present, we use multipart FormData
+    if ((newFiles && newFiles.length > 0) || (deletedFileNames && deletedFileNames.length > 0)) {
+      const data = new FormData()
+      data.append('vistoria', vistoriaId)
+      data.append('hospital', hospitalId)
+      data.append('categoria', categoriaId)
+      if (formData.possuiSistema) data.append('possuiSistema', formData.possuiSistema)
+      if (formData.servicoPeriodico) data.append('servicoPeriodico', formData.servicoPeriodico)
+      data.append(
+        'prestadorServico',
+        formData.prestadorServico ? formData.prestadorServico.trim() : '',
+      )
+      data.append('numeroArt', formData.numeroArt ? formData.numeroArt.trim() : '')
+      if (formData.dataUltimaVerificacao) {
+        data.append('dataUltimaVerificacao', formData.dataUltimaVerificacao)
+      }
+      if (situacao) {
+        data.append('situacaoCalculada', situacao)
+      }
+
+      // Append new files
+      if (newFiles) {
+        for (const file of newFiles) {
+          data.append('fotos', file)
+        }
+      }
+
+      // Handle deleted files in PocketBase: pass 'fotos-' for each removed filename
+      if (deletedFileNames) {
+        for (const name of deletedFileNames) {
+          data.append('fotos-', name)
+        }
+      }
+
+      if (existingItemId) {
+        return await pb.collection('vistoria_itens').update<VistoriaItem>(existingItemId, data, {
+          expand: 'categoria,hospital',
+        })
+      }
+
+      // Check if item exists
+      try {
+        const existing = await pb.collection('vistoria_itens').getList<VistoriaItem>(1, 1, {
+          filter: `vistoria = "${vistoriaId}" && categoria = "${categoriaId}"`,
+        })
+        if (existing.items.length > 0) {
+          return await pb
+            .collection('vistoria_itens')
+            .update<VistoriaItem>(existing.items[0].id, data, {
+              expand: 'categoria,hospital',
+            })
+        }
+      } catch {
+        // Continue to create
+      }
+
+      return await pb.collection('vistoria_itens').create<VistoriaItem>(data, {
+        expand: 'categoria,hospital',
+      })
+    }
+
+    // Standard JSON payload
     const payload: Record<string, unknown> = {
       vistoria: vistoriaId,
       hospital: hospitalId,
       categoria: categoriaId,
       possuiSistema: formData.possuiSistema || null,
+      servicoPeriodico: formData.servicoPeriodico || null,
       prestadorServico: formData.prestadorServico ? formData.prestadorServico.trim() : '',
       numeroArt: formData.numeroArt ? formData.numeroArt.trim() : '',
-      comprovanteEntregue: formData.comprovanteEntregue || null,
       dataUltimaVerificacao: formData.dataUltimaVerificacao || null,
       situacaoCalculada: situacao,
     }
@@ -228,6 +321,30 @@ export const vistoriasService = {
     }
 
     return await pb.collection('vistoria_itens').create<VistoriaItem>(payload, {
+      expand: 'categoria,hospital',
+    })
+  },
+
+  /**
+   * Upload single/multiple photos to an existing vistoria item
+   */
+  async uploadItemPhotos(itemId: string, files: File[]): Promise<VistoriaItem> {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('fotos', file)
+    }
+    return await pb.collection('vistoria_itens').update<VistoriaItem>(itemId, formData, {
+      expand: 'categoria,hospital',
+    })
+  },
+
+  /**
+   * Remove a specific photo filename from an item
+   */
+  async deleteItemPhoto(itemId: string, filename: string): Promise<VistoriaItem> {
+    const formData = new FormData()
+    formData.append('fotos-', filename)
+    return await pb.collection('vistoria_itens').update<VistoriaItem>(itemId, formData, {
       expand: 'categoria,hospital',
     })
   },

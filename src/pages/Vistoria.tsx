@@ -12,13 +12,16 @@ import {
   FileCheck2,
   RefreshCw,
   ArrowRight,
-  ShieldAlert,
   Save,
   Check,
   Clock,
-  Sparkles,
   Search,
-  ExternalLink,
+  Plus,
+  ArrowLeft,
+  SlidersHorizontal,
+  ClipboardList,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react'
 import {
   Accordion,
@@ -38,7 +41,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
@@ -50,11 +52,16 @@ import {
   SituacaoChecklist,
   calculateItemSituacao,
 } from '@/services/vistorias'
+import { PhotoUploadSection } from '@/components/PhotoUploadSection'
+import { NovaVistoriaDialog } from '@/components/NovaVistoriaDialog'
+import { VistoriaCard } from '@/components/VistoriaCard'
 
 interface CategoryFormState extends VistoriaItemFormData {
   itemId?: string
   isDirty?: boolean
   isSaving?: boolean
+  pendingFiles?: File[]
+  deletedFileNames?: string[]
 }
 
 export default function VistoriaPage() {
@@ -66,8 +73,12 @@ export default function VistoriaPage() {
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [categorias, setCategorias] = useState<CategoriaVistoria[]>([])
   const [vistorias, setVistorias] = useState<Vistoria[]>([])
+  const [allVistoriaItens, setAllVistoriaItens] = useState<VistoriaItem[]>([])
 
-  // Selection state
+  // Modal: Nova Vistoria
+  const [isNovaVistoriaOpen, setIsNovaVistoriaOpen] = useState(false)
+
+  // Current Mode: 'list' (all open vistorias) vs 'checklist' (active vistoria inspection)
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>('')
   const [activeVistoria, setActiveVistoria] = useState<Vistoria | null>(null)
 
@@ -79,12 +90,13 @@ export default function VistoriaPage() {
   const [isLoadingVistoria, setIsLoadingVistoria] = useState(false)
   const [openAccordionValues, setOpenAccordionValues] = useState<string[]>([])
   const [filterSituacao, setFilterSituacao] = useState<string>('todos')
+  const [searchVistoriaQuery, setSearchVistoriaQuery] = useState('')
 
   useEffect(() => {
     document.title = 'Vistoria · CREA-PI Fiscalização'
   }, [])
 
-  // 1. Initial Load of Hospitais, Categorias, and existing Vistorias
+  // 1. Initial Load of Hospitais, Categorias, and existing Vistorias + Itens
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoadingInitial(true)
@@ -98,30 +110,18 @@ export default function VistoriaPage() {
       setCategorias(catList)
       setVistorias(vistList)
 
-      // Determine initial selection
+      // Determine if a specific vistoria or hospital was requested in URL
       const paramHospitalId = searchParams.get('hospitalId')
       const paramVistoriaId = searchParams.get('vistoriaId')
 
-      let targetHospitalId = ''
-
-      if (paramHospitalId && hospList.some((h) => h.id === paramHospitalId)) {
-        targetHospitalId = paramHospitalId
-      } else if (paramVistoriaId) {
-        const foundVistoria = vistList.find((v) => v.id === paramVistoriaId)
-        if (foundVistoria) {
-          targetHospitalId = foundVistoria.hospital
+      if (paramVistoriaId) {
+        const found = vistList.find((v) => v.id === paramVistoriaId)
+        if (found) {
+          setSelectedHospitalId(found.hospital)
+          setActiveVistoria(found)
         }
-      }
-
-      // If no valid param but we have vistorias or hospitais, select the first vistoria's hospital
-      if (!targetHospitalId && vistList.length > 0) {
-        targetHospitalId = vistList[0].hospital
-      } else if (!targetHospitalId && hospList.length > 0) {
-        targetHospitalId = hospList[0].id
-      }
-
-      if (targetHospitalId) {
-        setSelectedHospitalId(targetHospitalId)
+      } else if (paramHospitalId && hospList.some((h) => h.id === paramHospitalId)) {
+        setSelectedHospitalId(paramHospitalId)
       }
     } catch (err) {
       console.error('Erro ao carregar dados iniciais de vistoria:', err)
@@ -139,9 +139,9 @@ export default function VistoriaPage() {
     loadInitialData()
   }, [loadInitialData])
 
-  // 2. When selectedHospitalId changes, fetch or create its vistoria and load items
+  // 2. Load checklist items when an active vistoria or hospital is chosen
   const loadVistoriaForHospital = useCallback(
-    async (hospitalId: string) => {
+    async (hospitalId: string, specificVistoriaId?: string) => {
       if (!hospitalId) {
         setActiveVistoria(null)
         setItemsMap({})
@@ -150,10 +150,17 @@ export default function VistoriaPage() {
 
       try {
         setIsLoadingVistoria(true)
-        const vistoria = await vistoriasService.getOrCreateForHospital(hospitalId)
+        let vistoria: Vistoria | null = null
+
+        if (specificVistoriaId) {
+          vistoria = await vistoriasService.getById(specificVistoriaId)
+        } else {
+          vistoria = await vistoriasService.getOrCreateForHospital(hospitalId)
+        }
+
         setActiveVistoria(vistoria)
 
-        // Update URL query param quietly without page reload
+        // Update URL query param quietly without reload
         setSearchParams(
           (prev) => {
             const next = new URLSearchParams(prev)
@@ -175,22 +182,28 @@ export default function VistoriaPage() {
             newMap[cat.id] = {
               itemId: existingItem.id,
               possuiSistema: existingItem.possuiSistema || null,
+              servicoPeriodico: existingItem.servicoPeriodico || null,
               prestadorServico: existingItem.prestadorServico || '',
               numeroArt: existingItem.numeroArt || '',
-              comprovanteEntregue: existingItem.comprovanteEntregue || null,
+              fotos: existingItem.fotos || [],
               dataUltimaVerificacao: existingItem.dataUltimaVerificacao
                 ? existingItem.dataUltimaVerificacao.substring(0, 10)
                 : '',
+              pendingFiles: [],
+              deletedFileNames: [],
               isDirty: false,
               isSaving: false,
             }
           } else {
             newMap[cat.id] = {
               possuiSistema: null,
+              servicoPeriodico: null,
               prestadorServico: '',
               numeroArt: '',
-              comprovanteEntregue: null,
+              fotos: [],
               dataUltimaVerificacao: '',
+              pendingFiles: [],
+              deletedFileNames: [],
               isDirty: false,
               isSaving: false,
             }
@@ -198,7 +211,7 @@ export default function VistoriaPage() {
         })
         setItemsMap(newMap)
 
-        // Refresh vistorias list so the selector stays updated
+        // Refresh vistorias list so the cards & list stay updated
         const updatedVistorias = await vistoriasService.getAll()
         setVistorias(updatedVistorias)
       } catch (err) {
@@ -217,16 +230,36 @@ export default function VistoriaPage() {
 
   useEffect(() => {
     if (selectedHospitalId && categorias.length > 0) {
-      loadVistoriaForHospital(selectedHospitalId)
+      const paramVistoriaId = searchParams.get('vistoriaId') || undefined
+      loadVistoriaForHospital(selectedHospitalId, paramVistoriaId)
     }
-  }, [selectedHospitalId, categorias.length, loadVistoriaForHospital])
+  }, [selectedHospitalId, categorias.length, loadVistoriaForHospital, searchParams])
 
   // Active hospital object
   const activeHospital = useMemo(() => {
     return hospitais.find((h) => h.id === selectedHospitalId) || null
   }, [hospitais, selectedHospitalId])
 
-  // Calculation of summary counts
+  // Open vistorias (status === 'em_andamento' or undefined)
+  const openVistorias = useMemo(() => {
+    return vistorias.filter((v) => !v.status || v.status === 'em_andamento')
+  }, [vistorias])
+
+  // Filtered open vistorias by search query
+  const filteredOpenVistorias = useMemo(() => {
+    if (!searchVistoriaQuery.trim()) return openVistorias
+    const term = searchVistoriaQuery.toLowerCase()
+    return openVistorias.filter((v) => {
+      const hosp = v.expand?.hospital || hospitais.find((h) => h.id === v.hospital)
+      return (
+        hosp?.nome?.toLowerCase().includes(term) ||
+        hosp?.municipio?.toLowerCase().includes(term) ||
+        hosp?.cnes?.toLowerCase().includes(term)
+      )
+    })
+  }, [openVistorias, searchVistoriaQuery, hospitais])
+
+  // Calculation of summary counts for active checklist
   const checklistSummary = useMemo(() => {
     let total = categorias.length
     let naoSeAplica = 0
@@ -265,10 +298,13 @@ export default function VistoriaPage() {
       setItemsMap((prev) => {
         const current = prev[categoriaId] || {
           possuiSistema: null,
+          servicoPeriodico: null,
           prestadorServico: '',
           numeroArt: '',
-          comprovanteEntregue: null,
+          fotos: [],
           dataUltimaVerificacao: '',
+          pendingFiles: [],
+          deletedFileNames: [],
         }
         return {
           ...prev,
@@ -282,6 +318,55 @@ export default function VistoriaPage() {
     },
     [],
   )
+
+  // Photo helpers for a category
+  const handleAddPhotos = (categoriaId: string, newFiles: File[]) => {
+    setItemsMap((prev) => {
+      const current = prev[categoriaId] || {}
+      const existingPending = current.pendingFiles || []
+      return {
+        ...prev,
+        [categoriaId]: {
+          ...current,
+          pendingFiles: [...existingPending, ...newFiles],
+          isDirty: true,
+        },
+      }
+    })
+  }
+
+  const handleRemovePendingPhoto = (categoriaId: string, index: number) => {
+    setItemsMap((prev) => {
+      const current = prev[categoriaId] || {}
+      const pending = [...(current.pendingFiles || [])]
+      pending.splice(index, 1)
+      return {
+        ...prev,
+        [categoriaId]: {
+          ...current,
+          pendingFiles: pending,
+          isDirty: true,
+        },
+      }
+    })
+  }
+
+  const handleDeleteExistingPhoto = (categoriaId: string, photoName: string) => {
+    setItemsMap((prev) => {
+      const current = prev[categoriaId] || {}
+      const existing = (current.fotos || []).filter((f) => f !== photoName)
+      const deleted = [...(current.deletedFileNames || []), photoName]
+      return {
+        ...prev,
+        [categoriaId]: {
+          ...current,
+          fotos: existing,
+          deletedFileNames: deleted,
+          isDirty: true,
+        },
+      }
+    })
+  }
 
   // Save a single category item to backend
   const handleSaveCategoryItem = async (categoria: CategoriaVistoria) => {
@@ -305,13 +390,15 @@ export default function VistoriaPage() {
         categoria.id,
         {
           possuiSistema: itemState.possuiSistema,
+          servicoPeriodico: itemState.servicoPeriodico,
           prestadorServico: itemState.prestadorServico,
           numeroArt: itemState.numeroArt,
-          comprovanteEntregue: itemState.comprovanteEntregue,
           dataUltimaVerificacao: itemState.dataUltimaVerificacao || null,
         },
         categoria,
         itemState.itemId,
+        itemState.pendingFiles,
+        itemState.deletedFileNames,
       )
 
       setItemsMap((prev) => ({
@@ -319,14 +406,17 @@ export default function VistoriaPage() {
         [categoria.id]: {
           ...prev[categoria.id],
           itemId: saved.id,
+          fotos: saved.fotos || [],
+          pendingFiles: [],
+          deletedFileNames: [],
           isDirty: false,
           isSaving: false,
         },
       }))
 
       toast({
-        title: 'Item salvo!',
-        description: `As informações de "${categoria.nome}" foram salvas.`,
+        title: 'Item salvo com sucesso!',
+        description: `As informações de "${categoria.nome}" foram persistidas.`,
       })
     } catch (err) {
       console.error('Erro ao salvar item de vistoria:', err)
@@ -345,12 +435,47 @@ export default function VistoriaPage() {
     }
   }
 
-  // Quick switch of hospital in the top bar
+  // Switch hospital in checklist view
   const handleSelectHospital = (hospitalId: string) => {
     setSelectedHospitalId(hospitalId)
   }
 
-  // Helper badge component for item situation (CREA-PI official palette: Green Conforme, Red Pendente/Vencido, Gray Não se aplica)
+  // Start new vistoria from dialog
+  const handleStartNovaVistoria = async (hospitalId: string) => {
+    try {
+      const vistoria = await vistoriasService.getOrCreateForHospital(hospitalId)
+      setSelectedHospitalId(hospitalId)
+      setActiveVistoria(vistoria)
+      setSearchParams({ hospitalId, vistoriaId: vistoria.id })
+      toast({
+        title: 'Vistoria iniciada',
+        description: 'Checklist carregado para preenchimento.',
+      })
+    } catch (err) {
+      console.error('Erro ao iniciar vistoria:', err)
+      toast({
+        title: 'Erro ao iniciar vistoria',
+        description: 'Não foi possível abrir a vistoria selecionada.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Open an existing vistoria card
+  const handleOpenVistoriaCard = (vistoria: Vistoria) => {
+    setSelectedHospitalId(vistoria.hospital)
+    setActiveVistoria(vistoria)
+    setSearchParams({ hospitalId: vistoria.hospital, vistoriaId: vistoria.id })
+  }
+
+  // Back to list view
+  const handleBackToList = () => {
+    setSelectedHospitalId('')
+    setActiveVistoria(null)
+    setSearchParams({})
+  }
+
+  // Helper badge component for item situation
   const renderSituacaoBadge = (situacao: SituacaoChecklist, size: 'sm' | 'default' = 'default') => {
     const isSm = size === 'sm'
     switch (situacao) {
@@ -428,7 +553,7 @@ export default function VistoriaPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-[#486581] animate-page-enter">
         <RefreshCw className="w-8 h-8 animate-spin text-[#004B8D] mb-3" />
-        <p className="text-sm font-medium">Carregando checklist de vistoria CREA-PI...</p>
+        <p className="text-sm font-medium">Carregando sistema de vistoria CREA-PI...</p>
       </div>
     )
   }
@@ -438,7 +563,7 @@ export default function VistoriaPage() {
     return (
       <div className="animate-page-enter">
         <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight mb-2">
-          Vistoria Técnica
+          Vistoria Técnica CREA-PI
         </h1>
         <p className="text-sm text-[#486581] mb-8">
           Checklist técnico de engenharia, instalações hospitalares e conformidade de ARTs.
@@ -457,7 +582,7 @@ export default function VistoriaPage() {
           </p>
           <Button
             onClick={() => navigate('/hospitais')}
-            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold"
+            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold cursor-pointer"
           >
             Ir para cadastro de Hospitais
             <ArrowRight className="w-4 h-4 ml-1.5" />
@@ -467,28 +592,169 @@ export default function VistoriaPage() {
     )
   }
 
-  return (
-    <div className="animate-page-enter space-y-6 pb-16">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
-            Vistoria Técnica CREA-PI
-          </h1>
-          <p className="text-sm text-[#486581] mt-0.5">
-            Checklist de verificação, ARTs e conformidade das instalações hospitalares
-          </p>
+  // ==========================================
+  // VIEW 1: LIST OF ALL OPEN VISTORIAS
+  // Shown when no specific hospital/vistoria is selected
+  // ==========================================
+  if (!selectedHospitalId) {
+    return (
+      <div className="animate-page-enter space-y-6 pb-16">
+        {/* Top Header with Title and "Nova vistoria" button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
+              Vistorias Técnicas
+            </h1>
+            <p className="text-sm text-[#486581] mt-0.5">
+              Gerencie e acompanhe todas as vistorias hospitalares abertas no estado do Piauí
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            <Button
+              onClick={() => setIsNovaVistoriaOpen(true)}
+              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              Nova vistoria
+            </Button>
+          </div>
         </div>
 
-        {/* Hospital Selector Dropdown (when multiple exist or switching) */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 bg-white p-2 sm:px-3 sm:py-2 rounded-xl border border-[#D3DFE9] shadow-sm">
+        {/* Search & Filter Bar */}
+        <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#D3DFE9] shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-[#486581] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              placeholder="Buscar vistoria por hospital, município ou CNES..."
+              value={searchVistoriaQuery}
+              onChange={(e) => setSearchVistoriaQuery(e.target.value)}
+              className="pl-10 pr-4 border-[#D3DFE9] focus-visible:ring-[#004B8D] bg-[#F4F6F9]/50 h-10 text-sm"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-[#486581] font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <span>
+              <strong>{openVistorias.length}</strong>{' '}
+              {openVistorias.length === 1 ? 'vistoria aberta' : 'vistorias abertas'}
+            </span>
+          </div>
+        </div>
+
+        {/* Empty State for Vistorias */}
+        {openVistorias.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-16 px-4 bg-white rounded-2xl border border-[#D3DFE9] shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+            <div className="w-20 h-20 rounded-full bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] mb-4 shadow-xs">
+              <ClipboardList className="w-9 h-9 stroke-[1.8]" />
+            </div>
+            <p className="text-lg font-bold text-[#102A43] max-w-sm mb-1">
+              Nenhuma vistoria em andamento
+            </p>
+            <p className="text-sm text-[#486581] max-w-sm mb-6">
+              Inicie uma nova vistoria técnica hospitalar para preencher o checklist de engenharia e
+              ARTs.
+            </p>
+            <Button
+              onClick={() => setIsNovaVistoriaOpen(true)}
+              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold cursor-pointer"
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Nova vistoria
+            </Button>
+          </div>
+        ) : filteredOpenVistorias.length === 0 ? (
+          <div className="bg-white rounded-xl border border-[#D3DFE9] p-8 text-center">
+            <Search className="w-8 h-8 text-[#829AB1] mx-auto mb-2" />
+            <p className="text-sm font-semibold text-[#102A43]">
+              Nenhuma vistoria encontrada com os termos buscados.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSearchVistoriaQuery('')}
+              className="mt-3 text-xs border-[#D3DFE9] text-[#004B8D]"
+            >
+              Limpar busca
+            </Button>
+          </div>
+        ) : (
+          /* Grid of Open Vistoria Cards */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {filteredOpenVistorias.map((vistoria) => {
+              return (
+                <VistoriaCard
+                  key={vistoria.id}
+                  vistoria={vistoria}
+                  pendentesCount={0}
+                  vencidosCount={0}
+                  conformesCount={0}
+                  totalItensCount={categorias.length}
+                  onClick={() => handleOpenVistoriaCard(vistoria)}
+                />
+              )
+            })}
+          </div>
+        )}
+
+        {/* Dialog: Nova Vistoria */}
+        <NovaVistoriaDialog
+          open={isNovaVistoriaOpen}
+          onOpenChange={setIsNovaVistoriaOpen}
+          hospitais={hospitais}
+          onSelectHospital={handleStartNovaVistoria}
+        />
+      </div>
+    )
+  }
+
+  // ==========================================
+  // VIEW 2: ACTIVE CHECKLIST INSPECTION FORM
+  // Shown when a specific hospital/vistoria is selected
+  // ==========================================
+  return (
+    <div className="animate-page-enter space-y-6 pb-16">
+      {/* Top Navigation & Action Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBackToList}
+            className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] hover:bg-[#F4F6F9] h-9 px-3 font-semibold"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            Todas as vistorias
+          </Button>
+          <div>
+            <h1 className="text-[20px] sm:text-[24px] font-bold text-[#102A43] tracking-tight leading-tight">
+              Checklist de Vistoria Técnica
+            </h1>
+            <p className="text-xs text-[#486581] mt-0.5">
+              CREA-PI • Conselho Regional de Engenharia e Agronomia do Piauí
+            </p>
+          </div>
+        </div>
+
+        {/* Quick Switch Hospital & "+ Nova vistoria" button */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            onClick={() => setIsNovaVistoriaOpen(true)}
+            size="sm"
+            variant="outline"
+            className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 mr-1 stroke-[2.5]" />
+            Nova vistoria
+          </Button>
+
+          <div className="flex items-center gap-1.5 bg-white p-1 px-2.5 rounded-lg border border-[#D3DFE9] shadow-xs">
             <span className="text-xs font-semibold text-[#486581] flex items-center gap-1">
               <Building2 className="w-3.5 h-3.5 text-[#004B8D]" />
-              Hospital selecionado:
+              Hospital:
             </span>
             <Select value={selectedHospitalId} onValueChange={handleSelectHospital}>
-              <SelectTrigger className="w-full sm:w-[260px] h-9 border-[#D3DFE9] font-semibold text-xs sm:text-sm text-[#102A43] focus:ring-[#004B8D]">
+              <SelectTrigger className="w-[180px] sm:w-[220px] h-8 border-0 font-semibold text-xs text-[#102A43] focus:ring-0 p-0 shadow-none">
                 <SelectValue placeholder="Selecione um hospital" />
               </SelectTrigger>
               <SelectContent>
@@ -593,7 +859,7 @@ export default function VistoriaPage() {
                 size="sm"
                 variant={filterSituacao === 'todos' ? 'default' : 'outline'}
                 onClick={() => setFilterSituacao('todos')}
-                className={`text-xs h-8 px-3 font-semibold ${
+                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
                   filterSituacao === 'todos'
                     ? 'bg-[#004B8D] hover:bg-[#003666] text-white'
                     : 'border-[#D3DFE9] text-[#486581] hover:text-[#102A43]'
@@ -606,7 +872,7 @@ export default function VistoriaPage() {
                 size="sm"
                 variant={filterSituacao === 'atencao' ? 'default' : 'outline'}
                 onClick={() => setFilterSituacao('atencao')}
-                className={`text-xs h-8 px-3 font-semibold ${
+                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
                   filterSituacao === 'atencao'
                     ? 'bg-[#E5A812] hover:bg-[#C88F06] text-[#102A43] font-bold'
                     : 'border-amber-300 text-[#8C6200] hover:bg-amber-50'
@@ -619,7 +885,7 @@ export default function VistoriaPage() {
                 size="sm"
                 variant={filterSituacao === 'conforme' ? 'default' : 'outline'}
                 onClick={() => setFilterSituacao('conforme')}
-                className={`text-xs h-8 px-3 font-semibold ${
+                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
                   filterSituacao === 'conforme'
                     ? 'bg-[#004B8D] hover:bg-[#003666] text-white'
                     : 'border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8]'
@@ -632,7 +898,7 @@ export default function VistoriaPage() {
                 size="sm"
                 variant={filterSituacao === 'nao_se_aplica' ? 'default' : 'outline'}
                 onClick={() => setFilterSituacao('nao_se_aplica')}
-                className={`text-xs h-8 px-3 font-semibold ${
+                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
                   filterSituacao === 'nao_se_aplica'
                     ? 'bg-[#486581] hover:bg-[#334E68] text-white'
                     : 'border-[#D3DFE9] text-[#486581] hover:bg-[#F4F6F9]'
@@ -692,10 +958,13 @@ export default function VistoriaPage() {
               {filteredCategorias.map((categoria) => {
                 const itemState = itemsMap[categoria.id] || {
                   possuiSistema: null,
+                  servicoPeriodico: null,
                   prestadorServico: '',
                   numeroArt: '',
-                  comprovanteEntregue: null,
+                  fotos: [],
                   dataUltimaVerificacao: '',
+                  pendingFiles: [],
+                  deletedFileNames: [],
                   isDirty: false,
                   isSaving: false,
                 }
@@ -718,24 +987,17 @@ export default function VistoriaPage() {
                             </span>
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs text-[#486581]">
-                            {categoria.exigeArt ? (
-                              <span className="text-[#004B8D] font-bold bg-[#E8F1F8] px-2 py-0.5 rounded text-[11px]">
-                                Exige ART
-                              </span>
-                            ) : (
-                              <span className="text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded text-[11px]">
-                                ART não exigida
-                              </span>
-                            )}
-
                             {categoria.periodicidadeDias && categoria.periodicidadeDias > 0 ? (
                               <span className="flex items-center gap-1 text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded text-[11px]">
                                 <Calendar className="w-3 h-3 text-[#004B8D]" />
-                                Periodicidade: {categoria.periodicidadeDias} dias
+                                Periodicidade regulatória: {categoria.periodicidadeDias} dias
                               </span>
-                            ) : (
-                              <span className="text-[#829AB1] bg-[#F4F6F9] px-2 py-0.5 rounded text-[11px]">
-                                Sem periodicidade fixa
+                            ) : null}
+
+                            {itemState.fotos && itemState.fotos.length > 0 && (
+                              <span className="text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded text-[11px] font-semibold">
+                                {itemState.fotos.length}{' '}
+                                {itemState.fotos.length === 1 ? 'foto' : 'fotos'}
                               </span>
                             )}
                           </div>
@@ -750,7 +1012,7 @@ export default function VistoriaPage() {
 
                     <AccordionContent className="pt-0 pb-0 border-t border-[#D3DFE9]/80">
                       <div className="p-5 sm:p-6 space-y-6 bg-slate-50/50">
-                        {/* 1. Pergunta Principal / Header: Possui o sistema/serviço? */}
+                        {/* 1. Pergunta Principal: O hospital possui este sistema / serviço? */}
                         <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#D3DFE9] shadow-xs">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
@@ -759,8 +1021,8 @@ export default function VistoriaPage() {
                                 <span className="text-rose-600">*</span>
                               </Label>
                               <p className="text-xs text-[#486581] mt-0.5">
-                                Selecione &quot;Sim&quot; para detalhar prestador, ART e
-                                comprovantes, ou &quot;Não&quot; para registrar como Não se aplica.
+                                Selecione &quot;Sim&quot; para preencher os dados técnicos e fotos,
+                                ou &quot;Não&quot; para registrar como Não se aplica.
                               </p>
                             </div>
 
@@ -771,9 +1033,9 @@ export default function VistoriaPage() {
                                   possuiSistema: val as 'Sim' | 'Não',
                                 })
                               }
-                              className="flex items-center gap-5 shrink-0 pt-1 sm:pt-0"
+                              className="flex items-center gap-4 shrink-0 pt-1 sm:pt-0"
                             >
-                              <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
+                              <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
                                 <RadioGroupItem
                                   value="Sim"
                                   id={`possui-sim-${categoria.id}`}
@@ -786,7 +1048,7 @@ export default function VistoriaPage() {
                                   Sim
                                 </Label>
                               </div>
-                              <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
+                              <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
                                 <RadioGroupItem
                                   value="Não"
                                   id={`possui-nao-${categoria.id}`}
@@ -806,21 +1068,21 @@ export default function VistoriaPage() {
                         {/* 2. Se a resposta for "Sim", mostrar campos adicionais estruturados */}
                         {isPossuiSim && (
                           <div className="bg-white rounded-xl border border-[#004B8D]/20 shadow-xs divide-y divide-[#D3DFE9]/60 animate-page-enter">
-                            {/* Card Sub-header */}
+                            {/* Subheader */}
                             <div className="px-5 py-3.5 bg-gradient-to-r from-[#E8F1F8]/80 to-white flex items-center justify-between rounded-t-xl">
                               <div className="flex items-center gap-2">
                                 <UserCheck className="w-4 h-4 text-[#004B8D]" />
                                 <span className="text-xs font-bold uppercase tracking-wider text-[#004B8D]">
-                                  Dados de Fiscalização Técnica & Responsabilidade
+                                  Fiscalização Técnica & Responsabilidade
                                 </span>
                               </div>
                               <span className="text-[11px] text-[#486581] font-medium hidden sm:inline">
-                                Todos os campos marcados com * são obrigatórios
+                                CREA-PI • Vistoria Hospitalar
                               </span>
                             </div>
 
                             <div className="p-5 sm:p-6 space-y-5">
-                              {/* Grid: Prestador de Serviço e Número da ART */}
+                              {/* Grid: Prestador de Serviço e Número da ART (OPCIONAL) */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                                 {/* Campo: Nome do prestador de serviço */}
                                 <div className="space-y-2">
@@ -829,7 +1091,7 @@ export default function VistoriaPage() {
                                     className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
                                   >
                                     <Building2 className="w-3.5 h-3.5 text-[#004B8D]" />
-                                    Nome do prestador de serviço
+                                    Nome do prestador de serviço / empresa
                                   </Label>
                                   <Input
                                     id={`prestador-${categoria.id}`}
@@ -847,74 +1109,57 @@ export default function VistoriaPage() {
                                   </p>
                                 </div>
 
-                                {/* Campo: Número da ART (se exigeArt = true) */}
-                                {categoria.exigeArt ? (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <Label
-                                        htmlFor={`art-${categoria.id}`}
-                                        className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
-                                      >
-                                        <FileCheck2 className="w-3.5 h-3.5 text-[#004B8D]" />
-                                        Número da ART (CREA-PI){' '}
-                                        <span className="text-rose-600">*</span>
-                                      </Label>
-                                      <span className="text-[10px] text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                                        Obrigatória
-                                      </span>
-                                    </div>
-                                    <Input
-                                      id={`art-${categoria.id}`}
-                                      placeholder="Ex.: PI20260012345"
-                                      value={itemState.numeroArt || ''}
-                                      onChange={(e) =>
-                                        handleFieldChange(categoria.id, {
-                                          numeroArt: e.target.value,
-                                        })
-                                      }
-                                      className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs font-mono ${
-                                        !itemState.numeroArt?.trim()
-                                          ? 'border-rose-300 bg-rose-50/20'
-                                          : ''
-                                      }`}
-                                    />
-                                    <p className="text-[11px] text-[#627D98]">
-                                      Anotação de Responsabilidade Técnica registrada no conselho.
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2">
-                                    <Label className="text-xs font-bold text-[#829AB1] flex items-center gap-1.5">
-                                      <FileCheck2 className="w-3.5 h-3.5 text-[#829AB1]" />
+                                {/* Campo: Número da ART (SEMPRE OPCIONAL) */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label
+                                      htmlFor={`art-${categoria.id}`}
+                                      className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
+                                    >
+                                      <FileCheck2 className="w-3.5 h-3.5 text-[#004B8D]" />
                                       Número da ART
                                     </Label>
-                                    <div className="h-10 px-3 flex items-center bg-[#F4F6F9] border border-[#D3DFE9] rounded-md text-xs text-[#627D98] italic">
-                                      Esta categoria técnica não exige obrigatoriedade de ART.
-                                    </div>
+                                    <span className="text-[10px] text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded font-medium">
+                                      Opcional
+                                    </span>
                                   </div>
-                                )}
+                                  <Input
+                                    id={`art-${categoria.id}`}
+                                    placeholder="Ex.: PI20260012345 (opcional)"
+                                    value={itemState.numeroArt || ''}
+                                    onChange={(e) =>
+                                      handleFieldChange(categoria.id, {
+                                        numeroArt: e.target.value,
+                                      })
+                                    }
+                                    className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs font-mono"
+                                  />
+                                  <p className="text-[11px] text-[#627D98]">
+                                    Anotação de Responsabilidade Técnica registrada no CREA (se
+                                    houver).
+                                  </p>
+                                </div>
                               </div>
 
-                              {/* Grid: Comprovante Entregue e Data da Última Verificação */}
+                              {/* Grid: Serviço Periódico (Sim/Não) e Data da Última Verificação */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 pt-2 border-t border-[#D3DFE9]/60">
-                                {/* Campo: Comprovante entregue no ato da fiscalização */}
+                                {/* Campo: Este serviço é feito periodicamente? */}
                                 <div className="space-y-2.5">
                                   <div>
                                     <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1.5">
-                                      <ClipboardCheck className="w-3.5 h-3.5 text-[#004B8D]" />
-                                      Comprovante entregue no ato da fiscalização?{' '}
-                                      <span className="text-rose-600">*</span>
+                                      <RotateCcw className="w-3.5 h-3.5 text-[#004B8D]" />
+                                      Este serviço é feito periodicamente?
                                     </Label>
                                     <p className="text-[11px] text-[#627D98] mt-0.5">
-                                      Laudo, relatório de manutenção, nota fiscal ou certificado.
+                                      Para controle e cobrança da ART com regularidade periódica.
                                     </p>
                                   </div>
 
                                   <RadioGroup
-                                    value={itemState.comprovanteEntregue || ''}
+                                    value={itemState.servicoPeriodico || ''}
                                     onValueChange={(val) =>
                                       handleFieldChange(categoria.id, {
-                                        comprovanteEntregue: val as 'Sim' | 'Não',
+                                        servicoPeriodico: val as 'Sim' | 'Não',
                                       })
                                     }
                                     className="flex items-center gap-4 pt-0.5"
@@ -922,99 +1167,108 @@ export default function VistoriaPage() {
                                     <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
                                       <RadioGroupItem
                                         value="Sim"
-                                        id={`comp-sim-${categoria.id}`}
+                                        id={`periodico-sim-${categoria.id}`}
                                         className="border-[#004B8D] text-[#004B8D]"
                                       />
                                       <Label
-                                        htmlFor={`comp-sim-${categoria.id}`}
+                                        htmlFor={`periodico-sim-${categoria.id}`}
                                         className="text-xs sm:text-sm font-semibold text-[#102A43] cursor-pointer"
                                       >
-                                        Sim (Entregue)
+                                        Sim (Periódico)
                                       </Label>
                                     </div>
                                     <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
                                       <RadioGroupItem
                                         value="Não"
-                                        id={`comp-nao-${categoria.id}`}
+                                        id={`periodico-nao-${categoria.id}`}
                                         className="border-[#004B8D] text-[#004B8D]"
                                       />
                                       <Label
-                                        htmlFor={`comp-nao-${categoria.id}`}
+                                        htmlFor={`periodico-nao-${categoria.id}`}
                                         className="text-xs sm:text-sm font-semibold text-[#102A43] cursor-pointer"
                                       >
-                                        Não (Pendente)
+                                        Não
                                       </Label>
                                     </div>
                                   </RadioGroup>
                                 </div>
 
-                                {/* Campo: Data da última verificação */}
-                                {categoria.periodicidadeDias && categoria.periodicidadeDias > 0 ? (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <Label
-                                        htmlFor={`data-verif-${categoria.id}`}
-                                        className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
-                                      >
-                                        <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
-                                        Data da última verificação / laudo{' '}
-                                        <span className="text-rose-600">*</span>
-                                      </Label>
+                                {/* Campo: Data da última verificação / laudo */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label
+                                      htmlFor={`data-verif-${categoria.id}`}
+                                      className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
+                                    >
+                                      <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
+                                      Data da última verificação / laudo
+                                    </Label>
+                                    {categoria.periodicidadeDias &&
+                                    categoria.periodicidadeDias > 0 ? (
                                       <span className="text-[11px] text-[#004B8D] font-bold">
                                         Validade: {categoria.periodicidadeDias} dias
                                       </span>
-                                    </div>
-                                    <Input
-                                      id={`data-verif-${categoria.id}`}
-                                      type="date"
-                                      value={itemState.dataUltimaVerificacao || ''}
-                                      onChange={(e) =>
-                                        handleFieldChange(categoria.id, {
-                                          dataUltimaVerificacao: e.target.value,
-                                        })
-                                      }
-                                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs"
-                                    />
-                                    <p className="text-[11px] text-[#627D98]">
-                                      Inspeções com mais de {categoria.periodicidadeDias} dias serão
-                                      marcadas como vencidas.
-                                    </p>
+                                    ) : (
+                                      <span className="text-[10px] text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded">
+                                        Opcional
+                                      </span>
+                                    )}
                                   </div>
-                                ) : (
-                                  <div className="space-y-2">
-                                    <Label className="text-xs font-bold text-[#829AB1] flex items-center gap-1.5">
-                                      <Calendar className="w-3.5 h-3.5 text-[#829AB1]" />
-                                      Periodicidade de inspeção
-                                    </Label>
-                                    <div className="h-10 px-3 flex items-center bg-[#F4F6F9] border border-[#D3DFE9] rounded-md text-xs text-[#627D98]">
-                                      Esta categoria não possui ciclo de renovação temporal
-                                      obrigatório.
-                                    </div>
-                                  </div>
-                                )}
+                                  <Input
+                                    id={`data-verif-${categoria.id}`}
+                                    type="date"
+                                    value={itemState.dataUltimaVerificacao || ''}
+                                    onChange={(e) =>
+                                      handleFieldChange(categoria.id, {
+                                        dataUltimaVerificacao: e.target.value,
+                                      })
+                                    }
+                                    className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs"
+                                  />
+                                  <p className="text-[11px] text-[#627D98]">
+                                    {categoria.periodicidadeDias && categoria.periodicidadeDias > 0
+                                      ? `Inspeções com mais de ${categoria.periodicidadeDias} dias serão consideradas vencidas.`
+                                      : 'Data do último laudo ou manutenção executada.'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Registro Fotográfico (Fotos - até 3 fotos) */}
+                              <div className="pt-3 border-t border-[#D3DFE9]/60">
+                                <PhotoUploadSection
+                                  itemId={itemState.itemId}
+                                  existingPhotos={itemState.fotos || []}
+                                  pendingFiles={itemState.pendingFiles || []}
+                                  onAddFiles={(files) => handleAddPhotos(categoria.id, files)}
+                                  onRemovePendingFile={(idx) =>
+                                    handleRemovePendingPhoto(categoria.id, idx)
+                                  }
+                                  onDeleteExistingPhoto={(photoName) =>
+                                    handleDeleteExistingPhoto(categoria.id, photoName)
+                                  }
+                                  disabled={itemState.isSaving}
+                                />
                               </div>
                             </div>
                           </div>
                         )}
 
-                        {/* 3. Rodapé do Item: Situação Calculada + Botão de Ação */}
+                        {/* 3. Rodapé do Item: Situação Calculada + Botão de Salvar */}
                         <div className="bg-white p-4 rounded-xl border border-[#D3DFE9] flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-xs">
                           <div className="flex flex-wrap items-center gap-2 text-xs text-[#486581]">
                             <span className="font-semibold text-[#102A43]">Situação avaliada:</span>
                             {renderSituacaoBadge(situacao, 'default')}
-                            {situacao === 'pendente' && (
-                              <span className="text-rose-700 font-medium text-[11px] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                ART obrigatória não informada ou comprovante ausente
-                              </span>
-                            )}
                             {situacao === 'vencido' && (
                               <span className="text-rose-700 font-medium text-[11px] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                Validade expirada (limite: {categoria.periodicidadeDias} dias)
+                                Validade expirada
+                                {categoria.periodicidadeDias
+                                  ? ` (limite: ${categoria.periodicidadeDias} dias)`
+                                  : ''}
                               </span>
                             )}
                             {situacao === 'conforme' && (
                               <span className="text-emerald-800 font-medium text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                Atende plenamente aos requisitos de fiscalização do CREA-PI
+                                Atende aos critérios de conformidade da fiscalização
                               </span>
                             )}
                             {situacao === 'não se aplica' && (
@@ -1064,6 +1318,14 @@ export default function VistoriaPage() {
           )}
         </div>
       )}
+
+      {/* Dialog: Nova Vistoria */}
+      <NovaVistoriaDialog
+        open={isNovaVistoriaOpen}
+        onOpenChange={setIsNovaVistoriaOpen}
+        hospitais={hospitais}
+        onSelectHospital={handleStartNovaVistoria}
+      />
     </div>
   )
 }

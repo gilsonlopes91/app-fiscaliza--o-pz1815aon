@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T19:03:28.698Z",
+  "generatedAt": "2026-08-31T19:10:41.543Z",
   "collections": [
     {
       "name": "users",
@@ -308,6 +308,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "servicoPeriodico",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Sim", "Não"]
+        },
+        {
+          "name": "fotos",
+          "type": "file",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

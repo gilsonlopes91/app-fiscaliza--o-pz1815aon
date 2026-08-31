@@ -1,0 +1,164 @@
+import React, { useState } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Building2, Plus, Sparkles, Loader2, MapPin } from 'lucide-react'
+import { Hospital } from '@/services/hospitais'
+
+interface NovaVistoriaDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  hospitais: Hospital[]
+  onSelectHospital: (hospitalId: string) => Promise<void>
+}
+
+export function NovaVistoriaDialog({
+  open,
+  onOpenChange,
+  hospitais,
+  onSelectHospital,
+}: NovaVistoriaDialogProps) {
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const filteredHospitais = hospitais.filter((h) => {
+    if (!search.trim()) return true
+    const term = search.toLowerCase()
+    return (
+      h.nome?.toLowerCase().includes(term) ||
+      h.municipio?.toLowerCase().includes(term) ||
+      h.cnes?.toLowerCase().includes(term)
+    )
+  })
+
+  const handleConfirm = async () => {
+    if (!selectedHospitalId) return
+    try {
+      setIsSubmitting(true)
+      await onSelectHospital(selectedHospitalId)
+      onOpenChange(false)
+      setSelectedHospitalId('')
+      setSearch('')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const selectedHospital = hospitais.find((h) => h.id === selectedHospitalId)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg bg-white border-[#D3DFE9] p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 bg-[#F4F6F9] border-b border-[#D3DFE9]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#004B8D] text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Plus className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-bold text-[#102A43]">
+                Nova Vistoria Técnica
+              </DialogTitle>
+              <DialogDescription className="text-xs text-[#486581]">
+                Selecione o hospital fiscalizado para iniciar ou continuar o checklist do CREA-PI.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="p-6 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="hospital-select" className="text-xs font-bold text-[#102A43]">
+              Selecione o Hospital <span className="text-rose-600">*</span>
+            </Label>
+            <Select value={selectedHospitalId} onValueChange={setSelectedHospitalId}>
+              <SelectTrigger
+                id="hospital-select"
+                className="w-full h-11 border-[#D3DFE9] text-sm font-medium focus:ring-[#004B8D] bg-white"
+              >
+                <SelectValue placeholder="Escolha um hospital da lista..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {hospitais.map((h) => (
+                  <SelectItem key={h.id} value={h.id}>
+                    <div className="flex flex-col text-left py-0.5">
+                      <span className="font-semibold text-[#102A43] text-sm truncate max-w-sm">
+                        {h.nome}
+                      </span>
+                      <span className="text-[11px] text-[#486581] flex items-center gap-1.5">
+                        <span>{h.municipio}</span>
+                        <span>•</span>
+                        <span className="font-mono">CNES: {h.cnes}</span>
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedHospital && (
+            <div className="p-3.5 rounded-xl bg-[#E8F1F8] border border-[#004B8D]/20 text-xs text-[#102A43] space-y-1 animate-page-enter">
+              <div className="font-bold text-[#004B8D] flex items-center gap-1.5">
+                <Building2 className="w-4 h-4" />
+                {selectedHospital.nome}
+              </div>
+              <div className="text-[#486581] flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-[#004B8D]" />
+                  {selectedHospital.municipio}
+                </span>
+                <span>•</span>
+                <span className="font-mono font-semibold">CNES: {selectedHospital.cnes}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="p-4 sm:px-6 bg-[#F4F6F9] border-t border-[#D3DFE9] flex flex-row items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+            className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43]"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!selectedHospitalId || isSubmitting}
+            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold cursor-pointer"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Iniciando...
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Iniciar vistoria
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
