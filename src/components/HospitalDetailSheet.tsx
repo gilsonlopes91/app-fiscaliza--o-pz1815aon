@@ -35,7 +35,8 @@ import {
   Building,
   ClipboardCheck,
 } from 'lucide-react'
-import { Hospital, HospitalFormData, HospitalTipo } from '@/services/hospitais'
+import { Hospital, HospitalFormData } from '@/services/hospitais'
+import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { vistoriasService } from '@/services/vistorias'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
@@ -58,8 +59,6 @@ interface HospitalDetailSheetProps {
   onDelete?: (id: string) => Promise<void>
 }
 
-const TIPO_OPTIONS: HospitalTipo[] = ['Hospital Geral', 'Hospital Especializado', 'Hospital-Dia']
-
 export function HospitalDetailSheet({
   hospital,
   open,
@@ -74,6 +73,7 @@ export function HospitalDetailSheet({
   const [isDeleting, setIsDeleting] = useState(false)
   const [isStartingVistoria, setIsStartingVistoria] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
 
   const [formData, setFormData] = useState<HospitalFormData>({
     nome: '',
@@ -81,13 +81,20 @@ export function HospitalDetailSheet({
     cnes: '',
     cnpj: '',
     cnpj_mantenedora: '',
-    tipo: '',
+    tipo: 'Hospital',
     endereco: '',
     responsavel: '',
     cpf_responsavel: '',
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    tiposEmpreendimentoService
+      .getAll()
+      .then((data) => setTiposEmpreendimento(data))
+      .catch((err) => console.error('Erro ao carregar tipos no detail:', err))
+  }, [])
 
   useEffect(() => {
     if (hospital && open) {
@@ -97,7 +104,7 @@ export function HospitalDetailSheet({
         cnes: hospital.cnes || '',
         cnpj: hospital.cnpj ? formatCNPJ(hospital.cnpj) : '',
         cnpj_mantenedora: hospital.cnpj_mantenedora ? formatCNPJ(hospital.cnpj_mantenedora) : '',
-        tipo: hospital.tipo || '',
+        tipo: hospital.tipo || 'Hospital',
         endereco: hospital.endereco || '',
         responsavel: hospital.responsavel || '',
         cpf_responsavel: hospital.cpf_responsavel ? formatCPF(hospital.cpf_responsavel) : '',
@@ -170,7 +177,7 @@ export function HospitalDetailSheet({
       cnes: hospital.cnes || '',
       cnpj: hospital.cnpj ? formatCNPJ(hospital.cnpj) : '',
       cnpj_mantenedora: hospital.cnpj_mantenedora ? formatCNPJ(hospital.cnpj_mantenedora) : '',
-      tipo: hospital.tipo || '',
+      tipo: hospital.tipo || 'Hospital',
       endereco: hospital.endereco || '',
       responsavel: hospital.responsavel || '',
       cpf_responsavel: hospital.cpf_responsavel ? formatCPF(hospital.cpf_responsavel) : '',
@@ -256,7 +263,7 @@ export function HospitalDetailSheet({
                     size="sm"
                     onClick={handleIniciarVistoria}
                     disabled={isStartingVistoria}
-                    className="shrink-0 bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-9 px-3"
+                    className="shrink-0 bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-9 px-3 cursor-pointer"
                   >
                     {isStartingVistoria ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
@@ -270,7 +277,7 @@ export function HospitalDetailSheet({
                     size="sm"
                     variant="outline"
                     onClick={() => setIsEditing(true)}
-                    className="shrink-0 border-[#D3DFE9] text-[#004B8D] hover:text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3"
+                    className="shrink-0 border-[#D3DFE9] text-[#004B8D] hover:text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer"
                   >
                     <Edit2 className="w-4 h-4 mr-1.5" />
                     Editar
@@ -362,30 +369,39 @@ export function HospitalDetailSheet({
 
                   <div className="space-y-1.5">
                     <Label htmlFor="edit-tipo" className="text-sm font-semibold text-[#102A43]">
-                      Tipo de Estabelecimento
+                      Tipo de Empreendimento
                     </Label>
                     <Select
-                      value={formData.tipo || 'none'}
+                      value={formData.tipo || 'Hospital'}
                       onValueChange={(val) =>
                         setFormData({
                           ...formData,
-                          tipo: val === 'none' ? '' : (val as HospitalTipo),
+                          tipo: val,
                         })
                       }
                     >
                       <SelectTrigger
                         id="edit-tipo"
-                        className="border-[#D3DFE9] focus:ring-[#004B8D]"
+                        className="border-[#D3DFE9] focus:ring-[#004B8D] bg-white"
                       >
                         <SelectValue placeholder="Selecione o tipo" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Não informado</SelectItem>
-                        {TIPO_OPTIONS.map((tipo) => (
-                          <SelectItem key={tipo} value={tipo}>
-                            {tipo}
-                          </SelectItem>
-                        ))}
+                        {tiposEmpreendimento.length > 0 ? (
+                          tiposEmpreendimento.map((t) => (
+                            <SelectItem key={t.id} value={t.nome}>
+                              {t.nome}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <>
+                            <SelectItem value="Hospital">Hospital</SelectItem>
+                            <SelectItem value="Clínica Médica">Clínica Médica</SelectItem>
+                            <SelectItem value="Laboratório de Análises">
+                              Laboratório de Análises
+                            </SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -564,11 +580,11 @@ export function HospitalDetailSheet({
 
                   <div>
                     <span className="text-xs text-[#486581] block mb-0.5 font-medium">
-                      Tipo de Unidade
+                      Tipo de Empreendimento
                     </span>
                     <span className="font-semibold text-[#102A43] block">
                       {hospital.tipo || (
-                        <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                        <span className="text-[#829AB1] italic font-normal">Hospital</span>
                       )}
                     </span>
                   </div>
@@ -691,7 +707,7 @@ export function HospitalDetailSheet({
                     type="button"
                     onClick={handleIniciarVistoria}
                     disabled={isStartingVistoria}
-                    className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold shrink-0 text-xs h-9 px-3.5"
+                    className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold shrink-0 text-xs h-9 px-3.5 cursor-pointer"
                   >
                     {isStartingVistoria ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
@@ -712,7 +728,7 @@ export function HospitalDetailSheet({
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5 mr-1" />
                       Excluir hospital

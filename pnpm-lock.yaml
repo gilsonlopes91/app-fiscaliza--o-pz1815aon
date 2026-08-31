@@ -122,6 +122,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      papaparse:
+        specifier: 5.7.0
+        version: 5.7.0
       pocketbase:
         specifier: ~0.26.9
         version: 0.26.9
@@ -1897,6 +1900,9 @@ packages:
         optional: true
       vite-plus:
         optional: true
+
+  papaparse@5.7.0:
+    resolution: {integrity: sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==}
 
   path-parse@1.0.7:
     resolution: {integrity: sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw==}
@@ -3737,6 +3743,8 @@ snapshots:
       '@oxlint/binding-win32-arm64-msvc': 1.71.0
       '@oxlint/binding-win32-ia32-msvc': 1.71.0
       '@oxlint/binding-win32-x64-msvc': 1.71.0
+
+  papaparse@5.7.0: {}
 
   path-parse@1.0.7: {}
 

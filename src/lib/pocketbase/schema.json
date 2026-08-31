@@ -1,15 +1,15 @@
 {
-  "generatedAt": "2026-08-31T19:10:41.543Z",
+  "generatedAt": "2026-08-31T19:37:01.413Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "id = @request.auth.id",
-        "view": "id = @request.auth.id",
+        "list": "",
+        "view": "",
         "create": "",
-        "update": "id = @request.auth.id",
-        "delete": "id = @request.auth.id"
+        "update": "",
+        "delete": ""
       },
       "fields": [
         {
@@ -37,6 +37,26 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["admin", "usuario"]
+        },
+        {
+          "name": "approved",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "approvalStatus",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pendente", "aprovado", "rejeitado"]
         }
       ],
       "indexes": [
@@ -86,13 +106,6 @@
           "system": false
         },
         {
-          "name": "tipo",
-          "type": "select",
-          "required": false,
-          "system": false,
-          "selectValues": ["Hospital Geral", "Hospital Especializado", "Hospital-Dia"]
-        },
-        {
           "name": "endereco",
           "type": "text",
           "required": false,
@@ -123,6 +136,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -327,6 +346,54 @@
         "CREATE INDEX idx_vistoria_itens_vistoria ON vistoria_itens (vistoria)",
         "CREATE INDEX idx_vistoria_itens_hospital ON vistoria_itens (hospital)",
         "CREATE INDEX idx_vistoria_itens_categoria ON vistoria_itens (categoria)"
+      ]
+    },
+    {
+      "name": "tipos_empreendimento",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "icone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_tipos_empreendimento_nome ON tipos_empreendimento (nome)"
       ]
     }
   ]

@@ -1,951 +1,461 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import Papa from 'papaparse'
 import {
-  UploadCloud,
+  Upload,
   FileSpreadsheet,
-  AlertTriangle,
   CheckCircle2,
+  AlertTriangle,
   RefreshCw,
-  Info,
-  X,
-  FileDown,
+  PlusCircle,
   ArrowRight,
-  ShieldAlert,
-  Building2,
-  Trash2,
+  Download,
+  AlertCircle,
   HelpCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { hospitaisService, Hospital, HospitalTipo } from '@/services/hospitais'
-import { formatCNPJ } from '@/lib/formatters'
+import { Progress } from '@/components/ui/progress'
+import { Hospital, HospitalFormData } from '@/services/hospitais'
+import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
+import { formatCNPJ, formatCNES } from '@/lib/formatters'
 import { useToast } from '@/hooks/use-toast'
-
-const REQUIRED_HEADERS = ['nome', 'municipio', 'cnes', 'cnpj', 'cnpj_mantenedora', 'tipo'] as const
-
-const VALID_TIPOS: HospitalTipo[] = ['Hospital Geral', 'Hospital Especializado', 'Hospital-Dia']
-
-export interface ParsedCsvRow {
-  rowNumber: number
-  nome: string
-  municipio: string
-  cnes: string
-  cnpj: string
-  cnpj_mantenedora: string
-  tipo: HospitalTipo | ''
-  rawTipo: string
-  status: 'new' | 'update' | 'invalid'
-  errors: string[]
-  existingHospitalId?: string
-  existingHospitalName?: string
-}
-
-export interface ImportSummary {
-  createdCount: number
-  updatedCount: number
-  totalProcessed: number
-  errorsCount: number
-  details: {
-    nome: string
-    cnes: string
-    action: 'created' | 'updated'
-  }[]
-}
 
 interface HospitalImportCsvProps {
   existingHospitais: Hospital[]
-  onImportComplete: () => Promise<void> | void
+  onImportCompleted: (createdCount: number, updatedCount: number) => void
+  onCancel: () => void
 }
 
-/**
- * Robust RFC 4180 compliant CSV line parser with support for quotes and delimiters
- */
-function parseCsvLine(text: string, delimiter: string): string[] {
-  const result: string[] = []
-  let cell = ''
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i]
-    const nextChar = text[i + 1]
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        // Escaped double quote
-        cell += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if (char === delimiter && !inQuotes) {
-      result.push(cell.trim())
-      cell = ''
-    } else {
-      cell += char
-    }
-  }
-  result.push(cell.trim())
-  return result
+interface CsvRow {
+  nome?: string
+  municipio?: string
+  cnes?: string
+  cnpj?: string
+  cnpj_mantenedora?: string
+  tipo?: string
+  endereco?: string
+  responsavel?: string
+  cpf_responsavel?: string
+  [key: string]: any
 }
 
-function detectDelimiter(headerLine: string): string {
-  const commaCount = (headerLine.match(/,/g) || []).length
-  const semicolonCount = (headerLine.match(/;/g) || []).length
-  const tabCount = (headerLine.match(/\t/g) || []).length
-
-  if (semicolonCount > commaCount && semicolonCount > tabCount) return ';'
-  if (tabCount > commaCount && tabCount > semicolonCount) return '\t'
-  return ','
+interface ProcessedItem {
+  data: HospitalFormData
+  isExisting: boolean
+  existingId?: string
+  isValid: boolean
+  errors: string[]
 }
 
-function normalizeTipo(rawTipo: string): HospitalTipo | null {
-  if (!rawTipo) return null
-  const cleaned = rawTipo.trim()
-  if (!cleaned) return null
-
-  // Direct exact match
-  const direct = VALID_TIPOS.find((t) => t.toLowerCase() === cleaned.toLowerCase())
-  if (direct) return direct
-
-  // Flexible accents & slug matches
-  const normalized = cleaned
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  if (normalized === 'hospital geral' || normalized === 'geral') {
-    return 'Hospital Geral'
-  }
-  if (normalized === 'hospital especializado' || normalized === 'especializado') {
-    return 'Hospital Especializado'
-  }
-  if (normalized === 'hospital dia' || normalized === 'hospitaldia' || normalized === 'dia') {
-    return 'Hospital-Dia'
-  }
-
-  return null
-}
-
-export function HospitalImportCsv({ existingHospitais, onImportComplete }: HospitalImportCsvProps) {
+export function HospitalImportCsv({
+  existingHospitais,
+  onImportCompleted,
+  onCancel,
+}: HospitalImportCsvProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [fileSize, setFileSize] = useState<number | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isParsing, setIsParsing] = useState(false)
-  const [fileError, setFileError] = useState<string | null>(null)
-  const [parsedRows, setParsedRows] = useState<ParsedCsvRow[]>([])
+  const [file, setFile] = useState<File | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
-  const [importProgress, setImportProgress] = useState<{
-    current: number
-    total: number
-  } | null>(null)
-  const [importResult, setImportResult] = useState<ImportSummary | null>(null)
+  const [processedItems, setProcessedItems] = useState<ProcessedItem[]>([])
+  const [importProgress, setImportProgress] = useState(0)
+  const [importStats, setImportStats] = useState<{ created: number; updated: number } | null>(null)
+  const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
 
-  // Fast map lookup by normalized CNES
-  const existingByCnes = useMemo(() => {
-    const map = new Map<string, Hospital>()
-    existingHospitais.forEach((h) => {
-      const clean = h.cnes ? h.cnes.replace(/\D/g, '').trim() : ''
-      if (clean) {
-        map.set(clean, h)
-      }
-      // Also map exact string value
-      if (h.cnes && h.cnes.trim()) {
-        map.set(h.cnes.trim(), h)
-      }
-    })
-    return map
-  }, [existingHospitais])
+  useEffect(() => {
+    tiposEmpreendimentoService
+      .getAll()
+      .then((data) => setTiposEmpreendimento(data))
+      .catch((err) => console.error('Erro ao carregar tipos no importador CSV:', err))
+  }, [])
 
-  const processCsvContent = useCallback(
-    (text: string, name: string, size: number) => {
-      setIsParsing(true)
-      setFileError(null)
-      setImportResult(null)
-      setFileName(name)
-      setFileSize(size)
+  // Create quick lookup map for CNES
+  const existingByCnes = new Map<string, Hospital>()
+  existingHospitais.forEach((h) => {
+    if (h.cnes) {
+      existingByCnes.set(h.cnes.replace(/\D/g, ''), h)
+    }
+  })
 
-      try {
-        // Remove UTF-8 BOM if present
-        const cleanText = text.replace(/^\uFEFF/, '')
-        const lines = cleanText
-          .split(/\r\n|\n|\r/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (!selectedFile) return
 
-        if (lines.length === 0) {
-          setFileError('O arquivo CSV está vazio. Adicione dados e tente novamente.')
-          setParsedRows([])
-          setIsParsing(false)
-          return
-        }
-
-        const delimiter = detectDelimiter(lines[0])
-        const rawHeaders = parseCsvLine(lines[0], delimiter).map((h) =>
-          h.toLowerCase().trim().replace(/['"]/g, ''),
-        )
-
-        // Check for missing required headers
-        const missingHeaders = REQUIRED_HEADERS.filter((req) => !rawHeaders.includes(req))
-
-        if (missingHeaders.length > 0) {
-          setFileError(
-            `Cabeçalhos obrigatórios ausentes no CSV: ${missingHeaders.join(
-              ', ',
-            )}. O arquivo precisa conter as seguintes colunas: nome, municipio, cnes, cnpj, cnpj_mantenedora, tipo.`,
-          )
-          setParsedRows([])
-          setIsParsing(false)
-          return
-        }
-
-        // Map column names to index positions
-        const headerIndices: Record<string, number> = {}
-        REQUIRED_HEADERS.forEach((req) => {
-          headerIndices[req] = rawHeaders.indexOf(req)
-        })
-
-        if (lines.length === 1) {
-          setFileError(
-            'O arquivo contém apenas o cabeçalho e nenhuma linha de dados para importação.',
-          )
-          setParsedRows([])
-          setIsParsing(false)
-          return
-        }
-
-        const rows: ParsedCsvRow[] = []
-        // Track CNES within the CSV to detect duplicate rows in the same file
-        const seenCsvCnes = new Map<string, number>()
-
-        for (let i = 1; i < lines.length; i++) {
-          const rowNumber = i + 1
-          const cells = parseCsvLine(lines[i], delimiter)
-
-          // Skip completely blank rows that might have commas only
-          const hasContent = cells.some((c) => c.trim().length > 0)
-          if (!hasContent) continue
-
-          const rowErrors: string[] = []
-
-          const nome = cells[headerIndices.nome]?.trim() || ''
-          const municipio = cells[headerIndices.municipio]?.trim() || ''
-          const rawCnes = cells[headerIndices.cnes]?.trim() || ''
-          const cnpj = cells[headerIndices.cnpj]?.trim() || ''
-          const cnpj_mantenedora = cells[headerIndices.cnpj_mantenedora]?.trim() || ''
-          const rawTipo = cells[headerIndices.tipo]?.trim() || ''
-
-          // Validation
-          if (!nome) {
-            rowErrors.push('O campo "nome" é obrigatório.')
-          }
-
-          if (!municipio) {
-            rowErrors.push('O campo "municipio" é obrigatório.')
-          }
-
-          if (!rawCnes) {
-            rowErrors.push('O campo "cnes" é obrigatório.')
-          }
-
-          // Validate CNES format (7 digits)
-          const cleanCnesDigits = rawCnes.replace(/\D/g, '')
-          if (rawCnes && cleanCnesDigits.length === 0) {
-            rowErrors.push('CNES inválido.')
-          }
-
-          // Check duplicate within the same CSV
-          if (cleanCnesDigits) {
-            if (seenCsvCnes.has(cleanCnesDigits)) {
-              const prevRow = seenCsvCnes.get(cleanCnesDigits)
-              rowErrors.push(`CNES duplicado no arquivo (já apareceu na linha ${prevRow}).`)
-            } else {
-              seenCsvCnes.set(cleanCnesDigits, rowNumber)
-            }
-          }
-
-          // Validate Tipo against allowed select values
-          let validatedTipo: HospitalTipo | '' = ''
-          if (rawTipo) {
-            const matched = normalizeTipo(rawTipo)
-            if (matched) {
-              validatedTipo = matched
-            } else {
-              rowErrors.push(
-                `Tipo "${rawTipo}" inválido. Permitidos: Hospital Geral, Hospital Especializado, Hospital-Dia.`,
-              )
-            }
-          }
-
-          // Compare CNES with already registered hospitals
-          let status: 'new' | 'update' | 'invalid' = 'new'
-          let existingHospitalId: string | undefined
-          let existingHospitalName: string | undefined
-
-          if (rowErrors.length > 0) {
-            status = 'invalid'
-          } else {
-            const foundHospital = existingByCnes.get(cleanCnesDigits) || existingByCnes.get(rawCnes)
-
-            if (foundHospital) {
-              status = 'update'
-              existingHospitalId = foundHospital.id
-              existingHospitalName = foundHospital.nome
-            } else {
-              status = 'new'
-            }
-          }
-
-          rows.push({
-            rowNumber,
-            nome,
-            municipio,
-            cnes: cleanCnesDigits || rawCnes,
-            cnpj,
-            cnpj_mantenedora,
-            tipo: validatedTipo,
-            rawTipo,
-            status,
-            errors: rowErrors,
-            existingHospitalId,
-            existingHospitalName,
-          })
-        }
-
-        if (rows.length === 0) {
-          setFileError('Nenhuma linha de dados válida foi encontrada após a leitura do arquivo.')
-        }
-
-        setParsedRows(rows)
-      } catch (err) {
-        console.error('Erro no processamento do CSV:', err)
-        setFileError(
-          'Falha ao ler o arquivo CSV. Certifique-se de que é um arquivo de texto válido codificado em UTF-8.',
-        )
-        setParsedRows([])
-      } finally {
-        setIsParsing(false)
-      }
-    },
-    [existingByCnes],
-  )
-
-  const handleFileSelect = (file: File) => {
-    if (!file) return
-
-    if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
-      setFileError('Por favor selecione um arquivo com extensão .csv')
-      setParsedRows([])
+    if (!selectedFile.name.endsWith('.csv')) {
+      toast({
+        title: 'Formato inválido',
+        description: 'Por favor, selecione um arquivo no formato .CSV.',
+        variant: 'destructive',
+      })
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const content = e.target?.result as string
-      processCsvContent(content, file.name, file.size)
-    }
-    reader.onerror = () => {
-      setFileError('Erro ao carregar o arquivo do disco.')
-    }
-    reader.readAsText(file, 'UTF-8')
+    setFile(selectedFile)
+    parseCsv(selectedFile)
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(true)
+  const normalizeKey = (key: string): string => {
+    return key
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_]/g, '_')
   }
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
+  const parseCsv = (fileToParse: File) => {
+    setIsProcessing(true)
+    Papa.parse(fileToParse, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => normalizeKey(header),
+      complete: (results) => {
+        processRows(results.data as CsvRow[])
+        setIsProcessing(false)
+      },
+      error: (error) => {
+        console.error('Erro ao processar CSV:', error)
+        toast({
+          title: 'Erro ao ler arquivo',
+          description: 'Não foi possível ler o arquivo CSV fornecido.',
+          variant: 'destructive',
+        })
+        setIsProcessing(false)
+      },
+    })
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileSelect(e.dataTransfer.files[0])
-    }
-  }
+  const processRows = (rows: CsvRow[]) => {
+    const items: ProcessedItem[] = []
 
-  const handleReset = () => {
-    setFileName(null)
-    setFileSize(null)
-    setParsedRows([])
-    setFileError(null)
-    setImportResult(null)
-    setImportProgress(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
+    rows.forEach((row) => {
+      // Find matching keys flexibly
+      const nome =
+        row.nome ||
+        row.hospital ||
+        row.estabelecimento ||
+        row.razao_social ||
+        row.nome_fantasia ||
+        ''
+      const municipio = row.municipio || row.cidade || ''
+      const rawCnes = String(row.cnes || row.cod_cnes || row.codigo_cnes || '').trim()
+      const cnes = rawCnes.replace(/\D/g, '')
+      const cnpj = row.cnpj || ''
+      const cnpj_mantenedora = row.cnpj_mantenedora || row.cnpj_mantenedor || row.mantenedora || ''
+      const tipo = row.tipo || row.tipo_unidade || row.tipo_empreendimento || 'Hospital'
+      const endereco = row.endereco || row.logradouro || ''
+      const responsavel = row.responsavel || row.diretor || ''
+      const cpf_responsavel = row.cpf_responsavel || row.cpf || ''
 
-  // Count metrics for preview
-  const counts = useMemo(() => {
-    let newCount = 0
-    let updateCount = 0
-    let invalidCount = 0
+      const errors: string[] = []
 
-    parsedRows.forEach((r) => {
-      if (r.status === 'new') newCount++
-      else if (r.status === 'update') updateCount++
-      else if (r.status === 'invalid') invalidCount++
+      if (!nome.trim()) {
+        errors.push('Nome obrigatório')
+      }
+      if (!municipio.trim()) {
+        errors.push('Município obrigatório')
+      }
+      if (!cnes) {
+        errors.push('CNES obrigatório')
+      } else if (cnes.length !== 7) {
+        errors.push('CNES deve ter 7 dígitos')
+      }
+
+      const existing = existingByCnes.get(cnes)
+
+      items.push({
+        data: {
+          nome: nome.trim(),
+          municipio: municipio.trim(),
+          cnes: cnes,
+          cnpj: cnpj.trim(),
+          cnpj_mantenedora: cnpj_mantenedora.trim(),
+          tipo: tipo.trim() || 'Hospital',
+          endereco: endereco.trim(),
+          responsavel: responsavel.trim(),
+          cpf_responsavel: cpf_responsavel.trim(),
+        },
+        isExisting: !!existing,
+        existingId: existing?.id,
+        isValid: errors.length === 0,
+        errors,
+      })
     })
 
-    return {
-      total: parsedRows.length,
-      newCount,
-      updateCount,
-      invalidCount,
-      validTotal: newCount + updateCount,
-    }
-  }, [parsedRows])
+    setProcessedItems(items)
+  }
 
-  // Execute actual import
-  const handleConfirmImport = async () => {
-    const validRows = parsedRows.filter((r) => r.status !== 'invalid')
-    if (validRows.length === 0) {
+  const handleExecuteImport = async () => {
+    const validItems = processedItems.filter((item) => item.isValid)
+    if (validItems.length === 0) {
       toast({
-        title: 'Nenhuma linha válida',
-        description: 'Corrija os erros do arquivo antes de importar.',
+        title: 'Nenhum registro válido',
+        description: 'Corrija os erros na planilha antes de importar.',
         variant: 'destructive',
       })
       return
     }
 
     setIsImporting(true)
-    setImportProgress({ current: 0, total: validRows.length })
+    setImportProgress(0)
 
-    let createdCount = 0
-    let updatedCount = 0
-    let errorsCount = 0
-    const details: {
-      nome: string
-      cnes: string
-      action: 'created' | 'updated'
-    }[] = []
+    let created = 0
+    let updated = 0
 
-    for (let i = 0; i < validRows.length; i++) {
-      const row = validRows[i]
-      setImportProgress({ current: i + 1, total: validRows.length })
+    const { hospitaisService } = await import('@/services/hospitais')
 
+    for (let i = 0; i < validItems.length; i++) {
+      const item = validItems[i]
       try {
-        if (row.status === 'update' && row.existingHospitalId) {
-          await hospitaisService.update(row.existingHospitalId, {
-            nome: row.nome,
-            municipio: row.municipio,
-            cnes: row.cnes,
-            cnpj: row.cnpj,
-            cnpj_mantenedora: row.cnpj_mantenedora,
-            tipo: row.tipo,
-          })
-          updatedCount++
-          details.push({
-            nome: row.nome,
-            cnes: row.cnes,
-            action: 'updated',
-          })
+        if (item.isExisting && item.existingId) {
+          await hospitaisService.update(item.existingId, item.data)
+          updated++
         } else {
-          await hospitaisService.create({
-            nome: row.nome,
-            municipio: row.municipio,
-            cnes: row.cnes,
-            cnpj: row.cnpj,
-            cnpj_mantenedora: row.cnpj_mantenedora,
-            tipo: row.tipo,
-          })
-          createdCount++
-          details.push({
-            nome: row.nome,
-            cnes: row.cnes,
-            action: 'created',
-          })
+          await hospitaisService.create(item.data)
+          created++
         }
       } catch (err) {
-        console.error(`Erro ao importar linha ${row.rowNumber} (${row.nome}):`, err)
-        errorsCount++
+        console.error('Erro ao importar linha:', item, err)
       }
+
+      setImportProgress(Math.round(((i + 1) / validItems.length) * 100))
     }
 
     setIsImporting(false)
-    setImportProgress(null)
-
-    const summary: ImportSummary = {
-      createdCount,
-      updatedCount,
-      totalProcessed: createdCount + updatedCount,
-      errorsCount,
-      details,
-    }
-
-    setImportResult(summary)
-
-    // Notify parent to refresh hospitals list
-    await onImportComplete()
-
+    setImportStats({ created, updated })
     toast({
-      title: 'Importação concluída!',
-      description: `${createdCount} novos hospitais criados e ${updatedCount} atualizados.`,
+      title: 'Importação concluída com sucesso!',
+      description: `${created} novo(s) hospital(is) criado(s) e ${updated} atualizado(s).`,
     })
+
+    onImportCompleted(created, updated)
   }
 
-  // Download example CSV template
-  const handleDownloadTemplate = () => {
+  const downloadSampleCsv = () => {
     const csvContent =
-      'nome,municipio,cnes,cnpj,cnpj_mantenedora,tipo\n' +
-      'Hospital Regional Darcy Vargas,Rio Bonito,2296306,30.123.456/0001-90,30.123.456/0001-90,Hospital Geral\n' +
-      'Instituto de Cardiologia do Estado,Niterói,2269880,12.345.678/0001-00,12.345.678/0001-00,Hospital Especializado\n' +
-      'Centro Cirúrgico Dia Santa Clara,São Gonçalo,7654321,98.765.432/0001-11,,Hospital-Dia\n'
+      'nome,municipio,cnes,cnpj,cnpj_mantenedora,tipo,endereco,responsavel,cpf_responsavel\n' +
+      '"Hospital Regional Justino Luz","Picos","2365478","06.554.123/0001-90","06.554.123/0001-90","Hospital","Praça Antenor Neiva, s/n - Centro","Eng. Carlos Eduardo","123.456.789-00"\n' +
+      '"Hospital Estadual Dirceu Arcoverde","Parnaíba","2365494","06.554.123/0002-71","06.554.123/0001-90","Hospital","Av. São Sebastião, 2500 - Fátima","Dra. Maria Helena","987.654.321-99"\n' +
+      '"Clínica de Olhos do Piauí","Teresina","2365516","12.345.678/0001-99","","Clínica Médica","Rua Desembargador Pires de Castro, 450 - Centro","Dr. Marcos Santos","111.222.333-44"'
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.setAttribute('href', url)
-    link.setAttribute('download', 'modelo_importacao_hospitais.csv')
+    link.setAttribute('download', 'modelo_importacao_hospitais_creapi.csv')
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    URL.revokeObjectURL(url)
   }
 
+  const newCount = processedItems.filter((i) => !i.isExisting && i.isValid).length
+  const updateCount = processedItems.filter((i) => i.isExisting && i.isValid).length
+  const errorCount = processedItems.filter((i) => !i.isValid).length
+
   return (
-    <div className="space-y-6">
-      {/* Introduction Card */}
-      <div className="bg-white rounded-xl border border-[#D3DFE9] p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D]">
-                <FileSpreadsheet className="w-4 h-4" />
-              </div>
-              <h2 className="text-lg font-bold text-[#102A43]">Importação em Lote via CSV</h2>
-            </div>
-            <p className="text-sm text-[#486581] max-w-2xl leading-relaxed">
-              Carregue uma planilha CSV com a relação de hospitais. O sistema do CREA-PI faz a
-              pré-visualização completa, compara o <strong>CNES</strong> com os registros existentes
-              e indica quais unidades serão criadas ou atualizadas antes de gravar.
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleDownloadTemplate}
-            className="border-[#D3DFE9] hover:bg-[#E8F1F8] hover:text-[#004B8D] text-[#102A43] text-xs font-semibold shrink-0 h-9"
-          >
-            <FileDown className="w-3.5 h-3.5 mr-1.5 text-[#004B8D]" />
-            Baixar modelo CSV
-          </Button>
+    <div className="bg-white rounded-xl border border-[#D3DFE9] p-6 shadow-sm space-y-6 animate-page-enter">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
+        <div>
+          <h2 className="text-xl font-bold text-[#102A43] flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5 text-[#004B8D]" />
+            Importação de Hospitais e Estabelecimentos via CSV
+          </h2>
+          <p className="text-xs text-[#486581] mt-1">
+            Envie uma planilha com colunas: <strong>nome, municipio, cnes</strong> (obrigatórios),
+            cnpj, cnpj_mantenedora, tipo, endereco, responsavel, cpf_responsavel.
+          </p>
         </div>
 
-        {/* Expected format requirements pill box */}
-        <div className="mt-4 pt-4 border-t border-[#D3DFE9]/70 text-xs text-[#486581] grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#F4F6F9] p-3.5 rounded-lg">
-          <div>
-            <span className="font-semibold text-[#102A43] block mb-1">
-              Colunas obrigatórias no cabeçalho:
-            </span>
-            <code className="text-[#004B8D] bg-white px-2 py-0.5 rounded border border-[#D3DFE9] inline-block font-mono text-[11px] font-semibold">
-              nome, municipio, cnes, cnpj, cnpj_mantenedora, tipo
-            </code>
-          </div>
-          <div>
-            <span className="font-semibold text-[#102A43] block mb-1">
-              Valores permitidos para a coluna tipo:
-            </span>
-            <span className="text-[#243B53]">
-              <code className="bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9] text-[11px] font-mono mr-1">
-                Hospital Geral
-              </code>
-              <code className="bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9] text-[11px] font-mono mr-1">
-                Hospital Especializado
-              </code>
-              <code className="bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9] text-[11px] font-mono">
-                Hospital-Dia
-              </code>
-            </span>
-          </div>
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={downloadSampleCsv}
+          className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold text-xs h-9 shrink-0 gap-1.5"
+        >
+          <Download className="w-3.5 h-3.5 text-[#004B8D]" />
+          Baixar Modelo CSV
+        </Button>
       </div>
 
-      {/* Success Summary Banner if import finished */}
-      {importResult && (
-        <div className="bg-[#E8F1F8] border border-[#004B8D]/30 rounded-xl p-6 shadow-sm animate-fadeIn">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-full bg-[#004B8D] text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-              <CheckCircle2 className="w-6 h-6 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <h3 className="text-base font-bold text-[#004B8D]">
-                  Importação concluída com sucesso!
-                </h3>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleReset}
-                  className="border-[#004B8D]/40 text-[#004B8D] bg-white hover:bg-[#004B8D] hover:text-white h-8 text-xs font-semibold"
-                >
-                  Importar outro arquivo
-                </Button>
-              </div>
-
-              <p className="text-sm text-[#102A43]">
-                O processamento do arquivo foi finalizado. Veja os resultados:
-              </p>
-
-              {/* Stats badges */}
-              <div className="flex flex-wrap gap-2.5 pt-1">
-                <div className="bg-white px-3 py-1.5 rounded-lg border border-[#004B8D]/20 flex items-center gap-2">
-                  <span className="text-xs text-[#486581]">Novos cadastrados:</span>
-                  <Badge className="bg-[#004B8D] text-white font-bold text-xs px-2 py-0.5">
-                    +{importResult.createdCount} criados
-                  </Badge>
-                </div>
-                <div className="bg-white px-3 py-1.5 rounded-lg border border-[#004B8D]/20 flex items-center gap-2">
-                  <span className="text-xs text-[#486581]">Hospitais atualizados:</span>
-                  <Badge className="bg-[#E5A812] text-[#102A43] font-bold text-xs px-2 py-0.5">
-                    {importResult.updatedCount} atualizados
-                  </Badge>
-                </div>
-                {importResult.errorsCount > 0 && (
-                  <div className="bg-white px-3 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
-                    <span className="text-xs text-red-700">Falhas ao gravar:</span>
-                    <Badge variant="destructive" className="font-bold text-xs px-2 py-0.5">
-                      {importResult.errorsCount} erros
-                    </Badge>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Drop Zone (Hidden if file is parsed and not imported yet) */}
-      {parsedRows.length === 0 && !importResult && (
+      {/* Upload Box */}
+      {!file && (
         <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`
-            border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all duration-200
-            ${
-              isDragging
-                ? 'border-[#004B8D] bg-[#E8F1F8] scale-[0.99]'
-                : 'border-[#D3DFE9] hover:border-[#004B8D]/80 bg-white hover:bg-[#F4F6F9]/70'
-            }
-          `}
+          className="border-2 border-dashed border-[#004B8D]/30 hover:border-[#004B8D] rounded-xl p-8 text-center cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8]/50 transition-colors flex flex-col items-center justify-center space-y-3"
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => {
-              if (e.target.files && e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0])
-              }
-            }}
+            accept=".csv"
+            onChange={handleFileChange}
             className="hidden"
           />
-
-          <div className="w-16 h-16 rounded-full bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] mx-auto mb-4 shadow-sm">
-            <UploadCloud className="w-8 h-8 stroke-[1.8]" />
+          <div className="w-12 h-12 rounded-full bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] shadow-xs">
+            <Upload className="w-6 h-6 stroke-[2]" />
           </div>
-
-          <h3 className="text-base font-bold text-[#102A43] mb-1">
-            Clique para selecionar ou arraste o arquivo CSV até aqui
-          </h3>
-          <p className="text-xs text-[#486581] max-w-md mx-auto mb-5">
-            Suporta arquivos .csv com separador por vírgula (,) ou ponto-e-vírgula (;) codificados
-            em UTF-8.
-          </p>
-
-          <Button
-            type="button"
-            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold pointer-events-none"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-1.5" />
-            Selecionar arquivo CSV
-          </Button>
+          <div>
+            <p className="text-sm font-bold text-[#102A43]">
+              Clique para selecionar ou arraste sua planilha CSV aqui
+            </p>
+            <p className="text-xs text-[#627D98] mt-1">
+              O sistema identifica automaticamente unidades já cadastradas através do código{' '}
+              <strong>CNES</strong>.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Error Alert for File Parse Failures */}
-      {fileError && (
-        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle className="font-bold text-sm">Problema ao ler o CSV</AlertTitle>
-          <AlertDescription className="text-xs leading-relaxed mt-1">{fileError}</AlertDescription>
-          <div className="mt-3">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleReset}
-              className="border-red-300 text-red-800 hover:bg-red-100 h-8 text-xs font-semibold"
-            >
-              Tentar outro arquivo
-            </Button>
-          </div>
-        </Alert>
-      )}
-
-      {/* Preview Section when rows are parsed */}
-      {parsedRows.length > 0 && !importResult && (
-        <div className="space-y-4">
-          {/* Action and Metrics Summary Header */}
-          <div className="bg-white rounded-xl border border-[#D3DFE9] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm sm:text-base text-[#102A43]">
-                    Pré-visualização do arquivo:
-                  </span>
-                  <span className="text-xs font-mono font-semibold text-[#004B8D] bg-[#E8F1F8] px-2.5 py-1 rounded-md border border-[#004B8D]/20">
-                    {fileName}
-                  </span>
-                  {fileSize && (
-                    <span className="text-xs text-[#486581]">
-                      ({(fileSize / 1024).toFixed(1)} KB)
-                    </span>
-                  )}
-                </div>
-
-                {/* Badge counters */}
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                  <span className="text-[#486581]">
-                    Total no arquivo: <strong>{counts.total}</strong> linhas
-                  </span>
-                  <span className="text-[#D3DFE9]">•</span>
-                  <Badge className="bg-[#004B8D] text-white hover:bg-[#004B8D] text-[11px] font-semibold">
-                    {counts.newCount} novos hospitais
-                  </Badge>
-                  <Badge className="bg-[#E5A812] text-[#102A43] hover:bg-[#E5A812] text-[11px] font-semibold">
-                    {counts.updateCount} existentes (atualização)
-                  </Badge>
-                  {counts.invalidCount > 0 && (
-                    <Badge variant="destructive" className="text-[11px] font-semibold">
-                      {counts.invalidCount} inválidos
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2.5 shrink-0">
-                <Button
-                  variant="outline"
-                  onClick={handleReset}
-                  disabled={isImporting}
-                  className="border-[#D3DFE9] text-[#486581] hover:text-red-700 hover:bg-red-50 text-xs font-semibold h-10"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                  Descartar
-                </Button>
-
-                <Button
-                  onClick={handleConfirmImport}
-                  disabled={isImporting || counts.validTotal === 0}
-                  className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-5 text-sm cursor-pointer"
-                >
-                  {isImporting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Importando ({importProgress?.current}/{importProgress?.total})...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Confirmar importação ({counts.validTotal})
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Explanatory banner: nothing saved yet */}
-            <div className="mt-4 pt-3 border-t border-[#D3DFE9] flex items-center gap-2 text-xs text-[#486581]">
-              <Info className="w-4 h-4 text-[#004B8D] shrink-0" />
-              <span>
-                <strong>Atenção:</strong> Nada foi salvo ainda. Revise a tabela de pré-visualização
-                abaixo e clique em <strong>"Confirmar importação"</strong> para gravar as alterações
-                no banco de dados do CREA-PI.
+      {/* Preview Section */}
+      {file && (
+        <div className="space-y-5">
+          {/* Summary Badges */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#F4F6F9] p-4 rounded-xl border border-[#D3DFE9]">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-[#102A43]">Arquivo:</span>
+              <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-[#D3DFE9] text-[#004B8D] font-bold">
+                {file.name}
               </span>
             </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 gap-1 font-semibold">
+                <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
+                {newCount} Novo(s)
+              </Badge>
+              <Badge className="bg-blue-50 text-blue-800 border border-blue-300 gap-1 font-semibold">
+                <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+                {updateCount} Atualização(ões) por CNES
+              </Badge>
+              {errorCount > 0 && (
+                <Badge className="bg-rose-50 text-rose-800 border border-rose-300 gap-1 font-semibold">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                  {errorCount} Inválido(s)
+                </Badge>
+              )}
+            </div>
           </div>
 
-          {/* Table of Parsed Rows */}
-          <div className="bg-white rounded-xl border border-[#D3DFE9] shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden">
-            <div className="overflow-x-auto max-h-[520px]">
-              <Table>
-                <TableHeader className="bg-[#F4F6F9] sticky top-0 z-10">
-                  <TableRow className="border-b border-[#D3DFE9]">
-                    <TableHead className="w-12 text-center text-[11px] font-bold text-[#486581]">
-                      #
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[160px]">
-                      Ação prevista
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[200px]">
-                      Nome do hospital
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[140px]">
-                      Município
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[100px]">
-                      CNES
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[130px]">
-                      CNPJ
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[140px]">
-                      CNPJ Mantenedora
-                    </TableHead>
-                    <TableHead className="text-[11px] font-bold text-[#486581] min-w-[130px]">
-                      Tipo
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {parsedRows.map((row) => {
-                    const isInvalid = row.status === 'invalid'
-                    const isUpdate = row.status === 'update'
-                    const isNew = row.status === 'new'
+          {/* Progress Bar during Import */}
+          {isImporting && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-semibold text-[#102A43]">
+                <span>Importando registros para o banco de dados...</span>
+                <span>{importProgress}%</span>
+              </div>
+              <Progress value={importProgress} className="h-2 bg-[#D3DFE9]" />
+            </div>
+          )}
 
-                    return (
-                      <TableRow
-                        key={row.rowNumber}
-                        className={`
-                          border-b border-[#D3DFE9]/80 text-xs transition-colors
-                          ${
-                            isInvalid
-                              ? 'bg-red-50/70 hover:bg-red-50'
-                              : isUpdate
-                                ? 'bg-amber-50/50 hover:bg-amber-50/80'
-                                : 'hover:bg-[#F4F6F9]/80'
-                          }
-                        `}
-                      >
-                        {/* Row Number */}
-                        <TableCell className="text-center font-mono text-[11px] text-[#486581]">
-                          {row.rowNumber}
-                        </TableCell>
+          {/* Table Preview */}
+          <div className="border border-[#D3DFE9] rounded-xl overflow-x-auto max-h-96">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-[#E8F1F8] text-[#102A43] font-bold sticky top-0 uppercase text-[11px] tracking-wider border-b border-[#D3DFE9]">
+                <tr>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">CNES</th>
+                  <th className="p-3">Nome da Unidade</th>
+                  <th className="p-3">Município</th>
+                  <th className="p-3">Tipo</th>
+                  <th className="p-3">CNPJ</th>
+                  <th className="p-3">Erros / Observações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#D3DFE9]">
+                {processedItems.map((item, idx) => (
+                  <tr
+                    key={idx}
+                    className={`hover:bg-slate-50 transition-colors ${
+                      !item.isValid
+                        ? 'bg-red-50/50'
+                        : item.isExisting
+                          ? 'bg-blue-50/30'
+                          : 'bg-white'
+                    }`}
+                  >
+                    <td className="p-3 whitespace-nowrap">
+                      {!item.isValid ? (
+                        <span className="inline-flex items-center gap-1 text-red-600 font-bold">
+                          <AlertCircle className="w-3.5 h-3.5" /> Erro
+                        </span>
+                      ) : item.isExisting ? (
+                        <span className="inline-flex items-center gap-1 text-blue-700 font-bold">
+                          <RefreshCw className="w-3 h-3" /> Já existe (atualizar)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
+                          <PlusCircle className="w-3.5 h-3.5" /> Novo hospital
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3 font-mono font-bold text-[#004B8D]">
+                      {item.data.cnes || '-'}
+                    </td>
+                    <td className="p-3 font-semibold text-[#102A43] max-w-xs truncate">
+                      {item.data.nome || '-'}
+                    </td>
+                    <td className="p-3 text-[#486581]">{item.data.municipio || '-'}</td>
+                    <td className="p-3 text-[#486581]">{item.data.tipo || 'Hospital'}</td>
+                    <td className="p-3 font-mono text-[#627D98]">
+                      {item.data.cnpj ? formatCNPJ(item.data.cnpj) : '-'}
+                    </td>
+                    <td className="p-3 text-red-600 font-medium">
+                      {item.errors.join(', ') || (
+                        <span className="text-emerald-700 text-[11px] font-semibold">Pronto</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-                        {/* Status / Planned Action Badge */}
-                        <TableCell>
-                          {isNew && (
-                            <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/30 hover:bg-[#E8F1F8] font-semibold text-[11px] flex items-center gap-1 w-fit">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#004B8D]" />
-                              Novo hospital
-                            </Badge>
-                          )}
+          {/* Action buttons */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-[#D3DFE9]">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setFile(null)
+                setProcessedItems([])
+                setImportStats(null)
+              }}
+              disabled={isImporting}
+              className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43]"
+            >
+              Escolher outro arquivo
+            </Button>
 
-                          {isUpdate && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge className="bg-[#FFF8E6] text-[#8C6200] border border-[#E5A812]/40 hover:bg-[#FFF8E6] font-semibold text-[11px] flex items-center gap-1 w-fit cursor-help">
-                                    <RefreshCw className="w-2.5 h-2.5 text-[#C88F06]" />
-                                    Já existe — será atualizado
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs bg-[#102A43] text-white max-w-xs">
-                                  CNES já cadastrado para: &ldquo;
-                                  {row.existingHospitalName}&rdquo;. Os dados do cadastro serão
-                                  sobrescritos com as informações desta linha.
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-
-                          {isInvalid && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge
-                                    variant="destructive"
-                                    className="font-semibold text-[11px] flex items-center gap-1 w-fit cursor-help"
-                                  >
-                                    <AlertTriangle className="w-2.5 h-2.5" />
-                                    Inválido ({row.errors.length})
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs bg-red-900 text-white max-w-xs">
-                                  <ul className="list-disc pl-3 space-y-0.5">
-                                    {row.errors.map((err, idx) => (
-                                      <li key={idx}>{err}</li>
-                                    ))}
-                                  </ul>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </TableCell>
-
-                        {/* Nome */}
-                        <TableCell className="font-semibold text-[#102A43]">
-                          {row.nome || <span className="text-red-500 italic">Vazio</span>}
-                        </TableCell>
-
-                        {/* Município */}
-                        <TableCell className="text-[#334E68] font-medium">
-                          {row.municipio || <span className="text-red-500 italic">Vazio</span>}
-                        </TableCell>
-
-                        {/* CNES */}
-                        <TableCell className="font-mono font-bold text-[#004B8D]">
-                          {row.cnes || <span className="text-red-500 italic">Vazio</span>}
-                        </TableCell>
-
-                        {/* CNPJ */}
-                        <TableCell className="font-mono text-[#486581]">
-                          {row.cnpj ? formatCNPJ(row.cnpj) : '—'}
-                        </TableCell>
-
-                        {/* CNPJ Mantenedora */}
-                        <TableCell className="font-mono text-[#486581]">
-                          {row.cnpj_mantenedora ? formatCNPJ(row.cnpj_mantenedora) : '—'}
-                        </TableCell>
-
-                        {/* Tipo */}
-                        <TableCell>
-                          {row.tipo ? (
-                            <Badge
-                              variant="outline"
-                              className="bg-white border-[#D3DFE9] text-[#102A43] font-medium text-[11px]"
-                            >
-                              {row.tipo}
-                            </Badge>
-                          ) : row.rawTipo ? (
-                            <span className="text-red-600 text-[11px] font-medium">
-                              {row.rawTipo} (inválido)
-                            </span>
-                          ) : (
-                            <span className="text-[#829AB1] text-[11px]">Não inf.</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={isImporting}
+                className="border-[#D3DFE9] text-[#486581]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleExecuteImport}
+                disabled={isImporting || newCount + updateCount === 0}
+                className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold h-10 px-5 shadow-sm cursor-pointer gap-2"
+              >
+                {isImporting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Processando importação...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Confirmar e Importar {newCount + updateCount} Estabelecimento(s)
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

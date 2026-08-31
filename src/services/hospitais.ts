@@ -1,7 +1,5 @@
 import pb from '@/lib/pocketbase/client'
 
-export type HospitalTipo = 'Hospital Geral' | 'Hospital Especializado' | 'Hospital-Dia'
-
 export interface Hospital {
   id: string
   nome: string
@@ -9,7 +7,7 @@ export interface Hospital {
   cnes: string
   cnpj?: string
   cnpj_mantenedora?: string
-  tipo?: HospitalTipo
+  tipo?: string
   endereco?: string
   responsavel?: string
   cpf_responsavel?: string
@@ -23,7 +21,7 @@ export type HospitalFormData = {
   cnes: string
   cnpj?: string
   cnpj_mantenedora?: string
-  tipo?: HospitalTipo | ''
+  tipo?: string
   endereco?: string
   responsavel?: string
   cpf_responsavel?: string
@@ -49,7 +47,7 @@ export const hospitaisService = {
       cnes: data.cnes.trim(),
       cnpj: data.cnpj?.trim() || '',
       cnpj_mantenedora: data.cnpj_mantenedora?.trim() || '',
-      tipo: data.tipo || null,
+      tipo: data.tipo?.trim() || 'Hospital',
       endereco: data.endereco?.trim() || '',
       responsavel: data.responsavel?.trim() || '',
       cpf_responsavel: data.cpf_responsavel?.trim() || '',
@@ -65,7 +63,7 @@ export const hospitaisService = {
     if (data.cnes !== undefined) payload.cnes = data.cnes.trim()
     if (data.cnpj !== undefined) payload.cnpj = data.cnpj.trim()
     if (data.cnpj_mantenedora !== undefined) payload.cnpj_mantenedora = data.cnpj_mantenedora.trim()
-    if (data.tipo !== undefined) payload.tipo = data.tipo || null
+    if (data.tipo !== undefined) payload.tipo = data.tipo?.trim() || 'Hospital'
     if (data.endereco !== undefined) payload.endereco = data.endereco.trim()
     if (data.responsavel !== undefined) payload.responsavel = data.responsavel.trim()
     if (data.cpf_responsavel !== undefined) payload.cpf_responsavel = data.cpf_responsavel.trim()

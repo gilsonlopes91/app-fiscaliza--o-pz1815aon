@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useId } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,8 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Building2, Save, X, Loader2 } from 'lucide-react'
-import { Hospital, HospitalFormData, HospitalTipo } from '@/services/hospitais'
+import { Hospital, HospitalFormData } from '@/services/hospitais'
+import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
 
 interface HospitalFormDialogProps {
@@ -29,15 +30,15 @@ interface HospitalFormDialogProps {
   onSave: (data: HospitalFormData) => Promise<void>
 }
 
-const TIPO_OPTIONS: HospitalTipo[] = ['Hospital Geral', 'Hospital Especializado', 'Hospital-Dia']
-
 export function HospitalFormDialog({
   open,
   onOpenChange,
   hospitalToEdit,
   onSave,
 }: HospitalFormDialogProps) {
-  const isEditing = !!hospitalToEdit
+  const isEditing = !hospitalToEdit
+
+  const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
 
   const [formData, setFormData] = useState<HospitalFormData>({
     nome: '',
@@ -45,7 +46,7 @@ export function HospitalFormDialog({
     cnes: '',
     cnpj: '',
     cnpj_mantenedora: '',
-    tipo: '',
+    tipo: 'Hospital',
     endereco: '',
     responsavel: '',
     cpf_responsavel: '',
@@ -53,6 +54,14 @@ export function HospitalFormDialog({
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Load registered tipos de empreendimento dynamically
+  useEffect(() => {
+    tiposEmpreendimentoService
+      .getAll()
+      .then((data) => setTiposEmpreendimento(data))
+      .catch((err) => console.error('Erro ao carregar tipos no formulário:', err))
+  }, [])
 
   // Sync form data when dialog opens or editing changes
   useEffect(() => {
@@ -66,7 +75,7 @@ export function HospitalFormDialog({
           cnpj_mantenedora: hospitalToEdit.cnpj_mantenedora
             ? formatCNPJ(hospitalToEdit.cnpj_mantenedora)
             : '',
-          tipo: hospitalToEdit.tipo || '',
+          tipo: hospitalToEdit.tipo || 'Hospital',
           endereco: hospitalToEdit.endereco || '',
           responsavel: hospitalToEdit.responsavel || '',
           cpf_responsavel: hospitalToEdit.cpf_responsavel
@@ -80,7 +89,7 @@ export function HospitalFormDialog({
           cnes: '',
           cnpj: '',
           cnpj_mantenedora: '',
-          tipo: '',
+          tipo: 'Hospital',
           endereco: '',
           responsavel: '',
           cpf_responsavel: '',
@@ -242,27 +251,39 @@ export function HospitalFormDialog({
 
               <div className="space-y-1.5">
                 <Label htmlFor="tipo" className="text-sm font-semibold text-[#102A43]">
-                  Tipo de Estabelecimento
+                  Tipo de Empreendimento
                 </Label>
                 <Select
-                  value={formData.tipo || 'none'}
+                  value={formData.tipo || 'Hospital'}
                   onValueChange={(val) =>
                     setFormData({
                       ...formData,
-                      tipo: val === 'none' ? '' : (val as HospitalTipo),
+                      tipo: val,
                     })
                   }
                 >
-                  <SelectTrigger id="tipo" className="border-[#D3DFE9] focus:ring-[#004B8D]">
-                    <SelectValue placeholder="Selecione o tipo" />
+                  <SelectTrigger
+                    id="tipo"
+                    className="border-[#D3DFE9] focus:ring-[#004B8D] bg-white"
+                  >
+                    <SelectValue placeholder="Selecione o tipo de empreendimento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Não informado</SelectItem>
-                    {TIPO_OPTIONS.map((tipo) => (
-                      <SelectItem key={tipo} value={tipo}>
-                        {tipo}
-                      </SelectItem>
-                    ))}
+                    {tiposEmpreendimento.length > 0 ? (
+                      tiposEmpreendimento.map((t) => (
+                        <SelectItem key={t.id} value={t.nome}>
+                          {t.nome}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Hospital">Hospital</SelectItem>
+                        <SelectItem value="Clínica Médica">Clínica Médica</SelectItem>
+                        <SelectItem value="Laboratório de Análises">
+                          Laboratório de Análises
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

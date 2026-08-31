@@ -1,34 +1,36 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
   ClipboardCheck,
-  Building2,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
-  HelpCircle,
-  Calendar,
-  UserCheck,
-  FileCheck2,
-  RefreshCw,
-  ArrowRight,
-  Save,
-  Check,
+  AlertTriangle,
   Clock,
-  Search,
+  Building2,
+  Calendar,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  FileCheck2,
+  Upload,
+  Camera,
+  Shield,
+  HelpCircle,
   Plus,
-  ArrowLeft,
-  SlidersHorizontal,
-  ClipboardList,
-  RotateCcw,
-  Sparkles,
+  RefreshCw,
+  Search,
+  Filter,
+  Eye,
+  X,
+  FileText,
+  AlertCircle,
+  Save,
+  Loader2,
+  CheckCircle,
 } from 'lucide-react'
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -36,12 +38,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { useToast } from '@/hooks/use-toast'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
 import {
@@ -49,1265 +51,738 @@ import {
   Vistoria,
   VistoriaItem,
   VistoriaItemFormData,
-  SituacaoChecklist,
   calculateItemSituacao,
+  SituacaoChecklist,
 } from '@/services/vistorias'
 import { PhotoUploadSection } from '@/components/PhotoUploadSection'
 import { NovaVistoriaDialog } from '@/components/NovaVistoriaDialog'
 import { VistoriaCard } from '@/components/VistoriaCard'
-
-interface CategoryFormState extends VistoriaItemFormData {
-  itemId?: string
-  isDirty?: boolean
-  isSaving?: boolean
-  pendingFiles?: File[]
-  deletedFileNames?: string[]
-}
+import { useToast } from '@/hooks/use-toast'
+import { formatCNPJ, formatCNES } from '@/lib/formatters'
 
 export default function VistoriaPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  // Master Data
+  const urlHospitalId = searchParams.get('hospitalId')
+  const urlVistoriaId = searchParams.get('vistoriaId')
+
+  // Global states
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [categorias, setCategorias] = useState<CategoriaVistoria[]>([])
-  const [vistorias, setVistorias] = useState<Vistoria[]>([])
+  const [openVistorias, setOpenVistorias] = useState<Vistoria[]>([])
   const [allVistoriaItens, setAllVistoriaItens] = useState<VistoriaItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Modal: Nova Vistoria
+  // Active Vistoria Selection
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(urlHospitalId || '')
+  const [currentVistoria, setCurrentVistoria] = useState<Vistoria | null>(null)
+  const [vistoriaItens, setVistoriaItens] = useState<VistoriaItem[]>([])
+  const [isLoadingChecklist, setIsLoadingChecklist] = useState(false)
+
+  // Local Form state for each category checklist item
+  const [itemForms, setItemForms] = useState<Record<string, VistoriaItemFormData>>({})
+  const [pendingPhotos, setPendingPhotos] = useState<Record<string, File[]>>({})
+  const [deletedPhotos, setDeletedPhotos] = useState<Record<string, string[]>>({})
+  const [savingCategoryIds, setSavingCategoryIds] = useState<Record<string, boolean>>({})
+
+  // Modal for new inspection
   const [isNovaVistoriaOpen, setIsNovaVistoriaOpen] = useState(false)
 
-  // Current Mode: 'list' (all open vistorias) vs 'checklist' (active vistoria inspection)
-  const [selectedHospitalId, setSelectedHospitalId] = useState<string>('')
-  const [activeVistoria, setActiveVistoria] = useState<Vistoria | null>(null)
-
-  // Checklist form data state mapped by categoriaId
-  const [itemsMap, setItemsMap] = useState<Record<string, CategoryFormState>>({})
-
-  // Loading and error states
-  const [isLoadingInitial, setIsLoadingInitial] = useState(true)
-  const [isLoadingVistoria, setIsLoadingVistoria] = useState(false)
-  const [openAccordionValues, setOpenAccordionValues] = useState<string[]>([])
-  const [filterSituacao, setFilterSituacao] = useState<string>('todos')
-  const [searchVistoriaQuery, setSearchVistoriaQuery] = useState('')
+  // Open inspection list search
+  const [searchOpenVistorias, setSearchOpenVistorias] = useState('')
 
   useEffect(() => {
-    document.title = 'Vistoria · CREA-PI Fiscalização'
+    document.title = 'Vistoria e Checklist · CREA-PI Fiscalização'
   }, [])
 
-  // 1. Initial Load of Hospitais, Categorias, and existing Vistorias + Itens
+  // 1. Initial load of Hospitais, Categorias, and Open Vistorias
   const loadInitialData = useCallback(async () => {
     try {
-      setIsLoadingInitial(true)
-      const [hospList, catList, vistList] = await Promise.all([
+      setIsLoading(true)
+      const [hospList, catList, openList] = await Promise.all([
         hospitaisService.getAll(),
         categoriasVistoriaService.getAll(),
-        vistoriasService.getAll(),
+        vistoriasService.getOpenVistorias(),
       ])
-
       setHospitais(hospList)
       setCategorias(catList)
-      setVistorias(vistList)
-
-      // Determine if a specific vistoria or hospital was requested in URL
-      const paramHospitalId = searchParams.get('hospitalId')
-      const paramVistoriaId = searchParams.get('vistoriaId')
-
-      if (paramVistoriaId) {
-        const found = vistList.find((v) => v.id === paramVistoriaId)
-        if (found) {
-          setSelectedHospitalId(found.hospital)
-          setActiveVistoria(found)
-        }
-      } else if (paramHospitalId && hospList.some((h) => h.id === paramHospitalId)) {
-        setSelectedHospitalId(paramHospitalId)
-      }
+      setOpenVistorias(openList)
     } catch (err) {
-      console.error('Erro ao carregar dados iniciais de vistoria:', err)
+      console.error('Erro ao carregar dados de vistoria:', err)
       toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível carregar as informações do sistema.',
+        title: 'Erro ao carregar vistoria',
+        description: 'Não foi possível carregar os dados do servidor.',
         variant: 'destructive',
       })
     } finally {
-      setIsLoadingInitial(false)
+      setIsLoading(false)
     }
-  }, [searchParams, toast])
+  }, [toast])
 
   useEffect(() => {
     loadInitialData()
   }, [loadInitialData])
 
-  // 2. Load checklist items when an active vistoria or hospital is chosen
+  // 2. When hospital is selected, load or create its vistoria & items
   const loadVistoriaForHospital = useCallback(
-    async (hospitalId: string, specificVistoriaId?: string) => {
-      if (!hospitalId) {
-        setActiveVistoria(null)
-        setItemsMap({})
+    async (hospId: string, specificVistoriaId?: string | null) => {
+      if (!hospId) {
+        setCurrentVistoria(null)
+        setVistoriaItens([])
+        setItemForms({})
+        setPendingPhotos({})
+        setDeletedPhotos({})
         return
       }
 
       try {
-        setIsLoadingVistoria(true)
+        setIsLoadingChecklist(true)
         let vistoria: Vistoria | null = null
 
         if (specificVistoriaId) {
-          vistoria = await vistoriasService.getById(specificVistoriaId)
-        } else {
-          vistoria = await vistoriasService.getOrCreateForHospital(hospitalId)
+          try {
+            vistoria = await vistoriasService.getById(specificVistoriaId)
+          } catch {
+            // fallback
+          }
         }
 
-        setActiveVistoria(vistoria)
+        if (!vistoria) {
+          vistoria = await vistoriasService.getOrCreateForHospital(hospId)
+        }
 
-        // Update URL query param quietly without reload
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.set('hospitalId', hospitalId)
-            next.set('vistoriaId', vistoria.id)
-            return next
-          },
-          { replace: true },
-        )
+        setCurrentVistoria(vistoria)
 
         // Load items for this vistoria
         const items = await vistoriasService.getItensByVistoria(vistoria.id)
+        setVistoriaItens(items)
 
-        // Build items map from categories and existing records
-        const newMap: Record<string, CategoryFormState> = {}
-        categorias.forEach((cat) => {
-          const existingItem = items.find((it) => it.categoria === cat.id)
-          if (existingItem) {
-            newMap[cat.id] = {
-              itemId: existingItem.id,
-              possuiSistema: existingItem.possuiSistema || null,
-              servicoPeriodico: existingItem.servicoPeriodico || null,
-              prestadorServico: existingItem.prestadorServico || '',
-              numeroArt: existingItem.numeroArt || '',
-              fotos: existingItem.fotos || [],
-              dataUltimaVerificacao: existingItem.dataUltimaVerificacao
-                ? existingItem.dataUltimaVerificacao.substring(0, 10)
-                : '',
-              pendingFiles: [],
-              deletedFileNames: [],
-              isDirty: false,
-              isSaving: false,
-            }
-          } else {
-            newMap[cat.id] = {
-              possuiSistema: null,
-              servicoPeriodico: null,
-              prestadorServico: '',
-              numeroArt: '',
-              fotos: [],
-              dataUltimaVerificacao: '',
-              pendingFiles: [],
-              deletedFileNames: [],
-              isDirty: false,
-              isSaving: false,
-            }
+        // Initialize form states
+        const initialForm: Record<string, VistoriaItemFormData> = {}
+        items.forEach((item) => {
+          initialForm[item.categoria] = {
+            possuiSistema: item.possuiSistema || '',
+            servicoPeriodico: item.servicoPeriodico || '',
+            prestadorServico: item.prestadorServico || '',
+            numeroArt: item.numeroArt || '',
+            dataUltimaVerificacao: item.dataUltimaVerificacao
+              ? item.dataUltimaVerificacao.split('T')[0]
+              : '',
           }
         })
-        setItemsMap(newMap)
-
-        // Refresh vistorias list so the cards & list stay updated
-        const updatedVistorias = await vistoriasService.getAll()
-        setVistorias(updatedVistorias)
+        setItemForms(initialForm)
+        setPendingPhotos({})
+        setDeletedPhotos({})
       } catch (err) {
         console.error('Erro ao carregar vistoria do hospital:', err)
         toast({
           title: 'Erro ao carregar vistoria',
-          description: 'Não foi possível carregar os itens desta vistoria.',
+          description: 'Não foi possível buscar a vistoria e checklist da unidade.',
           variant: 'destructive',
         })
       } finally {
-        setIsLoadingVistoria(false)
+        setIsLoadingChecklist(false)
       }
     },
-    [categorias, setSearchParams, toast],
+    [toast],
   )
 
   useEffect(() => {
-    if (selectedHospitalId && categorias.length > 0) {
-      const paramVistoriaId = searchParams.get('vistoriaId') || undefined
-      loadVistoriaForHospital(selectedHospitalId, paramVistoriaId)
+    if (selectedHospitalId) {
+      loadVistoriaForHospital(selectedHospitalId, urlVistoriaId)
     }
-  }, [selectedHospitalId, categorias.length, loadVistoriaForHospital, searchParams])
+  }, [selectedHospitalId, urlVistoriaId, loadVistoriaForHospital])
 
-  // Active hospital object
-  const activeHospital = useMemo(() => {
+  // Handle Hospital Selection dropdown
+  const handleSelectHospital = (hospId: string) => {
+    setSelectedHospitalId(hospId)
+    setSearchParams(hospId ? { hospitalId: hospId } : {})
+  }
+
+  // Active Hospital Entity
+  const selectedHospital = useMemo(() => {
     return hospitais.find((h) => h.id === selectedHospitalId) || null
   }, [hospitais, selectedHospitalId])
 
-  // Open vistorias (status === 'em_andamento' or undefined)
-  const openVistorias = useMemo(() => {
-    return vistorias.filter((v) => !v.status || v.status === 'em_andamento')
-  }, [vistorias])
-
-  // Filtered open vistorias by search query
-  const filteredOpenVistorias = useMemo(() => {
-    if (!searchVistoriaQuery.trim()) return openVistorias
-    const term = searchVistoriaQuery.toLowerCase()
-    return openVistorias.filter((v) => {
-      const hosp = v.expand?.hospital || hospitais.find((h) => h.id === v.hospital)
-      return (
-        hosp?.nome?.toLowerCase().includes(term) ||
-        hosp?.municipio?.toLowerCase().includes(term) ||
-        hosp?.cnes?.toLowerCase().includes(term)
-      )
-    })
-  }, [openVistorias, searchVistoriaQuery, hospitais])
-
-  // Calculation of summary counts for active checklist
-  const checklistSummary = useMemo(() => {
-    let total = categorias.length
-    let naoSeAplica = 0
-    let pendente = 0
-    let vencido = 0
-    let conforme = 0
-    let naoRespondido = 0
-
-    categorias.forEach((cat) => {
-      const itemData = itemsMap[cat.id] || {}
-      const situacao = calculateItemSituacao(itemData, cat)
-
-      if (situacao === 'não se aplica') naoSeAplica++
-      else if (situacao === 'pendente') pendente++
-      else if (situacao === 'vencido') vencido++
-      else if (situacao === 'conforme') conforme++
-      else naoRespondido++
-    })
-
-    const totalAtencao = pendente + vencido
-
-    return {
-      total,
-      naoSeAplica,
-      pendente,
-      vencido,
-      conforme,
-      naoRespondido,
-      totalAtencao,
-    }
-  }, [categorias, itemsMap])
-
-  // Handle field changes and automatically persist or mark dirty
-  const handleFieldChange = useCallback(
-    (categoriaId: string, updates: Partial<CategoryFormState>) => {
-      setItemsMap((prev) => {
-        const current = prev[categoriaId] || {
-          possuiSistema: null,
-          servicoPeriodico: null,
-          prestadorServico: '',
-          numeroArt: '',
-          fotos: [],
-          dataUltimaVerificacao: '',
-          pendingFiles: [],
-          deletedFileNames: [],
-        }
-        return {
-          ...prev,
-          [categoriaId]: {
-            ...current,
-            ...updates,
-            isDirty: true,
-          },
-        }
-      })
-    },
-    [],
-  )
-
-  // Photo helpers for a category
-  const handleAddPhotos = (categoriaId: string, newFiles: File[]) => {
-    setItemsMap((prev) => {
-      const current = prev[categoriaId] || {}
-      const existingPending = current.pendingFiles || []
-      return {
-        ...prev,
-        [categoriaId]: {
-          ...current,
-          pendingFiles: [...existingPending, ...newFiles],
-          isDirty: true,
-        },
-      }
-    })
+  // Update a form field for a category
+  const handleFieldChange = (
+    categoriaId: string,
+    field: keyof VistoriaItemFormData,
+    value: any,
+  ) => {
+    setItemForms((prev) => ({
+      ...prev,
+      [categoriaId]: {
+        ...prev[categoriaId],
+        [field]: value,
+      },
+    }))
   }
 
+  // Add pending photo files
+  const handleAddPendingPhotos = (categoriaId: string, files: File[]) => {
+    setPendingPhotos((prev) => ({
+      ...prev,
+      [categoriaId]: [...(prev[categoriaId] || []), ...files],
+    }))
+  }
+
+  // Remove pending photo file
   const handleRemovePendingPhoto = (categoriaId: string, index: number) => {
-    setItemsMap((prev) => {
-      const current = prev[categoriaId] || {}
-      const pending = [...(current.pendingFiles || [])]
-      pending.splice(index, 1)
-      return {
-        ...prev,
-        [categoriaId]: {
-          ...current,
-          pendingFiles: pending,
-          isDirty: true,
-        },
-      }
+    setPendingPhotos((prev) => {
+      const current = [...(prev[categoriaId] || [])]
+      current.splice(index, 1)
+      return { ...prev, [categoriaId]: current }
     })
   }
 
-  const handleDeleteExistingPhoto = (categoriaId: string, photoName: string) => {
-    setItemsMap((prev) => {
-      const current = prev[categoriaId] || {}
-      const existing = (current.fotos || []).filter((f) => f !== photoName)
-      const deleted = [...(current.deletedFileNames || []), photoName]
-      return {
-        ...prev,
-        [categoriaId]: {
-          ...current,
-          fotos: existing,
-          deletedFileNames: deleted,
-          isDirty: true,
-        },
-      }
-    })
+  // Mark existing photo for deletion
+  const handleDeleteExistingPhoto = (categoriaId: string, filename: string) => {
+    setDeletedPhotos((prev) => ({
+      ...prev,
+      [categoriaId]: [...(prev[categoriaId] || []), filename],
+    }))
+    // Also remove from local vistoriaItens display
+    setVistoriaItens((prev) =>
+      prev.map((item) => {
+        if (item.categoria === categoriaId && item.fotos) {
+          return {
+            ...item,
+            fotos: item.fotos.filter((f) => f !== filename),
+          }
+        }
+        return item
+      }),
+    )
   }
 
-  // Save a single category item to backend
-  const handleSaveCategoryItem = async (categoria: CategoriaVistoria) => {
-    if (!activeVistoria || !selectedHospitalId) return
+  // Save Item to Backend
+  const handleSaveItem = async (cat: CategoriaVistoria) => {
+    if (!currentVistoria || !selectedHospitalId) return
 
-    const itemState = itemsMap[categoria.id]
-    if (!itemState) return
+    const formData = itemForms[cat.id] || {
+      possuiSistema: '',
+      servicoPeriodico: '',
+      prestadorServico: '',
+      numeroArt: '',
+      dataUltimaVerificacao: '',
+    }
+
+    const existingItem = vistoriaItens.find((i) => i.categoria === cat.id)
+    const newFiles = pendingPhotos[cat.id] || []
+    const deletedNames = deletedPhotos[cat.id] || []
 
     try {
-      setItemsMap((prev) => ({
-        ...prev,
-        [categoria.id]: {
-          ...prev[categoria.id],
-          isSaving: true,
-        },
-      }))
+      setSavingCategoryIds((prev) => ({ ...prev, [cat.id]: true }))
 
       const saved = await vistoriasService.saveItem(
-        activeVistoria.id,
+        currentVistoria.id,
         selectedHospitalId,
-        categoria.id,
-        {
-          possuiSistema: itemState.possuiSistema,
-          servicoPeriodico: itemState.servicoPeriodico,
-          prestadorServico: itemState.prestadorServico,
-          numeroArt: itemState.numeroArt,
-          dataUltimaVerificacao: itemState.dataUltimaVerificacao || null,
-        },
-        categoria,
-        itemState.itemId,
-        itemState.pendingFiles,
-        itemState.deletedFileNames,
+        cat.id,
+        formData,
+        cat,
+        existingItem?.id,
+        newFiles.length > 0 ? newFiles : undefined,
+        deletedNames.length > 0 ? deletedNames : undefined,
       )
 
-      setItemsMap((prev) => ({
-        ...prev,
-        [categoria.id]: {
-          ...prev[categoria.id],
-          itemId: saved.id,
-          fotos: saved.fotos || [],
-          pendingFiles: [],
-          deletedFileNames: [],
-          isDirty: false,
-          isSaving: false,
-        },
-      }))
+      // Update local items state
+      setVistoriaItens((prev) => {
+        const index = prev.findIndex((i) => i.categoria === cat.id)
+        if (index >= 0) {
+          const updated = [...prev]
+          updated[index] = saved
+          return updated
+        }
+        return [...prev, saved]
+      })
+
+      // Clear pending/deleted tracking for this category
+      setPendingPhotos((prev) => ({ ...prev, [cat.id]: [] }))
+      setDeletedPhotos((prev) => ({ ...prev, [cat.id]: [] }))
 
       toast({
         title: 'Item salvo com sucesso!',
-        description: `As informações de "${categoria.nome}" foram persistidas.`,
+        description: `Informações de "${cat.nome}" foram sincronizadas.`,
       })
     } catch (err) {
-      console.error('Erro ao salvar item de vistoria:', err)
-      setItemsMap((prev) => ({
-        ...prev,
-        [categoria.id]: {
-          ...prev[categoria.id],
-          isSaving: false,
-        },
-      }))
+      console.error('Erro ao salvar item:', err)
       toast({
         title: 'Erro ao salvar item',
-        description: 'Não foi possível persistir as respostas no servidor.',
+        description: 'Não foi possível salvar o item da vistoria.',
         variant: 'destructive',
       })
+    } finally {
+      setSavingCategoryIds((prev) => ({ ...prev, [cat.id]: false }))
     }
   }
 
-  // Switch hospital in checklist view
-  const handleSelectHospital = (hospitalId: string) => {
-    setSelectedHospitalId(hospitalId)
-  }
+  // Calculate situation summary for the active vistoria
+  const stats = useMemo(() => {
+    let conformeCount = 0
+    let vencidoCount = 0
+    let naoSeAplicaCount = 0
+    let pendenteCount = 0
 
-  // Start new vistoria from dialog
-  const handleStartNovaVistoria = async (hospitalId: string) => {
-    try {
-      const vistoria = await vistoriasService.getOrCreateForHospital(hospitalId)
-      setSelectedHospitalId(hospitalId)
-      setActiveVistoria(vistoria)
-      setSearchParams({ hospitalId, vistoriaId: vistoria.id })
-      toast({
-        title: 'Vistoria iniciada',
-        description: 'Checklist carregado para preenchimento.',
-      })
-    } catch (err) {
-      console.error('Erro ao iniciar vistoria:', err)
-      toast({
-        title: 'Erro ao iniciar vistoria',
-        description: 'Não foi possível abrir a vistoria selecionada.',
-        variant: 'destructive',
-      })
-    }
-  }
+    categorias.forEach((cat) => {
+      const item = vistoriaItens.find((i) => i.categoria === cat.id)
+      const form = itemForms[cat.id]
 
-  // Open an existing vistoria card
-  const handleOpenVistoriaCard = (vistoria: Vistoria) => {
-    setSelectedHospitalId(vistoria.hospital)
-    setActiveVistoria(vistoria)
-    setSearchParams({ hospitalId: vistoria.hospital, vistoriaId: vistoria.id })
-  }
+      let situacao: SituacaoChecklist = null
 
-  // Back to list view
-  const handleBackToList = () => {
-    setSelectedHospitalId('')
-    setActiveVistoria(null)
-    setSearchParams({})
-  }
-
-  // Helper badge component for item situation
-  const renderSituacaoBadge = (situacao: SituacaoChecklist, size: 'sm' | 'default' = 'default') => {
-    const isSm = size === 'sm'
-    switch (situacao) {
-      case 'conforme':
-        return (
-          <Badge
-            className={`bg-emerald-50 text-emerald-800 hover:bg-emerald-50 border border-emerald-300 font-bold ${isSm ? 'text-[11px] px-2 py-0.5' : 'text-xs px-2.5 py-1'} gap-1 shrink-0 shadow-xs`}
-          >
-            <CheckCircle2
-              className={isSm ? 'w-3 h-3 text-emerald-600' : 'w-3.5 h-3.5 text-emerald-600'}
-            />
-            Conforme
-          </Badge>
-        )
-      case 'pendente':
-        return (
-          <Badge
-            className={`bg-rose-50 text-rose-800 hover:bg-rose-50 border border-rose-300 font-bold ${isSm ? 'text-[11px] px-2 py-0.5' : 'text-xs px-2.5 py-1'} gap-1 shrink-0 shadow-xs`}
-          >
-            <AlertTriangle
-              className={isSm ? 'w-3 h-3 text-rose-600' : 'w-3.5 h-3.5 text-rose-600'}
-            />
-            Pendente
-          </Badge>
-        )
-      case 'vencido':
-        return (
-          <Badge
-            className={`bg-rose-50 text-rose-800 hover:bg-rose-50 border border-rose-300 font-bold ${isSm ? 'text-[11px] px-2 py-0.5' : 'text-xs px-2.5 py-1'} gap-1 shrink-0 shadow-xs`}
-          >
-            <Clock className={isSm ? 'w-3 h-3 text-rose-600' : 'w-3.5 h-3.5 text-rose-600'} />
-            Vencido
-          </Badge>
-        )
-      case 'não se aplica':
-        return (
-          <Badge
-            className={`bg-[#F4F6F9] text-[#486581] hover:bg-[#F4F6F9] border border-[#D3DFE9] font-medium ${isSm ? 'text-[11px] px-2 py-0.5' : 'text-xs px-2.5 py-1'} gap-1 shrink-0`}
-          >
-            <XCircle className={isSm ? 'w-3 h-3 text-[#829AB1]' : 'w-3.5 h-3.5 text-[#829AB1]'} />
-            Não se aplica
-          </Badge>
-        )
-      default:
-        return (
-          <Badge
-            className={`bg-[#F4F6F9] text-[#829AB1] hover:bg-[#F4F6F9] border border-[#D3DFE9] font-medium ${isSm ? 'text-[11px] px-2 py-0.5' : 'text-xs px-2.5 py-1'} gap-1 shrink-0`}
-          >
-            <HelpCircle className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-            Não avaliado
-          </Badge>
-        )
-    }
-  }
-
-  // Filter categories if user selects a tab filter
-  const filteredCategorias = useMemo(() => {
-    if (filterSituacao === 'todos') return categorias
-    return categorias.filter((cat) => {
-      const itemData = itemsMap[cat.id] || {}
-      const situacao = calculateItemSituacao(itemData, cat)
-      if (filterSituacao === 'atencao') {
-        return situacao === 'pendente' || situacao === 'vencido'
+      if (form) {
+        situacao = calculateItemSituacao(form, cat)
+      } else if (item) {
+        situacao = item.situacaoCalculada || null
       }
-      if (filterSituacao === 'pendente') return situacao === 'pendente'
-      if (filterSituacao === 'vencido') return situacao === 'vencido'
-      if (filterSituacao === 'conforme') return situacao === 'conforme'
-      if (filterSituacao === 'nao_se_aplica') return situacao === 'não se aplica'
-      if (filterSituacao === 'nao_avaliado') return situacao === null
-      return true
+
+      if (situacao === 'conforme') conformeCount++
+      else if (situacao === 'vencido') vencidoCount++
+      else if (situacao === 'não se aplica') naoSeAplicaCount++
+      else pendenteCount++
     })
-  }, [categorias, itemsMap, filterSituacao])
 
-  if (isLoadingInitial) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-[#486581] animate-page-enter">
-        <RefreshCw className="w-8 h-8 animate-spin text-[#004B8D] mb-3" />
-        <p className="text-sm font-medium">Carregando sistema de vistoria CREA-PI...</p>
-      </div>
+    return {
+      total: categorias.length,
+      conforme: conformeCount,
+      vencido: vencidoCount,
+      naoSeAplica: naoSeAplicaCount,
+      pendente: pendenteCount,
+    }
+  }, [categorias, vistoriaItens, itemForms])
+
+  // Filter open vistorias for the open list view
+  const filteredOpenVistorias = useMemo(() => {
+    if (!searchOpenVistorias.trim()) return openVistorias
+    const q = searchOpenVistorias.toLowerCase()
+    return openVistorias.filter(
+      (v) =>
+        v.expand?.hospital?.nome.toLowerCase().includes(q) ||
+        v.expand?.hospital?.municipio.toLowerCase().includes(q) ||
+        v.expand?.hospital?.cnes.includes(q),
     )
-  }
+  }, [openVistorias, searchOpenVistorias])
 
-  // If no hospitals exist at all, invite user to create one
-  if (hospitais.length === 0) {
-    return (
-      <div className="animate-page-enter">
-        <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight mb-2">
-          Vistoria Técnica CREA-PI
-        </h1>
-        <p className="text-sm text-[#486581] mb-8">
-          Checklist técnico de engenharia, instalações hospitalares e conformidade de ARTs.
-        </p>
-
-        <div className="mt-4 flex flex-col items-center justify-center text-center py-16 px-4 bg-white rounded-2xl border border-[#D3DFE9] shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <div className="w-20 h-20 rounded-full bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] mb-4 shadow-xs">
-            <Building2 className="w-9 h-9 stroke-[1.8]" />
-          </div>
-          <p className="text-lg font-bold text-[#102A43] max-w-sm mb-1">
-            Nenhum hospital cadastrado
-          </p>
-          <p className="text-sm text-[#486581] max-w-sm mb-6">
-            Para iniciar uma vistoria técnica, você precisa primeiro cadastrar ou importar um
-            hospital.
-          </p>
-          <Button
-            onClick={() => navigate('/hospitais')}
-            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold cursor-pointer"
-          >
-            Ir para cadastro de Hospitais
-            <ArrowRight className="w-4 h-4 ml-1.5" />
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  // ==========================================
-  // VIEW 1: LIST OF ALL OPEN VISTORIAS
-  // Shown when no specific hospital/vistoria is selected
-  // ==========================================
-  if (!selectedHospitalId) {
-    return (
-      <div className="animate-page-enter space-y-6 pb-16">
-        {/* Top Header with Title and "Nova vistoria" button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
-              Vistorias Técnicas
-            </h1>
-            <p className="text-sm text-[#486581] mt-0.5">
-              Gerencie e acompanhe todas as vistorias hospitalares abertas no estado do Piauí
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 self-start sm:self-auto">
-            <Button
-              onClick={() => setIsNovaVistoriaOpen(true)}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              Nova vistoria
-            </Button>
-          </div>
-        </div>
-
-        {/* Search & Filter Bar */}
-        <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#D3DFE9] shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-[#486581] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input
-              placeholder="Buscar vistoria por hospital, município ou CNES..."
-              value={searchVistoriaQuery}
-              onChange={(e) => setSearchVistoriaQuery(e.target.value)}
-              className="pl-10 pr-4 border-[#D3DFE9] focus-visible:ring-[#004B8D] bg-[#F4F6F9]/50 h-10 text-sm"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-[#486581] font-medium">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>
-              <strong>{openVistorias.length}</strong>{' '}
-              {openVistorias.length === 1 ? 'vistoria aberta' : 'vistorias abertas'}
-            </span>
-          </div>
-        </div>
-
-        {/* Empty State for Vistorias */}
-        {openVistorias.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center py-16 px-4 bg-white rounded-2xl border border-[#D3DFE9] shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <div className="w-20 h-20 rounded-full bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] mb-4 shadow-xs">
-              <ClipboardList className="w-9 h-9 stroke-[1.8]" />
-            </div>
-            <p className="text-lg font-bold text-[#102A43] max-w-sm mb-1">
-              Nenhuma vistoria em andamento
-            </p>
-            <p className="text-sm text-[#486581] max-w-sm mb-6">
-              Inicie uma nova vistoria técnica hospitalar para preencher o checklist de engenharia e
-              ARTs.
-            </p>
-            <Button
-              onClick={() => setIsNovaVistoriaOpen(true)}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold cursor-pointer"
-            >
-              <Plus className="w-4 h-4 mr-1.5" />
-              Nova vistoria
-            </Button>
-          </div>
-        ) : filteredOpenVistorias.length === 0 ? (
-          <div className="bg-white rounded-xl border border-[#D3DFE9] p-8 text-center">
-            <Search className="w-8 h-8 text-[#829AB1] mx-auto mb-2" />
-            <p className="text-sm font-semibold text-[#102A43]">
-              Nenhuma vistoria encontrada com os termos buscados.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSearchVistoriaQuery('')}
-              className="mt-3 text-xs border-[#D3DFE9] text-[#004B8D]"
-            >
-              Limpar busca
-            </Button>
-          </div>
-        ) : (
-          /* Grid of Open Vistoria Cards */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {filteredOpenVistorias.map((vistoria) => {
-              return (
-                <VistoriaCard
-                  key={vistoria.id}
-                  vistoria={vistoria}
-                  pendentesCount={0}
-                  vencidosCount={0}
-                  conformesCount={0}
-                  totalItensCount={categorias.length}
-                  onClick={() => handleOpenVistoriaCard(vistoria)}
-                />
-              )
-            })}
-          </div>
-        )}
-
-        {/* Dialog: Nova Vistoria */}
-        <NovaVistoriaDialog
-          open={isNovaVistoriaOpen}
-          onOpenChange={setIsNovaVistoriaOpen}
-          hospitais={hospitais}
-          onSelectHospital={handleStartNovaVistoria}
-        />
-      </div>
-    )
-  }
-
-  // ==========================================
-  // VIEW 2: ACTIVE CHECKLIST INSPECTION FORM
-  // Shown when a specific hospital/vistoria is selected
-  // ==========================================
   return (
-    <div className="animate-page-enter space-y-6 pb-16">
-      {/* Top Navigation & Action Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleBackToList}
-            className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] hover:bg-[#F4F6F9] h-9 px-3 font-semibold"
-          >
-            <ArrowLeft className="w-4 h-4 mr-1.5" />
-            Todas as vistorias
-          </Button>
-          <div>
-            <h1 className="text-[20px] sm:text-[24px] font-bold text-[#102A43] tracking-tight leading-tight">
-              Checklist de Vistoria Técnica
+    <div className="animate-page-enter space-y-8 pb-20">
+      {/* 1. Header with Nova Vistoria button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
+              Vistorias & Checklist de Fiscalização
             </h1>
-            <p className="text-xs text-[#486581] mt-0.5">
-              CREA-PI • Conselho Regional de Engenharia e Agronomia do Piauí
-            </p>
           </div>
+          <p className="text-sm text-[#486581] mt-0.5">
+            Preenchimento técnico das conformidades, exigências de ART, fotos e situação regulatória
+          </p>
         </div>
 
-        {/* Quick Switch Hospital & "+ Nova vistoria" button */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
           <Button
             onClick={() => setIsNovaVistoriaOpen(true)}
-            size="sm"
-            variant="outline"
-            className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer"
+            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
           >
-            <Plus className="w-4 h-4 mr-1 stroke-[2.5]" />
-            Nova vistoria
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Nova Vistoria
           </Button>
+          <Button
+            variant="outline"
+            onClick={loadInitialData}
+            disabled={isLoading}
+            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer"
+            title="Atualizar lista"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </div>
 
-          <div className="flex items-center gap-1.5 bg-white p-1 px-2.5 rounded-lg border border-[#D3DFE9] shadow-xs">
-            <span className="text-xs font-semibold text-[#486581] flex items-center gap-1">
-              <Building2 className="w-3.5 h-3.5 text-[#004B8D]" />
-              Hospital:
-            </span>
+      {/* 2. Seleção do Hospital em Atendimento */}
+      <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <Label
+            htmlFor="select-hospital"
+            className="text-sm font-bold text-[#102A43] flex items-center gap-2"
+          >
+            <Building2 className="w-4 h-4 text-[#004B8D]" />
+            Selecione o Estabelecimento para Vistoriar:
+          </Label>
+
+          {selectedHospital && (
+            <Badge className="bg-[#E8F1F8] text-[#004B8D] hover:bg-[#E8F1F8] text-xs font-semibold self-start sm:self-auto border-0">
+              {selectedHospital.tipo || 'Hospital'} • CNES: {selectedHospital.cnes}
+            </Badge>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2">
             <Select value={selectedHospitalId} onValueChange={handleSelectHospital}>
-              <SelectTrigger className="w-[180px] sm:w-[220px] h-8 border-0 font-semibold text-xs text-[#102A43] focus:ring-0 p-0 shadow-none">
-                <SelectValue placeholder="Selecione um hospital" />
+              <SelectTrigger
+                id="select-hospital"
+                className="h-11 border-[#D3DFE9] bg-[#F4F6F9]/50 text-sm focus:ring-[#004B8D]"
+              >
+                <SelectValue placeholder="Selecione um hospital ou estabelecimento..." />
               </SelectTrigger>
               <SelectContent>
-                {hospitais.map((h) => {
-                  const hasVistoria = vistorias.some((v) => v.hospital === h.id)
-                  return (
-                    <SelectItem key={h.id} value={h.id}>
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span className="truncate">{h.nome}</span>
-                        {hasVistoria && (
-                          <span className="text-[10px] text-[#004B8D] bg-[#E8F1F8] px-1.5 py-0.5 rounded font-semibold shrink-0">
-                            Em andamento
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  )
-                })}
+                {hospitais.map((h) => (
+                  <SelectItem key={h.id} value={h.id}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[#102A43]">{h.nome}</span>
+                      <span className="text-xs text-[#627D98]">
+                        ({h.municipio} • CNES: {h.cnes})
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+
+          {selectedHospitalId && (
+            <Button
+              variant="outline"
+              onClick={() => handleSelectHospital('')}
+              className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] h-11 text-xs gap-1.5"
+            >
+              <X className="w-4 h-4" />
+              Limpar seleção
+            </Button>
+          )}
         </div>
-      </div>
 
-      {/* Active Hospital Summary Banner */}
-      {activeHospital && (
-        <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-[#E8F1F8] text-[#004B8D] flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-                <ClipboardCheck className="w-6 h-6 stroke-[2]" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-bold text-[#102A43] leading-tight">
-                    {activeHospital.nome}
-                  </h2>
-                  {activeHospital.tipo && (
-                    <Badge className="bg-[#E8F1F8] text-[#004B8D] hover:bg-[#E8F1F8] border-0 text-xs font-semibold">
-                      {activeHospital.tipo}
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-xs text-[#486581] flex flex-wrap items-center gap-3">
-                  <span>
-                    Município:{' '}
-                    <strong className="text-[#102A43]">{activeHospital.municipio}</strong>
-                  </span>
-                  <span>•</span>
-                  <span>
-                    CNES:{' '}
-                    <strong className="font-mono text-[#004B8D] font-bold">
-                      {activeHospital.cnes}
-                    </strong>
-                  </span>
-                  {activeHospital.responsavel && (
-                    <>
-                      <span>•</span>
-                      <span>
-                        Resp.:{' '}
-                        <strong className="text-[#102A43]">{activeHospital.responsavel}</strong>
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
+        {/* Selected Hospital Info Card */}
+        {selectedHospital && (
+          <div className="mt-4 p-4 rounded-xl bg-[#F4F6F9] border border-[#D3DFE9] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <span className="text-[#627D98] block">Município:</span>
+              <span className="font-semibold text-[#102A43]">{selectedHospital.municipio}</span>
             </div>
-
-            {/* Total Pending / Expired Highlight Box */}
-            <div className="flex flex-wrap items-center gap-3 bg-[#F4F6F9] p-3.5 sm:px-4 sm:py-3 rounded-xl border border-[#D3DFE9]">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-base shadow-sm ${
-                    checklistSummary.totalAtencao > 0
-                      ? 'bg-[#E5A812] text-[#102A43]'
-                      : 'bg-[#004B8D] text-white'
-                  }`}
-                >
-                  {checklistSummary.totalAtencao}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[#102A43]">
-                    {checklistSummary.totalAtencao === 0
-                      ? 'Nenhuma não conformidade'
-                      : checklistSummary.totalAtencao === 1
-                        ? '1 item pendente / vencido'
-                        : `${checklistSummary.totalAtencao} itens pendentes ou vencidos`}
-                  </div>
-                  <div className="text-[11px] text-[#486581]">
-                    {checklistSummary.pendente} pendentes • {checklistSummary.vencido} vencidos •{' '}
-                    {checklistSummary.conforme} conformes
-                  </div>
-                </div>
-              </div>
+            <div>
+              <span className="text-[#627D98] block">CNPJ:</span>
+              <span className="font-mono text-[#102A43]">
+                {selectedHospital.cnpj ? formatCNPJ(selectedHospital.cnpj) : 'Não informado'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[#627D98] block">Responsável pelas informações:</span>
+              <span className="font-semibold text-[#102A43]">
+                {selectedHospital.responsavel || 'Não informado'}
+              </span>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Quick Filter Bar */}
-          <div className="mt-5 pt-4 border-t border-[#D3DFE9] flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                size="sm"
-                variant={filterSituacao === 'todos' ? 'default' : 'outline'}
-                onClick={() => setFilterSituacao('todos')}
-                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
-                  filterSituacao === 'todos'
-                    ? 'bg-[#004B8D] hover:bg-[#003666] text-white'
-                    : 'border-[#D3DFE9] text-[#486581] hover:text-[#102A43]'
-                }`}
-              >
-                Todos ({checklistSummary.total})
-              </Button>
+      {/* 3. Resumo de Pendências (Card no Topo) se hospital estiver selecionado */}
+      {selectedHospitalId && (
+        <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#D3DFE9] pb-3">
+            <h3 className="text-base font-bold text-[#102A43] flex items-center gap-2">
+              <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
+              Resumo Técnico da Vistoria
+            </h3>
+            <span className="text-xs text-[#627D98] font-medium">
+              {stats.total} itens regulatórios cadastrados
+            </span>
+          </div>
 
-              <Button
-                size="sm"
-                variant={filterSituacao === 'atencao' ? 'default' : 'outline'}
-                onClick={() => setFilterSituacao('atencao')}
-                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
-                  filterSituacao === 'atencao'
-                    ? 'bg-[#E5A812] hover:bg-[#C88F06] text-[#102A43] font-bold'
-                    : 'border-amber-300 text-[#8C6200] hover:bg-amber-50'
-                }`}
-              >
-                Pendentes / Vencidos ({checklistSummary.totalAtencao})
-              </Button>
-
-              <Button
-                size="sm"
-                variant={filterSituacao === 'conforme' ? 'default' : 'outline'}
-                onClick={() => setFilterSituacao('conforme')}
-                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
-                  filterSituacao === 'conforme'
-                    ? 'bg-[#004B8D] hover:bg-[#003666] text-white'
-                    : 'border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8]'
-                }`}
-              >
-                Conformes ({checklistSummary.conforme})
-              </Button>
-
-              <Button
-                size="sm"
-                variant={filterSituacao === 'nao_se_aplica' ? 'default' : 'outline'}
-                onClick={() => setFilterSituacao('nao_se_aplica')}
-                className={`text-xs h-8 px-3 font-semibold cursor-pointer ${
-                  filterSituacao === 'nao_se_aplica'
-                    ? 'bg-[#486581] hover:bg-[#334E68] text-white'
-                    : 'border-[#D3DFE9] text-[#486581] hover:bg-[#F4F6F9]'
-                }`}
-              >
-                Não se aplica ({checklistSummary.naoSeAplica})
-              </Button>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+              <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold mb-1">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Conforme
+              </div>
+              <div className="text-2xl font-bold text-emerald-900">{stats.conforme}</div>
+              <div className="text-[11px] text-emerald-700">Sistemas regulares</div>
             </div>
 
-            <div className="text-xs text-[#486581] flex items-center gap-1 font-medium">
-              <span>{checklistSummary.naoRespondido} itens não avaliados</span>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
+              <div className="flex items-center gap-1.5 text-rose-800 text-xs font-bold mb-1">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                Vencido
+              </div>
+              <div className="text-2xl font-bold text-rose-900">{stats.vencido}</div>
+              <div className="text-[11px] text-rose-700">Prazo expirado</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-[#D3DFE9]">
+              <div className="flex items-center gap-1.5 text-[#486581] text-xs font-bold mb-1">
+                <CheckCircle className="w-4 h-4 text-[#627D98]" />
+                Não se aplica
+              </div>
+              <div className="text-2xl font-bold text-[#102A43]">{stats.naoSeAplica}</div>
+              <div className="text-[11px] text-[#627D98]">Não possui sistema</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
+              <div className="flex items-center gap-1.5 text-amber-800 text-xs font-bold mb-1">
+                <Clock className="w-4 h-4 text-amber-600" />
+                Pendente
+              </div>
+              <div className="text-2xl font-bold text-amber-900">{stats.pendente}</div>
+              <div className="text-[11px] text-amber-700">Ainda não preenchido</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Checklist Categorias Accordion */}
-      {isLoadingVistoria ? (
-        <div className="flex flex-col items-center justify-center py-20 text-[#486581] bg-white rounded-2xl border border-[#D3DFE9]">
-          <RefreshCw className="w-8 h-8 animate-spin text-[#004B8D] mb-3" />
-          <p className="text-sm font-medium">Carregando checklist de vistoria...</p>
-        </div>
-      ) : (
+      {/* 4. Checklist Expansível (Accordion) com Categorias Técnicas */}
+      {selectedHospitalId ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-base font-bold text-[#102A43] flex items-center gap-2">
-              <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
-              Categorias Técnicas de Engenharia
-            </h3>
-            <span className="text-xs text-[#486581]">
-              Exibindo {filteredCategorias.length} de {categorias.length} itens
-            </span>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-[#102A43] flex items-center gap-2">
+                <ClipboardCheck className="w-5 h-5 text-[#004B8D]" />
+                Checklist de Fiscalização Técnica
+              </h2>
+              <p className="text-xs text-[#486581]">
+                Abra cada categoria para preencher respostas, anotação de ART e registrar fotos.
+              </p>
+            </div>
+
+            {isLoadingChecklist && (
+              <div className="flex items-center gap-1.5 text-xs text-[#004B8D] font-semibold">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Carregando itens...
+              </div>
+            )}
           </div>
 
-          {filteredCategorias.length === 0 ? (
-            <div className="bg-white rounded-xl border border-[#D3DFE9] p-8 text-center">
-              <Search className="w-8 h-8 text-[#829AB1] mx-auto mb-2" />
-              <p className="text-sm font-semibold text-[#102A43]">
-                Nenhum item com a situação selecionada
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFilterSituacao('todos')}
-                className="mt-3 text-xs border-[#D3DFE9] text-[#004B8D]"
-              >
-                Ver todos os itens
-              </Button>
+          {categorias.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl border border-[#D3DFE9]">
+              <p className="text-sm text-[#486581]">Nenhuma categoria técnica cadastrada.</p>
             </div>
           ) : (
-            <Accordion
-              type="multiple"
-              value={openAccordionValues}
-              onValueChange={setOpenAccordionValues}
-              className="space-y-3"
-            >
-              {filteredCategorias.map((categoria) => {
-                const itemState = itemsMap[categoria.id] || {
-                  possuiSistema: null,
-                  servicoPeriodico: null,
+            <Accordion type="multiple" className="space-y-3">
+              {categorias.map((cat, idx) => {
+                const item = vistoriaItens.find((i) => i.categoria === cat.id)
+                const form = itemForms[cat.id] || {
+                  possuiSistema: '',
+                  servicoPeriodico: '',
                   prestadorServico: '',
                   numeroArt: '',
-                  fotos: [],
                   dataUltimaVerificacao: '',
-                  pendingFiles: [],
-                  deletedFileNames: [],
-                  isDirty: false,
-                  isSaving: false,
                 }
 
-                const situacao = calculateItemSituacao(itemState, categoria)
-                const isPossuiSim = itemState.possuiSistema === 'Sim'
+                const situacao = calculateItemSituacao(form, cat)
+                const isSaving = savingCategoryIds[cat.id] || false
+                const pending = pendingPhotos[cat.id] || []
 
                 return (
                   <AccordionItem
-                    key={categoria.id}
-                    value={categoria.id}
-                    className="border border-[#D3DFE9] bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-all overflow-hidden"
+                    key={cat.id}
+                    value={cat.id}
+                    className="border border-[#D3DFE9] bg-white rounded-xl overflow-hidden shadow-xs data-[state=open]:border-[#004B8D]/60 transition-all"
                   >
-                    <AccordionTrigger className="px-5 py-4 hover:no-underline flex items-center justify-between gap-3 text-left hover:bg-[#F8FAFC]">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 flex-1 pr-2">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[15px] sm:text-base text-[#102A43]">
-                              {categoria.nome}
-                            </span>
+                    <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-slate-50/70">
+                      <div className="flex flex-1 items-center justify-between gap-4 text-left pr-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-[#E8F1F8] text-[#004B8D] font-bold text-xs flex items-center justify-center shrink-0">
+                            {idx + 1}
                           </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-[#486581]">
-                            {categoria.periodicidadeDias && categoria.periodicidadeDias > 0 ? (
-                              <span className="flex items-center gap-1 text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded text-[11px]">
-                                <Calendar className="w-3 h-3 text-[#004B8D]" />
-                                Periodicidade regulatória: {categoria.periodicidadeDias} dias
-                              </span>
-                            ) : null}
-
-                            {itemState.fotos && itemState.fotos.length > 0 && (
-                              <span className="text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded text-[11px] font-semibold">
-                                {itemState.fotos.length}{' '}
-                                {itemState.fotos.length === 1 ? 'foto' : 'fotos'}
-                              </span>
-                            )}
+                          <div>
+                            <h4 className="font-bold text-sm text-[#102A43]">{cat.nome}</h4>
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#627D98] mt-0.5">
+                              <span>Exige ART: {cat.exigeArt ? 'Sim' : 'Não'}</span>
+                              {cat.periodicidadeDias && cat.periodicidadeDias > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span>Periodicidade: {cat.periodicidadeDias} dias</span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Status Label on the Right of Trigger */}
-                        <div className="flex items-center gap-2 self-start sm:self-center">
-                          {renderSituacaoBadge(situacao)}
+                        {/* Situacao Badge on Header */}
+                        <div>
+                          {situacao === 'conforme' && (
+                            <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Conforme
+                            </Badge>
+                          )}
+                          {situacao === 'vencido' && (
+                            <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-bold gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                              Vencido
+                            </Badge>
+                          )}
+                          {situacao === 'não se aplica' && (
+                            <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-xs font-medium">
+                              Não se aplica
+                            </Badge>
+                          )}
+                          {!situacao && (
+                            <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-medium gap-1">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              Pendente
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </AccordionTrigger>
 
-                    <AccordionContent className="pt-0 pb-0 border-t border-[#D3DFE9]/80">
-                      <div className="p-5 sm:p-6 space-y-6 bg-slate-50/50">
-                        {/* 1. Pergunta Principal: O hospital possui este sistema / serviço? */}
-                        <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#D3DFE9] shadow-xs">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                              <Label className="text-sm font-bold text-[#102A43] block">
-                                O hospital possui este sistema / serviço?{' '}
-                                <span className="text-rose-600">*</span>
-                              </Label>
-                              <p className="text-xs text-[#486581] mt-0.5">
-                                Selecione &quot;Sim&quot; para preencher os dados técnicos e fotos,
-                                ou &quot;Não&quot; para registrar como Não se aplica.
-                              </p>
-                            </div>
-
-                            <RadioGroup
-                              value={itemState.possuiSistema || ''}
-                              onValueChange={(val) =>
-                                handleFieldChange(categoria.id, {
-                                  possuiSistema: val as 'Sim' | 'Não',
-                                })
-                              }
-                              className="flex items-center gap-4 shrink-0 pt-1 sm:pt-0"
+                    <AccordionContent className="px-5 pb-6 pt-2 border-t border-[#D3DFE9]/70 bg-slate-50/30">
+                      <div className="space-y-5 pt-3">
+                        {/* 1. Possui o sistema / instalação? */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-bold text-[#102A43]">
+                            O estabelecimento possui este sistema / instalação?{' '}
+                            <span className="text-rose-600">*</span>
+                          </Label>
+                          <div className="flex items-center gap-3">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={form.possuiSistema === 'Sim' ? 'default' : 'outline'}
+                              onClick={() => handleFieldChange(cat.id, 'possuiSistema', 'Sim')}
+                              className={`h-9 px-5 text-xs font-bold ${
+                                form.possuiSistema === 'Sim'
+                                  ? 'bg-[#004B8D] text-white'
+                                  : 'border-[#D3DFE9] text-[#486581]'
+                              }`}
                             >
-                              <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
-                                <RadioGroupItem
-                                  value="Sim"
-                                  id={`possui-sim-${categoria.id}`}
-                                  className="border-[#004B8D] text-[#004B8D]"
-                                />
-                                <Label
-                                  htmlFor={`possui-sim-${categoria.id}`}
-                                  className="text-xs sm:text-sm font-bold text-[#102A43] cursor-pointer"
-                                >
-                                  Sim
-                                </Label>
-                              </div>
-                              <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
-                                <RadioGroupItem
-                                  value="Não"
-                                  id={`possui-nao-${categoria.id}`}
-                                  className="border-[#004B8D] text-[#004B8D]"
-                                />
-                                <Label
-                                  htmlFor={`possui-nao-${categoria.id}`}
-                                  className="text-xs sm:text-sm font-bold text-[#102A43] cursor-pointer"
-                                >
-                                  Não
-                                </Label>
-                              </div>
-                            </RadioGroup>
+                              Sim
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={form.possuiSistema === 'Não' ? 'default' : 'outline'}
+                              onClick={() => handleFieldChange(cat.id, 'possuiSistema', 'Não')}
+                              className={`h-9 px-5 text-xs font-bold ${
+                                form.possuiSistema === 'Não'
+                                  ? 'bg-slate-700 text-white'
+                                  : 'border-[#D3DFE9] text-[#486581]'
+                              }`}
+                            >
+                              Não
+                            </Button>
                           </div>
                         </div>
 
-                        {/* 2. Se a resposta for "Sim", mostrar campos adicionais estruturados */}
-                        {isPossuiSim && (
-                          <div className="bg-white rounded-xl border border-[#004B8D]/20 shadow-xs divide-y divide-[#D3DFE9]/60 animate-page-enter">
-                            {/* Subheader */}
-                            <div className="px-5 py-3.5 bg-gradient-to-r from-[#E8F1F8]/80 to-white flex items-center justify-between rounded-t-xl">
-                              <div className="flex items-center gap-2">
-                                <UserCheck className="w-4 h-4 text-[#004B8D]" />
-                                <span className="text-xs font-bold uppercase tracking-wider text-[#004B8D]">
-                                  Fiscalização Técnica & Responsabilidade
-                                </span>
-                              </div>
-                              <span className="text-[11px] text-[#486581] font-medium hidden sm:inline">
-                                CREA-PI • Vistoria Hospitalar
-                              </span>
-                            </div>
-
-                            <div className="p-5 sm:p-6 space-y-5">
-                              {/* Grid: Prestador de Serviço e Número da ART (OPCIONAL) */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                                {/* Campo: Nome do prestador de serviço */}
-                                <div className="space-y-2">
-                                  <Label
-                                    htmlFor={`prestador-${categoria.id}`}
-                                    className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
-                                  >
-                                    <Building2 className="w-3.5 h-3.5 text-[#004B8D]" />
-                                    Nome do prestador de serviço / empresa
-                                  </Label>
-                                  <Input
-                                    id={`prestador-${categoria.id}`}
-                                    placeholder="Ex.: Empresa ABC Engenharia Ltda ou Profissional"
-                                    value={itemState.prestadorServico || ''}
-                                    onChange={(e) =>
-                                      handleFieldChange(categoria.id, {
-                                        prestadorServico: e.target.value,
-                                      })
-                                    }
-                                    className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs"
-                                  />
-                                  <p className="text-[11px] text-[#627D98]">
-                                    Empresa contratada ou responsável técnico pelas instalações.
-                                  </p>
-                                </div>
-
-                                {/* Campo: Número da ART (SEMPRE OPCIONAL) */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label
-                                      htmlFor={`art-${categoria.id}`}
-                                      className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
-                                    >
-                                      <FileCheck2 className="w-3.5 h-3.5 text-[#004B8D]" />
-                                      Número da ART
-                                    </Label>
-                                    <span className="text-[10px] text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded font-medium">
-                                      Opcional
-                                    </span>
-                                  </div>
-                                  <Input
-                                    id={`art-${categoria.id}`}
-                                    placeholder="Ex.: PI20260012345 (opcional)"
-                                    value={itemState.numeroArt || ''}
-                                    onChange={(e) =>
-                                      handleFieldChange(categoria.id, {
-                                        numeroArt: e.target.value,
-                                      })
-                                    }
-                                    className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs font-mono"
-                                  />
-                                  <p className="text-[11px] text-[#627D98]">
-                                    Anotação de Responsabilidade Técnica registrada no CREA (se
-                                    houver).
-                                  </p>
-                                </div>
-                              </div>
-
-                              {/* Grid: Serviço Periódico (Sim/Não) e Data da Última Verificação */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 pt-2 border-t border-[#D3DFE9]/60">
-                                {/* Campo: Este serviço é feito periodicamente? */}
-                                <div className="space-y-2.5">
-                                  <div>
-                                    <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1.5">
-                                      <RotateCcw className="w-3.5 h-3.5 text-[#004B8D]" />
-                                      Este serviço é feito periodicamente?
-                                    </Label>
-                                    <p className="text-[11px] text-[#627D98] mt-0.5">
-                                      Para controle e cobrança da ART com regularidade periódica.
-                                    </p>
-                                  </div>
-
-                                  <RadioGroup
-                                    value={itemState.servicoPeriodico || ''}
-                                    onValueChange={(val) =>
-                                      handleFieldChange(categoria.id, {
-                                        servicoPeriodico: val as 'Sim' | 'Não',
-                                      })
-                                    }
-                                    className="flex items-center gap-4 pt-0.5"
-                                  >
-                                    <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
-                                      <RadioGroupItem
-                                        value="Sim"
-                                        id={`periodico-sim-${categoria.id}`}
-                                        className="border-[#004B8D] text-[#004B8D]"
-                                      />
-                                      <Label
-                                        htmlFor={`periodico-sim-${categoria.id}`}
-                                        className="text-xs sm:text-sm font-semibold text-[#102A43] cursor-pointer"
-                                      >
-                                        Sim (Periódico)
-                                      </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2 cursor-pointer bg-[#F4F6F9] hover:bg-[#E8F1F8] px-3.5 py-1.5 rounded-lg border border-[#D3DFE9] transition-colors">
-                                      <RadioGroupItem
-                                        value="Não"
-                                        id={`periodico-nao-${categoria.id}`}
-                                        className="border-[#004B8D] text-[#004B8D]"
-                                      />
-                                      <Label
-                                        htmlFor={`periodico-nao-${categoria.id}`}
-                                        className="text-xs sm:text-sm font-semibold text-[#102A43] cursor-pointer"
-                                      >
-                                        Não
-                                      </Label>
-                                    </div>
-                                  </RadioGroup>
-                                </div>
-
-                                {/* Campo: Data da última verificação / laudo */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <Label
-                                      htmlFor={`data-verif-${categoria.id}`}
-                                      className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
-                                    >
-                                      <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
-                                      Data da última verificação / laudo
-                                    </Label>
-                                    {categoria.periodicidadeDias &&
-                                    categoria.periodicidadeDias > 0 ? (
-                                      <span className="text-[11px] text-[#004B8D] font-bold">
-                                        Validade: {categoria.periodicidadeDias} dias
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] text-[#486581] bg-[#F4F6F9] px-2 py-0.5 rounded">
-                                        Opcional
-                                      </span>
-                                    )}
-                                  </div>
-                                  <Input
-                                    id={`data-verif-${categoria.id}`}
-                                    type="date"
-                                    value={itemState.dataUltimaVerificacao || ''}
-                                    onChange={(e) =>
-                                      handleFieldChange(categoria.id, {
-                                        dataUltimaVerificacao: e.target.value,
-                                      })
-                                    }
-                                    className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm bg-white h-10 shadow-2xs"
-                                  />
-                                  <p className="text-[11px] text-[#627D98]">
-                                    {categoria.periodicidadeDias && categoria.periodicidadeDias > 0
-                                      ? `Inspeções com mais de ${categoria.periodicidadeDias} dias serão consideradas vencidas.`
-                                      : 'Data do último laudo ou manutenção executada.'}
-                                  </p>
-                                </div>
-                              </div>
-
-                              {/* Registro Fotográfico (Fotos - até 3 fotos) */}
-                              <div className="pt-3 border-t border-[#D3DFE9]/60">
-                                <PhotoUploadSection
-                                  itemId={itemState.itemId}
-                                  existingPhotos={itemState.fotos || []}
-                                  pendingFiles={itemState.pendingFiles || []}
-                                  onAddFiles={(files) => handleAddPhotos(categoria.id, files)}
-                                  onRemovePendingFile={(idx) =>
-                                    handleRemovePendingPhoto(categoria.id, idx)
+                        {/* Fields if "Sim" */}
+                        {form.possuiSistema === 'Sim' && (
+                          <div className="p-4 rounded-xl bg-white border border-[#D3DFE9] space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Prestador do Serviço */}
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-bold text-[#102A43]">
+                                  Prestador do Serviço / Empresa Mantenedora
+                                </Label>
+                                <Input
+                                  placeholder="Ex: Empresa de Engenharia Ltda"
+                                  value={form.prestadorServico || ''}
+                                  onChange={(e) =>
+                                    handleFieldChange(cat.id, 'prestadorServico', e.target.value)
                                   }
-                                  onDeleteExistingPhoto={(photoName) =>
-                                    handleDeleteExistingPhoto(categoria.id, photoName)
-                                  }
-                                  disabled={itemState.isSaving}
+                                  className="border-[#D3DFE9] text-xs h-9"
                                 />
                               </div>
+
+                              {/* Número da ART (Opcional) */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs font-bold text-[#102A43]">
+                                    Número da ART (CREA)
+                                  </Label>
+                                  <span className="text-[10px] text-[#627D98] bg-[#F4F6F9] px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                    Opcional
+                                  </span>
+                                </div>
+                                <Input
+                                  placeholder="Ex: PI20240012345"
+                                  value={form.numeroArt || ''}
+                                  onChange={(e) =>
+                                    handleFieldChange(cat.id, 'numeroArt', e.target.value)
+                                  }
+                                  className="border-[#D3DFE9] text-xs h-9 font-mono"
+                                />
+                              </div>
+
+                              {/* Data da Última Verificação */}
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-bold text-[#102A43]">
+                                  Data da Última Verificação / Manutenção
+                                </Label>
+                                <Input
+                                  type="date"
+                                  value={form.dataUltimaVerificacao || ''}
+                                  onChange={(e) =>
+                                    handleFieldChange(
+                                      cat.id,
+                                      'dataUltimaVerificacao',
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="border-[#D3DFE9] text-xs h-9"
+                                />
+                              </div>
+
+                              {/* Este serviço é feito periodicamente? */}
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-bold text-[#102A43]">
+                                  Este serviço é feito periodicamente?
+                                </Label>
+                                <Select
+                                  value={form.servicoPeriodico || ''}
+                                  onValueChange={(val) =>
+                                    handleFieldChange(cat.id, 'servicoPeriodico', val)
+                                  }
+                                >
+                                  <SelectTrigger className="border-[#D3DFE9] text-xs h-9 bg-white">
+                                    <SelectValue placeholder="Selecione..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Sim">Sim (periódico)</SelectItem>
+                                    <SelectItem value="Não">Não (eventual/único)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            {/* Seção de Fotos (Até 3 por item) */}
+                            <div className="pt-3 border-t border-[#D3DFE9]">
+                              <PhotoUploadSection
+                                itemId={item?.id}
+                                existingPhotos={item?.fotos || []}
+                                pendingFiles={pending}
+                                onAddFiles={(files) => handleAddPendingPhotos(cat.id, files)}
+                                onRemovePendingFile={(index) =>
+                                  handleRemovePendingPhoto(cat.id, index)
+                                }
+                                onDeleteExistingPhoto={(filename) =>
+                                  handleDeleteExistingPhoto(cat.id, filename)
+                                }
+                              />
                             </div>
                           </div>
                         )}
 
-                        {/* 3. Rodapé do Item: Situação Calculada + Botão de Salvar */}
-                        <div className="bg-white p-4 rounded-xl border border-[#D3DFE9] flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-xs">
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-[#486581]">
-                            <span className="font-semibold text-[#102A43]">Situação avaliada:</span>
-                            {renderSituacaoBadge(situacao, 'default')}
-                            {situacao === 'vencido' && (
-                              <span className="text-rose-700 font-medium text-[11px] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                Validade expirada
-                                {categoria.periodicidadeDias
-                                  ? ` (limite: ${categoria.periodicidadeDias} dias)`
-                                  : ''}
-                              </span>
+                        {/* Save Item Action Button */}
+                        <div className="flex justify-end pt-2">
+                          <Button
+                            type="button"
+                            onClick={() => handleSaveItem(cat)}
+                            disabled={isSaving}
+                            className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 px-4 gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            {isSaving ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Salvando...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="w-3.5 h-3.5" />
+                                Salvar Respostas de {cat.nome}
+                              </>
                             )}
-                            {situacao === 'conforme' && (
-                              <span className="text-emerald-800 font-medium text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                Atende aos critérios de conformidade da fiscalização
-                              </span>
-                            )}
-                            {situacao === 'não se aplica' && (
-                              <span className="text-[#486581] font-medium text-[11px] bg-[#F4F6F9] px-2 py-0.5 rounded border border-[#D3DFE9]">
-                                Hospital declarou não possuir este sistema
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                            <Button
-                              size="sm"
-                              type="button"
-                              onClick={() => handleSaveCategoryItem(categoria)}
-                              disabled={itemState.isSaving}
-                              className={`h-9 px-4 text-xs font-bold shadow-xs transition-all cursor-pointer ${
-                                itemState.isDirty
-                                  ? 'bg-[#004B8D] hover:bg-[#003666] text-white'
-                                  : 'bg-[#E8F1F8] text-[#004B8D] hover:bg-[#D3DFE9]'
-                              }`}
-                            >
-                              {itemState.isSaving ? (
-                                <>
-                                  <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                                  Salvando...
-                                </>
-                              ) : itemState.isDirty ? (
-                                <>
-                                  <Save className="w-3.5 h-3.5 mr-1.5" />
-                                  Salvar resposta
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="w-3.5 h-3.5 mr-1.5" />
-                                  Salvo
-                                </>
-                              )}
-                            </Button>
-                          </div>
+                          </Button>
                         </div>
                       </div>
                     </AccordionContent>
@@ -1317,14 +792,91 @@ export default function VistoriaPage() {
             </Accordion>
           )}
         </div>
+      ) : (
+        /* 5. Lista de Vistorias Abertas (Cards clicáveis) quando nenhum hospital foi selecionado */
+        <div className="space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-[#102A43]">
+                Vistorias em Andamento no CREA-PI
+              </h2>
+              <p className="text-xs text-[#486581]">
+                Selecione uma vistoria aberta abaixo ou escolha um hospital no seletor acima para
+                iniciar
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-[#486581] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input
+                placeholder="Buscar vistoria aberta..."
+                value={searchOpenVistorias}
+                onChange={(e) => setSearchOpenVistorias(e.target.value)}
+                className="pl-9 h-9 text-xs border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+              />
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="py-16 text-center text-[#486581]">
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-[#004B8D] mb-2" />
+              <p className="text-xs font-semibold">Carregando vistorias abertas...</p>
+            </div>
+          ) : filteredOpenVistorias.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-[#D3DFE9] p-12 text-center space-y-3">
+              <ClipboardCheck className="w-12 h-12 text-[#829AB1] mx-auto stroke-[1.5]" />
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[#102A43]">
+                  Nenhuma vistoria em andamento
+                </h3>
+                <p className="text-xs text-[#486581] max-w-sm mx-auto">
+                  Utilize o botão &ldquo;Nova Vistoria&rdquo; ou o seletor acima para iniciar o
+                  checklist técnico de um estabelecimento.
+                </p>
+              </div>
+              <Button
+                onClick={() => setIsNovaVistoriaOpen(true)}
+                className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs font-bold h-9 px-4 mt-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Criar Nova Vistoria
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredOpenVistorias.map((vistoria) => (
+                <VistoriaCard
+                  key={vistoria.id}
+                  vistoria={vistoria}
+                  pendentesCount={0}
+                  vencidosCount={0}
+                  conformesCount={0}
+                  totalItensCount={categorias.length}
+                  onClick={() => {
+                    if (vistoria.hospital) {
+                      handleSelectHospital(vistoria.hospital)
+                      setSearchParams({
+                        hospitalId: vistoria.hospital,
+                        vistoriaId: vistoria.id,
+                      })
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Dialog: Nova Vistoria */}
+      {/* Nova Vistoria Dialog */}
       <NovaVistoriaDialog
         open={isNovaVistoriaOpen}
         onOpenChange={setIsNovaVistoriaOpen}
         hospitais={hospitais}
-        onSelectHospital={handleStartNovaVistoria}
+        onSelectHospital={async (hospId) => {
+          await loadInitialData()
+          handleSelectHospital(hospId)
+        }}
       />
     </div>
   )
