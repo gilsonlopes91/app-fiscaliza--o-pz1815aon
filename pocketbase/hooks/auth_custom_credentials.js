@@ -10,4 +10,4 @@ onRecordAuthWithPasswordRequest((e) => {
   }
 
   e.next()
-}, "users")
+}, 'users')
