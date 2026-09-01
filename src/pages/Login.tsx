@@ -11,12 +11,15 @@ import {
   AlertCircle,
   Loader2,
   Clock,
+  Download,
+  Smartphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePwa } from '@/hooks/use-pwa'
 import { useToast } from '@/hooks/use-toast'
 import logoCreaPi from '@/assets/logocreapiazul-919d6.png'
 
@@ -24,6 +27,7 @@ export default function Login() {
   const { login, register, isAuthenticated, isApproved, isAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { isInstallable, installApp } = usePwa()
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
@@ -428,6 +432,29 @@ export default function Login() {
             </TabsContent>
           </Tabs>
         </div>
+
+        {/* PWA Install Banner on Login if installable */}
+        {isInstallable && (
+          <div className="mt-4 p-3 bg-white rounded-xl border border-[#D3DFE9] shadow-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#004B8D] text-white flex items-center justify-center shrink-0">
+                <Smartphone className="w-4 h-4 text-[#E5A812]" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold text-[#102A43]">Instalar no celular / desktop</p>
+                <p className="text-[10px] text-[#627D98]">Acesso rápido direto da tela inicial</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={installApp}
+              className="h-7 px-2.5 text-xs bg-[#004B8D] hover:bg-[#003666] text-white font-semibold cursor-pointer"
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Instalar
+            </Button>
+          </div>
+        )}
 
         {/* Footer info */}
         <div className="text-center mt-6 text-xs text-[#627D98]">

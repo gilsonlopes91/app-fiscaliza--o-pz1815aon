@@ -9,9 +9,12 @@ import {
   LogOut,
   UserCheck,
   ChevronDown,
+  Download,
+  WifiOff,
 } from 'lucide-react'
 import logoCreaPi from '@/assets/logocreapiazul-919d6.png'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePwa } from '@/hooks/use-pwa'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -27,10 +30,15 @@ export function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, isAdmin, logout } = useAuth()
+  const { isInstallable, installApp, isOnline } = usePwa()
 
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleInstallClick = async () => {
+    await installApp()
   }
 
   // Define navigation tabs based on user role
@@ -70,6 +78,14 @@ export function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F4F6F9] text-[#102A43] font-sans antialiased selection:bg-[#004B8D] selection:text-white">
+      {/* Offline Alert Bar */}
+      {!isOnline && (
+        <div className="bg-amber-600 text-white px-4 py-1.5 text-xs font-semibold flex items-center justify-center gap-2 shadow-inner z-50">
+          <WifiOff className="w-3.5 h-3.5 animate-pulse" />
+          <span>Modo Offline ativado. Você pode continuar visualizando os itens em cache.</span>
+        </div>
+      )}
+
       {/* 1. Header Fixo Superior */}
       <header className="sticky top-0 z-40 bg-[#004B8D] border-b border-[#003666] text-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -93,6 +109,19 @@ export function Layout() {
 
           {/* Right Area: User profile dropdown & Role badge */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Install PWA Button if available */}
+            {isInstallable && (
+              <Button
+                onClick={handleInstallClick}
+                size="sm"
+                className="bg-[#E5A812] hover:bg-[#d4970b] text-[#102A43] font-bold text-xs h-8 px-2.5 sm:px-3 shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="Instalar App Fiscalização no Dispositivo"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Instalar App</span>
+              </Button>
+            )}
+
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
