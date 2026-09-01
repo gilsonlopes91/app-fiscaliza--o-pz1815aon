@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Building2,
   Stethoscope,
@@ -9,7 +10,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  FileCheck2,
   Search,
   CheckCircle2,
   Building,
@@ -17,7 +17,6 @@ import {
   Sparkles,
   RefreshCw,
   X,
-  AlertCircle,
   Briefcase,
   Store,
   Factory,
@@ -38,6 +37,9 @@ import {
   ShieldAlert,
   FileSpreadsheet,
   Check,
+  ChevronRight,
+  ArrowRight,
+  FileCheck2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,11 +70,7 @@ import {
   TipoEmpreendimento,
   TipoEmpreendimentoFormData,
 } from '@/services/tiposEmpreendimento'
-import {
-  categoriasVistoriaService,
-  CategoriaVistoria,
-  CategoriaVistoriaFormData,
-} from '@/services/categoriasVistoria'
+import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
@@ -142,13 +140,14 @@ export function getIconComponent(iconName?: string) {
 }
 
 export default function TiposEmpreendimentoPage() {
+  const navigate = useNavigate()
   const { isAdmin } = useAuth()
   const { toast } = useToast()
 
   // Data states
   const [tipos, setTipos] = useState<TipoEmpreendimento[]>([])
-  const [categorias, setCategorias] = useState<CategoriaVistoria[]>([])
   const [hospitais, setHospitais] = useState<Hospital[]>([])
+  const [categorias, setCategorias] = useState<CategoriaVistoria[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Sub-tabs: 'catalogo' vs 'importar' (importar visible only for admin)
@@ -167,17 +166,6 @@ export default function TiposEmpreendimentoPage() {
   })
   const [tipoToDelete, setTipoToDelete] = useState<TipoEmpreendimento | null>(null)
   const [iconPickerFilter, setIconPickerFilter] = useState('')
-
-  // Dialogs: Itens de Fiscalização
-  const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false)
-  const [editingCategoria, setEditingCategoria] = useState<CategoriaVistoria | null>(null)
-  const [categoriaForm, setCategoriaForm] = useState<CategoriaVistoriaFormData>({
-    nome: '',
-    exigeArt: true,
-    periodicidadeDias: null,
-  })
-  const [categoriaToDelete, setCategoriaToDelete] = useState<CategoriaVistoria | null>(null)
-
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -187,16 +175,16 @@ export default function TiposEmpreendimentoPage() {
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [tiposList, catList, hospList] = await Promise.all([
+      const [tiposList, hospList, catList] = await Promise.all([
         tiposEmpreendimentoService.getAll(),
-        categoriasVistoriaService.getAll(),
         hospitaisService.getAll(),
+        categoriasVistoriaService.getAll(),
       ])
       setTipos(tiposList)
-      setCategorias(catList)
       setHospitais(hospList)
+      setCategorias(catList)
     } catch (err) {
-      console.error('Erro ao carregar tipos de empreendimento e categorias:', err)
+      console.error('Erro ao carregar tipos de empreendimento:', err)
       toast({
         title: 'Erro ao carregar dados',
         description: 'Não foi possível carregar as informações do servidor.',
@@ -215,11 +203,21 @@ export default function TiposEmpreendimentoPage() {
   const countPerTipo = useMemo(() => {
     const map = new Map<string, number>()
     hospitais.forEach((h) => {
-      const t = h.tipo || 'Hospital'
-      map.set(t, (map.get(t) || 0) + 1)
+      const t = (h.tipo || 'Hospital').trim()
+      map.set(t.toLowerCase(), (map.get(t.toLowerCase()) || 0) + 1)
     })
     return map
   }, [hospitais])
+
+  // Count checklist items per Tipo
+  const checklistCountPerTipo = useMemo(() => {
+    const map = new Map<string, number>()
+    categorias.forEach((c) => {
+      const t = (c.tipo || 'Hospital').trim()
+      map.set(t.toLowerCase(), (map.get(t.toLowerCase()) || 0) + 1)
+    })
+    return map
+  }, [categorias])
 
   // Filtered Tipos
   const filteredTipos = useMemo(() => {
@@ -251,7 +249,8 @@ export default function TiposEmpreendimentoPage() {
     setIsTipoModalOpen(true)
   }
 
-  const handleOpenEditTipo = (t: TipoEmpreendimento) => {
+  const handleOpenEditTipo = (e: React.MouseEvent, t: TipoEmpreendimento) => {
+    e.stopPropagation()
     setEditingTipo(t)
     setTipoForm({
       nome: t.nome,
@@ -337,87 +336,8 @@ export default function TiposEmpreendimentoPage() {
     }
   }
 
-  // Handlers for Categorias / Itens de Fiscalização
-  const handleOpenCreateCategoria = () => {
-    setEditingCategoria(null)
-    setCategoriaForm({ nome: '', exigeArt: true, periodicidadeDias: null })
-    setIsCategoriaModalOpen(true)
-  }
-
-  const handleOpenEditCategoria = (c: CategoriaVistoria) => {
-    setEditingCategoria(c)
-    setCategoriaForm({
-      nome: c.nome,
-      exigeArt: c.exigeArt,
-      periodicidadeDias: c.periodicidadeDias || null,
-    })
-    setIsCategoriaModalOpen(true)
-  }
-
-  const handleSaveCategoria = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!categoriaForm.nome.trim()) {
-      toast({
-        title: 'Nome obrigatório',
-        description: 'Informe a descrição do item de vistoria.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    try {
-      setIsSaving(true)
-      if (editingCategoria) {
-        const updated = await categoriasVistoriaService.update(editingCategoria.id, categoriaForm)
-        setCategorias((prev) =>
-          prev.map((item) => (item.id === editingCategoria.id ? updated : item)),
-        )
-        toast({
-          title: 'Item de fiscalização atualizado!',
-          description: `O item "${updated.nome}" foi atualizado e refletirá no checklist de vistoria.`,
-        })
-      } else {
-        const created = await categoriasVistoriaService.create(categoriaForm)
-        setCategorias((prev) => [...prev, created])
-        toast({
-          title: 'Item criado com sucesso!',
-          description: `"${created.nome}" agora faz parte do checklist de fiscalização.`,
-        })
-      }
-      setIsCategoriaModalOpen(false)
-    } catch (err) {
-      console.error('Erro ao salvar categoria:', err)
-      toast({
-        title: 'Erro ao salvar item',
-        description: 'Não foi possível atualizar o item de fiscalização.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDeleteCategoria = async () => {
-    if (!categoriaToDelete) return
-    try {
-      setIsSaving(true)
-      await categoriasVistoriaService.delete(categoriaToDelete.id)
-      setCategorias((prev) => prev.filter((item) => item.id !== categoriaToDelete.id))
-      toast({
-        title: 'Item removido',
-        description: `O item "${categoriaToDelete.nome}" foi excluído.`,
-      })
-      setCategoriaToDelete(null)
-    } catch (err) {
-      console.error('Erro ao excluir categoria:', err)
-      toast({
-        title: 'Erro ao remover item',
-        description: 'Não foi possível remover o item de fiscalização.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsSaving(false)
-    }
+  const handleCardClick = (tipo: TipoEmpreendimento) => {
+    navigate(`/tipos-empreendimento/${tipo.id}`)
   }
 
   return (
@@ -427,32 +347,23 @@ export default function TiposEmpreendimentoPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
-              Tipos de Empreendimento & Fiscalização
+              Tipos de Empreendimento
             </h1>
           </div>
           <p className="text-sm text-[#486581] mt-0.5">
-            Estrutura de empreendimentos fiscalizados pelo CREA-PI (Hospital, Fazendas, Indústria,
-            Energia) e itens de vistoria
+            Catálogo de empreendimentos fiscalizados pelo CREA-PI. Clique em um tipo para acessar
+            suas unidades e checklist exclusivo.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
-          <Button
-            onClick={handleOpenCreateTipo}
-            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            Novo Tipo de Empreendimento
-          </Button>
-
           {isAdmin && (
             <Button
-              onClick={handleOpenCreateCategoria}
-              variant="outline"
-              className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3.5 gap-2 cursor-pointer"
+              onClick={handleOpenCreateTipo}
+              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
             >
-              <FileCheck2 className="w-4 h-4 text-[#004B8D]" />
-              Novo Item de Vistoria
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              Novo Tipo de Empreendimento
             </Button>
           )}
 
@@ -496,61 +407,60 @@ export default function TiposEmpreendimentoPage() {
           </TabsList>
 
           <span className="text-xs font-semibold text-[#627D98] hidden sm:inline">
-            {filteredTipos.length} tipo(s) no catálogo
+            {filteredTipos.length} tipo(s) cadastrado(s)
           </span>
         </div>
 
-        {/* TAB 1: CATÁLOGO DE TIPOS & ITENS DE FISCALIZAÇÃO */}
-        <TabsContent value="catalogo" className="space-y-8 mt-0">
-          {/* SECTION 1: GRADE VISUAL DE TIPOS DE EMPREENDIMENTO */}
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between gap-3 items-stretch sm:items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D]">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-[#102A43]">
-                    Empreendimentos Regulados pelo CREA-PI
-                  </h2>
-                  <p className="text-xs text-[#486581]">
-                    &ldquo;Hospital&rdquo; é o tipo padrão do sistema. Novos tipos (ex.: fazenda,
-                    indústria, energias renováveis) podem ser criados ou editados livremente.
-                  </p>
-                </div>
+        {/* TAB 1: CATÁLOGO DE TIPOS (SEM CHECKLIST EMBAIXO) */}
+        <TabsContent value="catalogo" className="space-y-6 mt-0">
+          <div className="flex flex-col sm:flex-row justify-between gap-3 items-stretch sm:items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D]">
+                <Layers className="w-4 h-4" />
               </div>
-
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-[#486581] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <Input
-                  placeholder="Buscar tipo de empreendimento..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9 text-xs border-[#D3DFE9] focus-visible:ring-[#004B8D]"
-                />
+              <div>
+                <h2 className="text-base font-bold text-[#102A43]">
+                  Empreendimentos Regulados pelo CREA-PI
+                </h2>
+                <p className="text-xs text-[#486581]">
+                  Selecione um card para gerenciar as unidades cadastradas e o checklist de vistoria
+                  daquele segmento.
+                </p>
               </div>
             </div>
 
-            {isLoading ? (
-              <div className="py-16 text-center text-[#486581]">
-                <RefreshCw className="w-8 h-8 animate-spin mx-auto text-[#004B8D] mb-2" />
-                <p className="text-xs font-semibold">Carregando catálogo de empreendimentos...</p>
-              </div>
-            ) : filteredTipos.length === 0 ? (
-              <div className="bg-white rounded-xl border border-[#D3DFE9] p-8 text-center space-y-3">
-                <Building2 className="w-8 h-8 text-[#829AB1] mx-auto mb-2" />
-                <p className="text-sm font-semibold text-[#102A43]">
-                  Nenhum tipo de empreendimento encontrado
-                </p>
-                <div className="flex justify-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSearchQuery('')}
-                    className="text-xs border-[#D3DFE9] text-[#004B8D] cursor-pointer"
-                  >
-                    Limpar busca
-                  </Button>
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-[#486581] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input
+                placeholder="Buscar tipo de empreendimento..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 text-xs border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+              />
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="py-20 text-center text-[#486581]">
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-[#004B8D] mb-2" />
+              <p className="text-xs font-semibold">Carregando catálogo de empreendimentos...</p>
+            </div>
+          ) : filteredTipos.length === 0 ? (
+            <div className="bg-white rounded-xl border border-[#D3DFE9] p-8 text-center space-y-3">
+              <Building2 className="w-8 h-8 text-[#829AB1] mx-auto mb-2" />
+              <p className="text-sm font-semibold text-[#102A43]">
+                Nenhum tipo de empreendimento encontrado
+              </p>
+              <div className="flex justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchQuery('')}
+                  className="text-xs border-[#D3DFE9] text-[#004B8D] cursor-pointer"
+                >
+                  Limpar busca
+                </Button>
+                {isAdmin && (
                   <Button
                     size="sm"
                     onClick={handleOpenCreateTipo}
@@ -558,32 +468,39 @@ export default function TiposEmpreendimentoPage() {
                   >
                     Cadastrar Novo Tipo
                   </Button>
-                </div>
+                )}
               </div>
-            ) : (
-              /* Cards Grid */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-                {filteredTipos.map((tipo) => {
-                  const IconComp = getIconComponent(tipo.icone)
-                  const count = countPerTipo.get(tipo.nome) || 0
-                  const isStandardHospital = tipo.nome.trim().toLowerCase() === 'hospital'
+            </div>
+          ) : (
+            /* Cards Grid - Each card opens its own type page */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              {filteredTipos.map((tipo) => {
+                const IconComp = getIconComponent(tipo.icone)
+                const unitCount = countPerTipo.get(tipo.nome.toLowerCase()) || 0
+                const checklistCount = checklistCountPerTipo.get(tipo.nome.toLowerCase()) || 0
+                const isStandardHospital = tipo.nome.trim().toLowerCase() === 'hospital'
 
-                  return (
-                    <div
-                      key={tipo.id}
-                      className="bg-white rounded-2xl border border-[#D3DFE9] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-md transition-all flex flex-col justify-between group"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#E8F1F8] to-blue-100/60 text-[#004B8D] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-                            <IconComp className="w-6 h-6 stroke-[2]" />
-                          </div>
+                return (
+                  <div
+                    key={tipo.id}
+                    onClick={() => handleCardClick(tipo)}
+                    className="bg-white rounded-2xl border border-[#D3DFE9] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-md hover:border-[#004B8D]/50 transition-all flex flex-col justify-between group cursor-pointer text-left"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#E8F1F8] to-blue-100/60 text-[#004B8D] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 group-hover:bg-[#004B8D] group-hover:text-white transition-all">
+                          <IconComp className="w-6 h-6 stroke-[2]" />
+                        </div>
 
-                          <div className="flex items-center gap-1 opacity-90">
+                        {isAdmin && (
+                          <div
+                            className="flex items-center gap-1 opacity-90"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleOpenEditTipo(tipo)}
+                              onClick={(e) => handleOpenEditTipo(e, tipo)}
                               className="h-8 w-8 p-0 text-[#004B8D] hover:bg-[#E8F1F8] cursor-pointer"
                               title="Editar tipo"
                             >
@@ -593,7 +510,10 @@ export default function TiposEmpreendimentoPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => setTipoToDelete(tipo)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setTipoToDelete(tipo)
+                                }}
                                 className="h-8 w-8 p-0 text-[#829AB1] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
                                 title="Excluir tipo"
                               >
@@ -608,139 +528,53 @@ export default function TiposEmpreendimentoPage() {
                               </span>
                             )}
                           </div>
-                        </div>
-
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-base text-[#102A43] leading-tight">
-                              {tipo.nome}
-                            </h3>
-                            {isStandardHospital && (
-                              <Badge className="bg-[#E5A812] text-[#102A43] hover:bg-[#E5A812] text-[10px] font-bold px-1.5 py-0">
-                                Padrão CREA-PI
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-[#486581] mt-1.5 line-clamp-2 leading-relaxed">
-                            {tipo.descricao ||
-                              'Empreendimento regulamentado pela fiscalização técnica do CREA-PI.'}
-                          </p>
-                        </div>
+                        )}
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-[#D3DFE9]/70 flex items-center justify-between text-xs text-[#486581]">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-base text-[#102A43] leading-tight group-hover:text-[#004B8D] transition-colors">
+                            {tipo.nome}
+                          </h3>
+                          {isStandardHospital && (
+                            <Badge className="bg-[#E5A812] text-[#102A43] hover:bg-[#E5A812] text-[10px] font-bold px-1.5 py-0">
+                              Padrão
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-[#486581] mt-1.5 line-clamp-2 leading-relaxed">
+                          {tipo.descricao ||
+                            'Clique para visualizar as unidades e o checklist de fiscalização deste segmento.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-[#D3DFE9]/70 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-xs text-[#486581]">
                         <span className="flex items-center gap-1.5 font-medium">
                           <span
                             className={`w-2 h-2 rounded-full ${
-                              count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
+                              unitCount > 0 ? 'bg-emerald-500' : 'bg-slate-300'
                             }`}
                           />
-                          <strong>{count}</strong>{' '}
-                          {count === 1 ? 'unidade vinculada' : 'unidades vinculadas'}
+                          <strong>{unitCount}</strong> {unitCount === 1 ? 'unidade' : 'unidades'}
                         </span>
-                        <span className="text-[11px] text-[#829AB1] font-mono flex items-center gap-1">
-                          <IconComp className="w-3 h-3 text-[#004B8D]" />
-                          {tipo.icone || 'Building2'}
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded-md">
+                          <FileCheck2 className="w-3 h-3" />
+                          {checklistCount} {checklistCount === 1 ? 'item' : 'itens'} no checklist
                         </span>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
 
-          {/* SECTION 2: ITENS / CATEGORIAS DE FISCALIZAÇÃO EDITÁVEIS */}
-          <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D3DFE9] pb-4">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
-                  <h2 className="text-lg font-bold text-[#102A43]">
-                    Itens & Categorias do Checklist de Vistoria
-                  </h2>
-                </div>
-                <p className="text-xs text-[#486581]">
-                  Os itens abaixo definem o checklist técnico exibido na aba &ldquo;Vistoria&rdquo;.
-                  {isAdmin
-                    ? ' Como administrador, você pode alterar o nome, exigência de ART e periodicidade.'
-                    : ' Visualização dos itens técnicos padronizados pelo CREA-PI.'}
-                </p>
-              </div>
-
-              {isAdmin && (
-                <Button
-                  size="sm"
-                  onClick={handleOpenCreateCategoria}
-                  className="bg-[#004B8D] hover:bg-[#003666] text-white font-semibold text-xs h-9 px-3.5 gap-1.5 shrink-0 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Adicionar Item ao Checklist
-                </Button>
-              )}
-            </div>
-
-            {/* Categories Table / List */}
-            <div className="divide-y divide-[#D3DFE9]/80 border border-[#D3DFE9] rounded-xl overflow-hidden">
-              {categorias.map((cat, idx) => (
-                <div
-                  key={cat.id}
-                  className="p-4 sm:px-5 sm:py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white hover:bg-slate-50/70 transition-colors"
-                >
-                  <div className="flex items-start sm:items-center gap-3">
-                    <span className="w-6 h-6 rounded-md bg-[#E8F1F8] text-[#004B8D] font-bold text-xs flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-
-                    <div className="space-y-0.5">
-                      <div className="font-bold text-sm text-[#102A43]">{cat.nome}</div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#486581]">
-                        <span className="flex items-center gap-1">
-                          Exige ART:{' '}
-                          <strong className={cat.exigeArt ? 'text-[#004B8D]' : 'text-[#627D98]'}>
-                            {cat.exigeArt ? 'Sim' : 'Não'}
-                          </strong>
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          Periodicidade:{' '}
-                          {cat.periodicidadeDias && cat.periodicidadeDias > 0 ? (
-                            <strong className="text-[#102A43]">{cat.periodicidadeDias} dias</strong>
-                          ) : (
-                            <span className="text-[#829AB1] italic">Sem periodicidade fixa</span>
-                          )}
-                        </span>
+                      <div className="flex items-center justify-between pt-1 text-[11px] text-[#004B8D] font-bold group-hover:translate-x-0.5 transition-transform">
+                        <span>Acessar unidades e checklist</span>
+                        <ChevronRight className="w-4 h-4 text-[#004B8D]" />
                       </div>
                     </div>
                   </div>
-
-                  {/* Action buttons for admin */}
-                  {isAdmin && (
-                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenEditCategoria(cat)}
-                        className="h-8 px-2.5 text-xs border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold gap-1 cursor-pointer"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        Editar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setCategoriaToDelete(cat)}
-                        className="h-8 w-8 p-0 text-[#829AB1] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                        title="Excluir item"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
-          </div>
+          )}
         </TabsContent>
 
         {/* TAB 2: IMPORTAR CSV (Restrito para Admin) */}
@@ -758,7 +592,7 @@ export default function TiposEmpreendimentoPage() {
         )}
       </Tabs>
 
-      {/* MODAL 1: CRIAR / EDITAR TIPO DE EMPREENDIMENTO COM SELEÇÃO VISUAL DE ÍCONES */}
+      {/* MODAL: CRIAR / EDITAR TIPO DE EMPREENDIMENTO COM SELEÇÃO VISUAL DE ÍCONES */}
       <Dialog open={isTipoModalOpen} onOpenChange={setIsTipoModalOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto bg-white border-[#D3DFE9] p-0 gap-0 sm:rounded-2xl">
           <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9]">
@@ -787,7 +621,7 @@ export default function TiposEmpreendimentoPage() {
               </Label>
               <Input
                 id="tipo-nome"
-                placeholder="Ex: Fazenda / Agronegócio, Usina Solar, Indústria Metalúrgica..."
+                placeholder="Ex: Fazendas / Agronegócio, Usina Solar, Indústria..."
                 value={tipoForm.nome}
                 onChange={(e) => setTipoForm({ ...tipoForm, nome: e.target.value })}
                 className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm"
@@ -891,111 +725,6 @@ export default function TiposEmpreendimentoPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL 2: ITEM / CATEGORIA DE VISTORIA */}
-      <Dialog open={isCategoriaModalOpen} onOpenChange={setIsCategoriaModalOpen}>
-        <DialogContent className="max-w-md bg-white border-[#D3DFE9]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-[#102A43]">
-              {editingCategoria ? 'Editar Item de Fiscalização' : 'Novo Item de Fiscalização'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-[#486581]">
-              Configure os parâmetros técnicos do item para o checklist de vistoria.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSaveCategoria} className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="cat-nome" className="text-xs font-bold text-[#102A43]">
-                Nome da Categoria / Instalação <span className="text-rose-600">*</span>
-              </Label>
-              <Input
-                id="cat-nome"
-                placeholder="Ex: Ar-condicionado e exaustão, Caldeiras, Silos..."
-                value={categoriaForm.nome}
-                onChange={(e) => setCategoriaForm({ ...categoriaForm, nome: e.target.value })}
-                className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="cat-art" className="text-xs font-bold text-[#102A43]">
-                Exige ART (Anotação de Responsabilidade Técnica)?
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCategoriaForm({ ...categoriaForm, exigeArt: true })}
-                  className={`text-xs font-semibold cursor-pointer ${
-                    categoriaForm.exigeArt
-                      ? 'bg-[#004B8D] text-white border-[#004B8D]'
-                      : 'border-[#D3DFE9] text-[#486581]'
-                  }`}
-                >
-                  Sim (Requer ART)
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCategoriaForm({ ...categoriaForm, exigeArt: false })}
-                  className={`text-xs font-semibold cursor-pointer ${
-                    !categoriaForm.exigeArt
-                      ? 'bg-[#004B8D] text-white border-[#004B8D]'
-                      : 'border-[#D3DFE9] text-[#486581]'
-                  }`}
-                >
-                  Não (Dispensado)
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="cat-per" className="text-xs font-bold text-[#102A43]">
-                  Periodicidade Regulatória em Dias
-                </Label>
-                <span className="text-[11px] text-[#627D98]">Vazio = sem periodicidade fixa</span>
-              </div>
-              <Input
-                id="cat-per"
-                type="number"
-                min={0}
-                placeholder="Ex: 365 (1 ano) ou vazio"
-                value={categoriaForm.periodicidadeDias ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value ? parseInt(e.target.value, 10) : null
-                  setCategoriaForm({ ...categoriaForm, periodicidadeDias: v })
-                }}
-                className="border-[#D3DFE9] focus-visible:ring-[#004B8D] text-sm"
-              />
-              <p className="text-[11px] text-[#627D98]">
-                Inspeções com data anterior a esse período serão calculadas como{' '}
-                <strong>Vencidas</strong> no checklist.
-              </p>
-            </div>
-
-            <DialogFooter className="pt-3 border-t border-[#D3DFE9]">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsCategoriaModalOpen(false)}
-                className="border-[#D3DFE9] text-[#486581] cursor-pointer"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSaving}
-                className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold cursor-pointer"
-              >
-                {isSaving ? 'Salvando...' : editingCategoria ? 'Salvar Alterações' : 'Salvar Item'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       {/* CONFIRM DELETE TIPO */}
       <AlertDialog open={!!tipoToDelete} onOpenChange={(open) => !open && setTipoToDelete(null)}>
         <AlertDialogContent className="border-[#D3DFE9] bg-white">
@@ -1016,34 +745,6 @@ export default function TiposEmpreendimentoPage() {
               className="bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer"
             >
               Excluir Tipo
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* CONFIRM DELETE CATEGORIA */}
-      <AlertDialog
-        open={!!categoriaToDelete}
-        onOpenChange={(open) => !open && setCategoriaToDelete(null)}
-      >
-        <AlertDialogContent className="border-[#D3DFE9] bg-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg font-bold text-[#102A43]">
-              Excluir Item de Fiscalização
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-[#486581]">
-              Tem certeza que deseja excluir &ldquo;{categoriaToDelete?.nome}&rdquo; do checklist?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-[#D3DFE9] text-[#486581] cursor-pointer">
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteCategoria}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer"
-            >
-              Excluir Item
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

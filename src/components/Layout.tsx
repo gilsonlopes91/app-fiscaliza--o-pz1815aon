@@ -46,18 +46,9 @@ export function Layout() {
   // Admin: Hospitais, Tipos de empreendimento, Vistoria, Usuários
   // Usuario: Tipos de empreendimento, Vistoria (Sem Hospitais)
   const navItems = [
-    ...(isAdmin
-      ? [
-          {
-            to: '/hospitais',
-            label: 'Hospitais',
-            icon: Building2,
-          },
-        ]
-      : []),
     {
       to: '/tipos-empreendimento',
-      label: 'Tipos de empreendimento',
+      label: 'Tipos de Empreendimento',
       icon: Layers,
     },
     {
@@ -69,13 +60,12 @@ export function Layout() {
       ? [
           {
             to: '/usuarios',
-            label: 'Controle de Usuários',
+            label: 'Gestão de Usuários',
             icon: Users,
           },
         ]
       : []),
   ]
-
   return (
     <div className="min-h-screen flex flex-col bg-[#F4F6F9] text-[#102A43] font-sans antialiased selection:bg-[#004B8D] selection:text-white">
       {/* Offline Alert Bar */}

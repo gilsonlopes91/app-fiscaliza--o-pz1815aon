@@ -35,6 +35,15 @@ export const hospitaisService = {
     return records
   },
 
+  async getByTipo(tipo: string): Promise<Hospital[]> {
+    const safeTipo = tipo.trim()
+    const records = await pb.collection('hospitais').getFullList<Hospital>({
+      filter: `tipo = "${safeTipo}"`,
+      sort: '-created',
+    })
+    return records
+  },
+
   async getById(id: string): Promise<Hospital> {
     const record = await pb.collection('hospitais').getOne<Hospital>(id)
     return record

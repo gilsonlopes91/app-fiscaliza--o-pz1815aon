@@ -26,6 +26,7 @@ import {
   Save,
   Loader2,
   CheckCircle,
+  Building,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +47,7 @@ import {
 } from '@/components/ui/accordion'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
+import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import {
   vistoriasService,
   Vistoria,
@@ -57,6 +59,7 @@ import {
 import { PhotoUploadSection } from '@/components/PhotoUploadSection'
 import { NovaVistoriaDialog } from '@/components/NovaVistoriaDialog'
 import { VistoriaCard } from '@/components/VistoriaCard'
+import { getIconComponent } from '@/pages/TiposEmpreendimento'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ, formatCNES } from '@/lib/formatters'
 
@@ -67,13 +70,17 @@ export default function VistoriaPage() {
 
   const urlHospitalId = searchParams.get('hospitalId')
   const urlVistoriaId = searchParams.get('vistoriaId')
+  const urlTipo = searchParams.get('tipo')
 
   // Global states
+  const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
   const [hospitais, setHospitais] = useState<Hospital[]>([])
-  const [categorias, setCategorias] = useState<CategoriaVistoria[]>([])
+  const [allCategorias, setAllCategorias] = useState<CategoriaVistoria[]>([])
   const [openVistorias, setOpenVistorias] = useState<Vistoria[]>([])
-  const [allVistoriaItens, setAllVistoriaItens] = useState<VistoriaItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Type filter for vistorias list
+  const [selectedTipoFiltro, setSelectedTipoFiltro] = useState<string>(urlTipo || 'todos')
 
   // Active Vistoria Selection
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>(urlHospitalId || '')
@@ -94,20 +101,22 @@ export default function VistoriaPage() {
   const [searchOpenVistorias, setSearchOpenVistorias] = useState('')
 
   useEffect(() => {
-    document.title = 'Vistoria e Checklist · CREA-PI Fiscalização'
+    document.title = 'Vistorias & Checklist por Tipo · CREA-PI Fiscalização'
   }, [])
 
-  // 1. Initial load of Hospitais, Categorias, and Open Vistorias
+  // 1. Initial load of Tipos, Hospitais, Categorias, and Open Vistorias
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [hospList, catList, openList] = await Promise.all([
+      const [tiposList, hospList, catList, openList] = await Promise.all([
+        tiposEmpreendimentoService.getAll(),
         hospitaisService.getAll(),
         categoriasVistoriaService.getAll(),
         vistoriasService.getOpenVistorias(),
       ])
+      setTiposEmpreendimento(tiposList)
       setHospitais(hospList)
-      setCategorias(catList)
+      setAllCategorias(catList)
       setOpenVistorias(openList)
     } catch (err) {
       console.error('Erro ao carregar dados de vistoria:', err)
@@ -124,6 +133,28 @@ export default function VistoriaPage() {
   useEffect(() => {
     loadInitialData()
   }, [loadInitialData])
+
+  // Active Hospital Entity
+  const selectedHospital = useMemo(() => {
+    return hospitais.find((h) => h.id === selectedHospitalId) || null
+  }, [hospitais, selectedHospitalId])
+
+  // Determine the Tipo for the active hospital or selected filter
+  const currentHospitalTipo = useMemo(() => {
+    if (selectedHospital) {
+      return (selectedHospital.tipo || 'Hospital').trim()
+    }
+    return selectedTipoFiltro !== 'todos' ? selectedTipoFiltro : 'Hospital'
+  }, [selectedHospital, selectedTipoFiltro])
+
+  // Categorias filtered for the active hospital's tipo
+  const relevantCategorias = useMemo(() => {
+    const isHospital = currentHospitalTipo.toLowerCase() === 'hospital'
+    return allCategorias.filter((cat) => {
+      const catTipo = (cat.tipo || (isHospital ? 'Hospital' : '')).trim()
+      return catTipo.toLowerCase() === currentHospitalTipo.toLowerCase()
+    })
+  }, [allCategorias, currentHospitalTipo])
 
   // 2. When hospital is selected, load or create its vistoria & items
   const loadVistoriaForHospital = useCallback(
@@ -176,7 +207,7 @@ export default function VistoriaPage() {
         setPendingPhotos({})
         setDeletedPhotos({})
       } catch (err) {
-        console.error('Erro ao carregar vistoria do hospital:', err)
+        console.error('Erro ao carregar vistoria da unidade:', err)
         toast({
           title: 'Erro ao carregar vistoria',
           description: 'Não foi possível buscar a vistoria e checklist da unidade.',
@@ -198,13 +229,20 @@ export default function VistoriaPage() {
   // Handle Hospital Selection dropdown
   const handleSelectHospital = (hospId: string) => {
     setSelectedHospitalId(hospId)
-    setSearchParams(hospId ? { hospitalId: hospId } : {})
+    const newParams: Record<string, string> = {}
+    if (hospId) newParams.hospitalId = hospId
+    if (selectedTipoFiltro !== 'todos') newParams.tipo = selectedTipoFiltro
+    setSearchParams(newParams)
   }
 
-  // Active Hospital Entity
-  const selectedHospital = useMemo(() => {
-    return hospitais.find((h) => h.id === selectedHospitalId) || null
-  }, [hospitais, selectedHospitalId])
+  // Handle Tipo Filter change
+  const handleTipoFilterChange = (tipoVal: string) => {
+    setSelectedTipoFiltro(tipoVal)
+    const newParams: Record<string, string> = {}
+    if (tipoVal !== 'todos') newParams.tipo = tipoVal
+    if (selectedHospitalId) newParams.hospitalId = selectedHospitalId
+    setSearchParams(newParams)
+  }
 
   // Update a form field for a category
   const handleFieldChange = (
@@ -319,14 +357,14 @@ export default function VistoriaPage() {
     }
   }
 
-  // Calculate situation summary for the active vistoria
+  // Calculate situation summary for the active vistoria based ONLY on relevant categories of this type
   const stats = useMemo(() => {
     let conformeCount = 0
     let vencidoCount = 0
     let naoSeAplicaCount = 0
     let pendenteCount = 0
 
-    categorias.forEach((cat) => {
+    relevantCategorias.forEach((cat) => {
       const item = vistoriaItens.find((i) => i.categoria === cat.id)
       const form = itemForms[cat.id]
 
@@ -345,25 +383,41 @@ export default function VistoriaPage() {
     })
 
     return {
-      total: categorias.length,
+      total: relevantCategorias.length,
       conforme: conformeCount,
       vencido: vencidoCount,
       naoSeAplica: naoSeAplicaCount,
       pendente: pendenteCount,
     }
-  }, [categorias, vistoriaItens, itemForms])
+  }, [relevantCategorias, vistoriaItens, itemForms])
 
-  // Filter open vistorias for the open list view
+  // Filter open vistorias for the open list view by Tipo and Search
   const filteredOpenVistorias = useMemo(() => {
-    if (!searchOpenVistorias.trim()) return openVistorias
-    const q = searchOpenVistorias.toLowerCase()
-    return openVistorias.filter(
-      (v) =>
-        v.expand?.hospital?.nome.toLowerCase().includes(q) ||
-        v.expand?.hospital?.municipio.toLowerCase().includes(q) ||
-        v.expand?.hospital?.cnes.includes(q),
-    )
-  }, [openVistorias, searchOpenVistorias])
+    return openVistorias.filter((v) => {
+      const hospTipo = (v.expand?.hospital?.tipo || 'Hospital').trim().toLowerCase()
+      const matchTipo =
+        selectedTipoFiltro === 'todos' || hospTipo === selectedTipoFiltro.trim().toLowerCase()
+
+      if (!matchTipo) return false
+
+      if (!searchOpenVistorias.trim()) return true
+      const q = searchOpenVistorias.toLowerCase()
+      return (
+        v.expand?.hospital?.nome?.toLowerCase().includes(q) ||
+        v.expand?.hospital?.municipio?.toLowerCase().includes(q) ||
+        v.expand?.hospital?.cnes?.includes(q)
+      )
+    })
+  }, [openVistorias, selectedTipoFiltro, searchOpenVistorias])
+
+  // Hospitais list for the selection dropdown (filtered by selectedTipoFiltro if active)
+  const selectableHospitais = useMemo(() => {
+    if (selectedTipoFiltro === 'todos') return hospitais
+    return hospitais.filter((h) => {
+      const t = (h.tipo || 'Hospital').trim().toLowerCase()
+      return t === selectedTipoFiltro.trim().toLowerCase()
+    })
+  }, [hospitais, selectedTipoFiltro])
 
   return (
     <div className="animate-page-enter space-y-8 pb-20">
@@ -372,11 +426,11 @@ export default function VistoriaPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
-              Vistorias & Checklist de Fiscalização
+              Vistorias & Checklist por Tipo
             </h1>
           </div>
           <p className="text-sm text-[#486581] mt-0.5">
-            Preenchimento técnico das conformidades, exigências de ART, fotos e situação regulatória
+            Organização das vistorias técnicas e checklist exclusivo por segmento de empreendimento
           </p>
         </div>
 
@@ -400,93 +454,179 @@ export default function VistoriaPage() {
         </div>
       </div>
 
-      {/* 2. Seleção do Hospital em Atendimento */}
-      <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <Label
-            htmlFor="select-hospital"
-            className="text-sm font-bold text-[#102A43] flex items-center gap-2"
-          >
-            <Building2 className="w-4 h-4 text-[#004B8D]" />
-            Selecione o Estabelecimento para Vistoriar:
-          </Label>
-
-          {selectedHospital && (
-            <Badge className="bg-[#E8F1F8] text-[#004B8D] hover:bg-[#E8F1F8] text-xs font-semibold self-start sm:self-auto border-0">
-              {selectedHospital.tipo || 'Hospital'} • CNES: {selectedHospital.cnes}
-            </Badge>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <Select value={selectedHospitalId} onValueChange={handleSelectHospital}>
-              <SelectTrigger
-                id="select-hospital"
-                className="h-11 border-[#D3DFE9] bg-[#F4F6F9]/50 text-sm focus:ring-[#004B8D]"
-              >
-                <SelectValue placeholder="Selecione um hospital ou estabelecimento..." />
-              </SelectTrigger>
-              <SelectContent>
-                {hospitais.map((h) => (
-                  <SelectItem key={h.id} value={h.id}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-[#102A43]">{h.nome}</span>
-                      <span className="text-xs text-[#627D98]">
-                        ({h.municipio} • CNES: {h.cnes})
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      {/* 2. Filtro por Tipo de Empreendimento + Seleção da Unidade */}
+      <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-5">
+        {/* Tipo Selector Chips / Dropdown */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1.5 uppercase tracking-wider">
+              <Layers className="w-4 h-4 text-[#004B8D]" />
+              Segmento de Fiscalização:
+            </Label>
+            {selectedTipoFiltro !== 'todos' && (
+              <span className="text-xs text-[#004B8D] font-bold">
+                Exibindo apenas: {selectedTipoFiltro}
+              </span>
+            )}
           </div>
 
-          {selectedHospitalId && (
-            <Button
-              variant="outline"
-              onClick={() => handleSelectHospital('')}
-              className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] h-11 text-xs gap-1.5"
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => handleTipoFilterChange('todos')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                selectedTipoFiltro === 'todos'
+                  ? 'bg-[#004B8D] text-white shadow-xs'
+                  : 'bg-[#F4F6F9] text-[#486581] hover:bg-[#E8F1F8] border border-[#D3DFE9]'
+              }`}
             >
-              <X className="w-4 h-4" />
-              Limpar seleção
-            </Button>
-          )}
+              Todos os Tipos ({openVistorias.length} vistorias)
+            </button>
+
+            {tiposEmpreendimento.map((t) => {
+              const isSelected = selectedTipoFiltro.toLowerCase() === t.nome.toLowerCase()
+              const Icon = getIconComponent(t.icone)
+              const vCount = openVistorias.filter((v) => {
+                const hTipo = (v.expand?.hospital?.tipo || 'Hospital').trim().toLowerCase()
+                return hTipo === t.nome.trim().toLowerCase()
+              }).length
+
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => handleTipoFilterChange(t.nome)}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#004B8D] text-white shadow-xs'
+                      : 'bg-[#F4F6F9] text-[#486581] hover:bg-[#E8F1F8] border border-[#D3DFE9]'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-[#004B8D]'}`} />
+                  <span>{t.nome}</span>
+                  {vCount > 0 && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-[#004B8D]/10 text-[#004B8D]'
+                      }`}
+                    >
+                      {vCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Selected Hospital Info Card */}
-        {selectedHospital && (
-          <div className="mt-4 p-4 rounded-xl bg-[#F4F6F9] border border-[#D3DFE9] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div>
-              <span className="text-[#627D98] block">Município:</span>
-              <span className="font-semibold text-[#102A43]">{selectedHospital.municipio}</span>
-            </div>
-            <div>
-              <span className="text-[#627D98] block">CNPJ:</span>
-              <span className="font-mono text-[#102A43]">
-                {selectedHospital.cnpj ? formatCNPJ(selectedHospital.cnpj) : 'Não informado'}
-              </span>
-            </div>
-            <div>
-              <span className="text-[#627D98] block">Responsável pelas informações:</span>
-              <span className="font-semibold text-[#102A43]">
-                {selectedHospital.responsavel || 'Não informado'}
-              </span>
-            </div>
+        {/* Seleção do Estabelecimento */}
+        <div className="pt-3 border-t border-[#D3DFE9]/70 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <Label
+              htmlFor="select-hospital"
+              className="text-sm font-bold text-[#102A43] flex items-center gap-2"
+            >
+              <Building2 className="w-4 h-4 text-[#004B8D]" />
+              Selecione a Unidade para Vistoriar / Preencher Checklist:
+            </Label>
+
+            {selectedHospital && (
+              <Badge className="bg-[#E8F1F8] text-[#004B8D] hover:bg-[#E8F1F8] text-xs font-semibold self-start sm:self-auto border-0 gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                {selectedHospital.tipo || 'Hospital'} • CNES: {selectedHospital.cnes}
+              </Badge>
+            )}
           </div>
-        )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <Select value={selectedHospitalId} onValueChange={handleSelectHospital}>
+                <SelectTrigger
+                  id="select-hospital"
+                  className="h-11 border-[#D3DFE9] bg-[#F4F6F9]/50 text-sm focus:ring-[#004B8D]"
+                >
+                  <SelectValue
+                    placeholder={
+                      selectedTipoFiltro === 'todos'
+                        ? 'Selecione uma unidade cadastrada...'
+                        : `Selecione uma unidade de ${selectedTipoFiltro}...`
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {selectableHospitais.length === 0 ? (
+                    <div className="p-3 text-xs text-center text-[#627D98]">
+                      Nenhuma unidade cadastrada neste tipo.
+                    </div>
+                  ) : (
+                    selectableHospitais.map((h) => (
+                      <SelectItem key={h.id} value={h.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-[#102A43]">{h.nome}</span>
+                          <span className="text-xs text-[#627D98]">
+                            ({h.municipio} • CNES: {h.cnes} • {h.tipo || 'Hospital'})
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedHospitalId && (
+              <Button
+                variant="outline"
+                onClick={() => handleSelectHospital('')}
+                className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] h-11 text-xs gap-1.5"
+              >
+                <X className="w-4 h-4" />
+                Limpar seleção de unidade
+              </Button>
+            )}
+          </div>
+
+          {/* Selected Hospital Info Card */}
+          {selectedHospital && (
+            <div className="mt-2 p-4 rounded-xl bg-[#F4F6F9] border border-[#D3DFE9] grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <span className="text-[#627D98] block">Segmento:</span>
+                <span className="font-bold text-[#004B8D]">
+                  {selectedHospital.tipo || 'Hospital'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#627D98] block">Município:</span>
+                <span className="font-semibold text-[#102A43]">{selectedHospital.municipio}</span>
+              </div>
+              <div>
+                <span className="text-[#627D98] block">CNPJ:</span>
+                <span className="font-mono text-[#102A43]">
+                  {selectedHospital.cnpj ? formatCNPJ(selectedHospital.cnpj) : 'Não informado'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#627D98] block">Responsável:</span>
+                <span className="font-semibold text-[#102A43]">
+                  {selectedHospital.responsavel || 'Não informado'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 3. Resumo de Pendências (Card no Topo) se hospital estiver selecionado */}
+      {/* 3. Resumo Técnico da Vistoria (Card no Topo) se hospital estiver selecionado */}
       {selectedHospitalId && (
         <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-[#D3DFE9] pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#D3DFE9] pb-3 gap-2">
             <h3 className="text-base font-bold text-[#102A43] flex items-center gap-2">
               <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
-              Resumo Técnico da Vistoria
+              Resumo Técnico do Checklist: {selectedHospital?.tipo || 'Hospital'}
             </h3>
             <span className="text-xs text-[#627D98] font-medium">
-              {stats.total} itens regulatórios cadastrados
+              {stats.total} {stats.total === 1 ? 'item regulatório' : 'itens regulatórios'} para
+              este tipo
             </span>
           </div>
 
@@ -530,17 +670,17 @@ export default function VistoriaPage() {
         </div>
       )}
 
-      {/* 4. Checklist Expansível (Accordion) com Categorias Técnicas */}
+      {/* 4. Checklist Expansível (Accordion) com Categorias do Tipo Específico */}
       {selectedHospitalId ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-[#102A43] flex items-center gap-2">
                 <ClipboardCheck className="w-5 h-5 text-[#004B8D]" />
-                Checklist de Fiscalização Técnica
+                Checklist Técnico: {selectedHospital?.tipo || 'Hospital'}
               </h2>
               <p className="text-xs text-[#486581]">
-                Abra cada categoria para preencher respostas, anotação de ART e registrar fotos.
+                Itens específicos de fiscalização para {selectedHospital?.tipo || 'Hospital'}.
               </p>
             </div>
 
@@ -552,13 +692,36 @@ export default function VistoriaPage() {
             )}
           </div>
 
-          {categorias.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-xl border border-[#D3DFE9]">
-              <p className="text-sm text-[#486581]">Nenhuma categoria técnica cadastrada.</p>
+          {relevantCategorias.length === 0 ? (
+            <div className="p-10 text-center bg-white rounded-2xl border border-dashed border-[#D3DFE9] space-y-3">
+              <FileCheck2 className="w-10 h-10 text-[#829AB1] mx-auto stroke-[1.5]" />
+              <h4 className="text-sm font-bold text-[#102A43]">
+                Checklist de {selectedHospital?.tipo || 'este segmento'} está vazio
+              </h4>
+              <p className="text-xs text-[#486581] max-w-md mx-auto">
+                Este tipo de empreendimento ainda não possui itens de checklist cadastrados. Acesse
+                a página do tipo em &ldquo;Tipos de Empreendimento&rdquo; para adicionar os itens
+                regulatórios.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const t = tiposEmpreendimento.find(
+                    (item) =>
+                      item.nome.toLowerCase() === (selectedHospital?.tipo || '').toLowerCase(),
+                  )
+                  if (t) navigate(`/tipos-empreendimento/${t.id}`)
+                  else navigate('/tipos-empreendimento')
+                }}
+                className="text-xs border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] mt-2 cursor-pointer"
+              >
+                Gerenciar Checklist deste Tipo
+              </Button>
             </div>
           ) : (
             <Accordion type="multiple" className="space-y-3">
-              {categorias.map((cat, idx) => {
+              {relevantCategorias.map((cat, idx) => {
                 const item = vistoriaItens.find((i) => i.categoria === cat.id)
                 const form = itemForms[cat.id] || {
                   possuiSistema: '',
@@ -581,9 +744,9 @@ export default function VistoriaPage() {
                     <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-slate-50/70">
                       <div className="flex flex-1 items-center justify-between gap-4 text-left pr-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-[#E8F1F8] text-[#004B8D] font-bold text-xs flex items-center justify-center shrink-0">
+                          <span className="w-8 h-8 rounded-lg bg-[#E8F1F8] text-[#004B8D] font-bold text-xs flex items-center justify-center shrink-0">
                             {idx + 1}
-                          </div>
+                          </span>
                           <div>
                             <h4 className="font-bold text-sm text-[#102A43]">{cat.nome}</h4>
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#627D98] mt-0.5">
@@ -793,16 +956,18 @@ export default function VistoriaPage() {
           )}
         </div>
       ) : (
-        /* 5. Lista de Vistorias Abertas (Cards clicáveis) quando nenhum hospital foi selecionado */
+        /* 5. Lista de Vistorias Abertas organizadas pelo tipo selecionado */
         <div className="space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-[#102A43]">
-                Vistorias em Andamento no CREA-PI
+                {selectedTipoFiltro === 'todos'
+                  ? 'Todas as Vistorias em Andamento'
+                  : `Vistorias em Andamento: ${selectedTipoFiltro}`}
               </h2>
               <p className="text-xs text-[#486581]">
-                Selecione uma vistoria aberta abaixo ou escolha um hospital no seletor acima para
-                iniciar
+                Selecione uma vistoria aberta abaixo ou escolha uma unidade acima para iniciar o
+                checklist
               </p>
             </div>
 
@@ -827,11 +992,13 @@ export default function VistoriaPage() {
               <ClipboardCheck className="w-12 h-12 text-[#829AB1] mx-auto stroke-[1.5]" />
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-[#102A43]">
-                  Nenhuma vistoria em andamento
+                  {selectedTipoFiltro === 'todos'
+                    ? 'Nenhuma vistoria em andamento'
+                    : `Nenhuma vistoria em andamento para ${selectedTipoFiltro}`}
                 </h3>
                 <p className="text-xs text-[#486581] max-w-sm mx-auto">
                   Utilize o botão &ldquo;Nova Vistoria&rdquo; ou o seletor acima para iniciar o
-                  checklist técnico de um estabelecimento.
+                  checklist técnico de uma unidade.
                 </p>
               </div>
               <Button
@@ -851,13 +1018,14 @@ export default function VistoriaPage() {
                   pendentesCount={0}
                   vencidosCount={0}
                   conformesCount={0}
-                  totalItensCount={categorias.length}
+                  totalItensCount={relevantCategorias.length}
                   onClick={() => {
                     if (vistoria.hospital) {
                       handleSelectHospital(vistoria.hospital)
                       setSearchParams({
                         hospitalId: vistoria.hospital,
                         vistoriaId: vistoria.id,
+                        ...(selectedTipoFiltro !== 'todos' ? { tipo: selectedTipoFiltro } : {}),
                       })
                     }
                   }}
@@ -873,6 +1041,8 @@ export default function VistoriaPage() {
         open={isNovaVistoriaOpen}
         onOpenChange={setIsNovaVistoriaOpen}
         hospitais={hospitais}
+        tipos={tiposEmpreendimento}
+        selectedTipoFiltro={selectedTipoFiltro !== 'todos' ? selectedTipoFiltro : undefined}
         onSelectHospital={async (hospId) => {
           await loadInitialData()
           handleSelectHospital(hospId)

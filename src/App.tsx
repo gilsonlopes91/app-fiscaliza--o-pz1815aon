@@ -1,9 +1,9 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Layout } from './components/Layout'
-import Hospitais from './pages/Hospitais'
 import Vistoria from './pages/Vistoria'
 import TiposEmpreendimento from './pages/TiposEmpreendimento'
+import TipoEmpreendimentoDetalhe from './pages/TipoEmpreendimentoDetalhe'
 import Login from './pages/Login'
 import AguardandoAprovacao from './pages/AguardandoAprovacao'
 import GestaoUsuarios from './pages/GestaoUsuarios'
@@ -95,22 +95,20 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            {/* Admin-only: Hospitais */}
+            {/* Redirecionamento da antiga rota /hospitais para o tipo Hospital */}
             <Route
               path="/hospitais"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <Hospitais />
-                </ProtectedRoute>
-              }
+              element={<Navigate to="/tipos-empreendimento/Hospital" replace />}
             />
 
-            {/* Public for all approved users: Tipos de empreendimento */}
+            {/* Tipos de Empreendimento - Catálogo */}
             <Route path="/tipos-empreendimento" element={<TiposEmpreendimento />} />
 
-            {/* Public for all approved users: Vistoria */}
-            <Route path="/vistoria" element={<Vistoria />} />
+            {/* Página do Tipo de Empreendimento (Unidades + Checklist exclusivo) */}
+            <Route path="/tipos-empreendimento/:id" element={<TipoEmpreendimentoDetalhe />} />
 
+            {/* Vistoria */}
+            <Route path="/vistoria" element={<Vistoria />} />
             {/* Admin-only: Gestao de Usuarios */}
             <Route
               path="/usuarios"
