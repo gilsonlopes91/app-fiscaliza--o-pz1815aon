@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T13:06:18.404Z",
+  "generatedAt": "2026-09-01T13:28:37.430Z",
   "collections": [
     {
       "name": "users",
@@ -394,6 +394,75 @@
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_tipos_empreendimento_nome ON tipos_empreendimento (nome)"
+      ]
+    },
+    {
+      "name": "itens_fiscalizacao",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "fields": [
+        {
+          "name": "hospital",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "hospitais"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Conforme", "Não Conforme"]
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_itens_fisc_hospital ON itens_fiscalizacao (hospital)",
+        "CREATE INDEX idx_itens_fisc_categoria ON itens_fiscalizacao (categoria)"
       ]
     }
   ]

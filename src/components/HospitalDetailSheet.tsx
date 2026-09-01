@@ -38,6 +38,7 @@ import {
 import { Hospital, HospitalFormData } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { vistoriasService } from '@/services/vistorias'
+import { ItensFiscalizacaoSection } from '@/components/ItensFiscalizacaoSection'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
 import {
@@ -691,7 +692,10 @@ export function HospitalDetailSheet({
                 </div>
               </div>
 
-              {/* Section 4: Ações Rápidas de Vistoria e Exclusão */}
+              {/* Section 4: Itens de Fiscalização Específicos do Empreendimento */}
+              <ItensFiscalizacaoSection hospitalId={hospital.id} hospitalNome={hospital.nome} />
+
+              {/* Section 5: Ações Rápidas de Vistoria e Exclusão */}
               <div className="pt-2 flex flex-col gap-3">
                 <div className="bg-[#E8F1F8] border border-[#004B8D]/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="space-y-0.5">
