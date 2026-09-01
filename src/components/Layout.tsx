@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Download,
   WifiOff,
+  LayoutDashboard,
+  CheckSquare,
 } from 'lucide-react'
 import logoCreaPi from '@/assets/logocreapiazul-919d6.png'
 import { useAuth } from '@/contexts/AuthContext'
@@ -42,10 +44,24 @@ export function Layout() {
   }
 
   // Define navigation tabs based on user role
-  // Rule:
-  // Admin: Hospitais, Tipos de empreendimento, Vistoria, Usuários
-  // Usuario: Tipos de empreendimento, Vistoria (Sem Hospitais)
+  // Admin: Painel Geral (Dashboard), Tipos de Empreendimento, Vistoria, Gestão de Usuários
+  // Fiscal: Minhas Fiscalizações, Tipos de Empreendimento, Vistoria
   const navItems = [
+    ...(isAdmin
+      ? [
+          {
+            to: '/dashboard',
+            label: 'Painel Geral',
+            icon: LayoutDashboard,
+          },
+        ]
+      : [
+          {
+            to: '/minhas-fiscalizacoes',
+            label: 'Minhas Fiscalizações',
+            icon: CheckSquare,
+          },
+        ]),
     {
       to: '/tipos-empreendimento',
       label: 'Tipos de Empreendimento',
@@ -156,13 +172,37 @@ export function Layout() {
                     </div>
                   </div>
 
-                  {isAdmin && (
+                  {isAdmin ? (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => navigate('/dashboard')}
+                        className="text-xs cursor-pointer focus:bg-[#E8F1F8] focus:text-[#004B8D]"
+                      >
+                        <LayoutDashboard className="w-4 h-4 mr-2 text-[#004B8D]" />
+                        Painel Geral
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate('/minhas-fiscalizacoes')}
+                        className="text-xs cursor-pointer focus:bg-[#E8F1F8] focus:text-[#004B8D]"
+                      >
+                        <CheckSquare className="w-4 h-4 mr-2 text-[#004B8D]" />
+                        Minhas Fiscalizações
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate('/usuarios')}
+                        className="text-xs cursor-pointer focus:bg-[#E8F1F8] focus:text-[#004B8D]"
+                      >
+                        <Users className="w-4 h-4 mr-2 text-[#004B8D]" />
+                        Gestão de Usuários
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
                     <DropdownMenuItem
-                      onClick={() => navigate('/usuarios')}
+                      onClick={() => navigate('/minhas-fiscalizacoes')}
                       className="text-xs cursor-pointer focus:bg-[#E8F1F8] focus:text-[#004B8D]"
                     >
-                      <Users className="w-4 h-4 mr-2 text-[#004B8D]" />
-                      Gestão de Usuários
+                      <CheckSquare className="w-4 h-4 mr-2 text-[#004B8D]" />
+                      Minhas Fiscalizações
                     </DropdownMenuItem>
                   )}
 

@@ -7,6 +7,8 @@ import TipoEmpreendimentoDetalhe from './pages/TipoEmpreendimentoDetalhe'
 import Login from './pages/Login'
 import AguardandoAprovacao from './pages/AguardandoAprovacao'
 import GestaoUsuarios from './pages/GestaoUsuarios'
+import AdminDashboard from './pages/AdminDashboard'
+import FiscalDashboard from './pages/FiscalDashboard'
 import NotFound from './pages/NotFound'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Loader2 } from 'lucide-react'
@@ -69,10 +71,10 @@ function IndexRedirect() {
   }
 
   if (isAdmin) {
-    return <Navigate to="/hospitais" replace />
+    return <Navigate to="/dashboard" replace />
   }
 
-  return <Navigate to="/tipos-empreendimento" replace />
+  return <Navigate to="/minhas-fiscalizacoes" replace />
 }
 
 export default function App() {
@@ -95,6 +97,18 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            {/* Dashboard Principal conforme o Papel */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route path="/minhas-fiscalizacoes" element={<FiscalDashboard />} />
+
             {/* Redirecionamento da antiga rota /hospitais para o tipo Hospital */}
             <Route
               path="/hospitais"
@@ -109,6 +123,7 @@ export default function App() {
 
             {/* Vistoria */}
             <Route path="/vistoria" element={<Vistoria />} />
+
             {/* Admin-only: Gestao de Usuarios */}
             <Route
               path="/usuarios"

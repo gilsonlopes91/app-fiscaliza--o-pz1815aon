@@ -34,8 +34,12 @@ import {
   CreditCard,
   Building,
   ClipboardCheck,
+  UserPlus,
 } from 'lucide-react'
 import { Hospital, HospitalFormData } from '@/services/hospitais'
+import { AtribuirFiscalizacaoModal } from '@/components/AtribuirFiscalizacaoModal'
+import { usersService, UserProfile } from '@/services/auth'
+import { useAuth } from '@/contexts/AuthContext'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { vistoriasService } from '@/services/vistorias'
 import { ItensFiscalizacaoSection } from '@/components/ItensFiscalizacaoSection'
@@ -74,7 +78,10 @@ export function HospitalDetailSheet({
   const [isDeleting, setIsDeleting] = useState(false)
   const [isStartingVistoria, setIsStartingVistoria] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isAtribuirModalOpen, setIsAtribuirModalOpen] = useState(false)
+  const [fiscaisList, setFiscaisList] = useState<UserProfile[]>([])
   const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
+  const { isAdmin } = useAuth()
 
   const [formData, setFormData] = useState<HospitalFormData>({
     nome: '',
@@ -91,10 +98,12 @@ export function HospitalDetailSheet({
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    tiposEmpreendimentoService
-      .getAll()
-      .then((data) => setTiposEmpreendimento(data))
-      .catch((err) => console.error('Erro ao carregar tipos no detail:', err))
+    Promise.all([tiposEmpreendimentoService.getAll(), usersService.getAll()])
+      .then(([tipos, users]) => {
+        setTiposEmpreendimento(tipos)
+        setFiscaisList(users.filter((u) => u.approved || u.approvalStatus === 'aprovado'))
+      })
+      .catch((err) => console.error('Erro ao carregar dados no detail sheet:', err))
   }, [])
 
   useEffect(() => {
@@ -256,15 +265,27 @@ export function HospitalDetailSheet({
                   </SheetDescription>
                 </div>
               </div>
-
               {!isEditing && (
                 <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsAtribuirModalOpen(true)}
+                      className="shrink-0 border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer text-xs"
+                      title="Atribuir este empreendimento a um fiscal"
+                    >
+                      <UserPlus className="w-4 h-4 mr-1.5" />
+                      Atribuir Fiscal
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
                     onClick={handleIniciarVistoria}
                     disabled={isStartingVistoria}
-                    className="shrink-0 bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-9 px-3 cursor-pointer"
+                    className="shrink-0 bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-9 px-3 cursor-pointer text-xs"
                   >
                     {isStartingVistoria ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
@@ -273,18 +294,20 @@ export function HospitalDetailSheet({
                     )}
                     Iniciar vistoria
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsEditing(true)}
-                    className="shrink-0 border-[#D3DFE9] text-[#004B8D] hover:text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer"
-                  >
-                    <Edit2 className="w-4 h-4 mr-1.5" />
-                    Editar
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsEditing(true)}
+                      className="shrink-0 border-[#D3DFE9] text-[#004B8D] hover:text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer text-xs"
+                    >
+                      <Edit2 className="w-4 h-4 mr-1.5" />
+                      Editar
+                    </Button>
+                  )}
                 </div>
-              )}
+              )}{' '}
             </div>
           </SheetHeader>
 
@@ -744,6 +767,21 @@ export function HospitalDetailSheet({
           )}
         </SheetContent>
       </Sheet>
+
+      {/* MODAL DE ATRIBUIÇÃO */}
+      {hospital && (
+        <AtribuirFiscalizacaoModal
+          open={isAtribuirModalOpen}
+          onOpenChange={setIsAtribuirModalOpen}
+          fiscais={fiscaisList}
+          hospitais={[hospital]}
+          tipos={tiposEmpreendimento}
+          preSelectedHospitalId={hospital.id}
+          onSuccess={async () => {
+            setIsAtribuirModalOpen(false)
+          }}
+        />
+      )}
 
       {/* Confirmation Dialog for Deletion */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

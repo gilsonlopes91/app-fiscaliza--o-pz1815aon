@@ -196,6 +196,10 @@ export default function VistoriaPage() {
           initialForm[item.categoria] = {
             possuiSistema: item.possuiSistema || '',
             servicoPeriodico: item.servicoPeriodico || '',
+            periodicidadeMeses:
+              item.periodicidadeMeses !== undefined && item.periodicidadeMeses !== null
+                ? item.periodicidadeMeses
+                : null,
             prestadorServico: item.prestadorServico || '',
             numeroArt: item.numeroArt || '',
             dataUltimaVerificacao: item.dataUltimaVerificacao
@@ -303,6 +307,7 @@ export default function VistoriaPage() {
     const formData = itemForms[cat.id] || {
       possuiSistema: '',
       servicoPeriodico: '',
+      periodicidadeMeses: null,
       prestadorServico: '',
       numeroArt: '',
       dataUltimaVerificacao: '',
@@ -726,6 +731,7 @@ export default function VistoriaPage() {
                 const form = itemForms[cat.id] || {
                   possuiSistema: '',
                   servicoPeriodico: '',
+                  periodicidadeMeses: null,
                   prestadorServico: '',
                   numeroArt: '',
                   dataUltimaVerificacao: '',
@@ -893,9 +899,12 @@ export default function VistoriaPage() {
                                 </Label>
                                 <Select
                                   value={form.servicoPeriodico || ''}
-                                  onValueChange={(val) =>
+                                  onValueChange={(val) => {
                                     handleFieldChange(cat.id, 'servicoPeriodico', val)
-                                  }
+                                    if (val !== 'Sim') {
+                                      handleFieldChange(cat.id, 'periodicidadeMeses', null)
+                                    }
+                                  }}
                                 >
                                   <SelectTrigger className="border-[#D3DFE9] text-xs h-9 bg-white">
                                     <SelectValue placeholder="Selecione..." />
@@ -906,6 +915,52 @@ export default function VistoriaPage() {
                                   </SelectContent>
                                 </Select>
                               </div>
+
+                              {/* Periodicidade em meses (Condicional: aparece quando servicoPeriodico === 'Sim') */}
+                              {form.servicoPeriodico === 'Sim' && (
+                                <div className="space-y-1.5 sm:col-span-2 p-3 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter">
+                                  <div className="flex items-center justify-between">
+                                    <Label
+                                      htmlFor={`period-meses-${cat.id}`}
+                                      className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
+                                    >
+                                      <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
+                                      De quantos em quantos meses esse serviço é realizado? (em
+                                      meses)
+                                    </Label>
+                                    <span className="text-[10px] text-[#486581] font-semibold bg-white px-2 py-0.5 rounded border border-[#D3DFE9]">
+                                      Informado nesta vistoria
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <Input
+                                      id={`period-meses-${cat.id}`}
+                                      type="number"
+                                      min={1}
+                                      max={120}
+                                      placeholder="Ex: 1 (mensal), 3 (trimestral), 6 (semestral), 12 (anual)..."
+                                      value={
+                                        form.periodicidadeMeses !== undefined &&
+                                        form.periodicidadeMeses !== null
+                                          ? form.periodicidadeMeses
+                                          : ''
+                                      }
+                                      onChange={(e) => {
+                                        const raw = e.target.value
+                                        const val = raw ? parseInt(raw, 10) : null
+                                        handleFieldChange(cat.id, 'periodicidadeMeses', val)
+                                      }}
+                                      className="border-[#D3DFE9] text-xs h-9 bg-white max-w-xs focus-visible:ring-[#004B8D]"
+                                    />
+                                    {form.periodicidadeMeses ? (
+                                      <span className="text-xs font-semibold text-[#004B8D]">
+                                        Realizado a cada {form.periodicidadeMeses}{' '}
+                                        {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             {/* Seção de Fotos (Até 3 por item) */}

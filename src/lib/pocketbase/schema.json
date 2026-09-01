@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T14:09:11.448Z",
+  "generatedAt": "2026-09-01T14:32:14.381Z",
   "collections": [
     {
       "name": "users",
@@ -346,6 +346,12 @@
           "type": "file",
           "required": false,
           "system": false
+        },
+        {
+          "name": "periodicidadeMeses",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -469,6 +475,70 @@
       "indexes": [
         "CREATE INDEX idx_itens_fisc_hospital ON itens_fiscalizacao (hospital)",
         "CREATE INDEX idx_itens_fisc_categoria ON itens_fiscalizacao (categoria)"
+      ]
+    },
+    {
+      "name": "atribuicoes",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "fields": [
+        {
+          "name": "fiscal",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "hospital",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "hospitais"
+        },
+        {
+          "name": "created_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prazo",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_atribuicoes_fiscal ON atribuicoes (fiscal)",
+        "CREATE INDEX idx_atribuicoes_hospital ON atribuicoes (hospital)"
       ]
     }
   ]

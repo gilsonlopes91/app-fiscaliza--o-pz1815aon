@@ -23,6 +23,7 @@ export interface VistoriaItem {
   categoria: string
   possuiSistema?: 'Sim' | 'Não' | '' | null
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
+  periodicidadeMeses?: number | null
   prestadorServico?: string
   numeroArt?: string
   fotos?: string[]
@@ -39,6 +40,7 @@ export interface VistoriaItem {
 export interface VistoriaItemFormData {
   possuiSistema?: 'Sim' | 'Não' | '' | null
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
+  periodicidadeMeses?: number | null
   prestadorServico?: string
   numeroArt?: string
   fotos?: string[]
@@ -232,6 +234,15 @@ export const vistoriasService = {
       data.append('categoria', categoriaId)
       if (formData.possuiSistema) data.append('possuiSistema', formData.possuiSistema)
       if (formData.servicoPeriodico) data.append('servicoPeriodico', formData.servicoPeriodico)
+      if (
+        formData.servicoPeriodico === 'Sim' &&
+        formData.periodicidadeMeses !== undefined &&
+        formData.periodicidadeMeses !== null
+      ) {
+        data.append('periodicidadeMeses', String(formData.periodicidadeMeses))
+      } else {
+        data.append('periodicidadeMeses', '')
+      }
       data.append(
         'prestadorServico',
         formData.prestadorServico ? formData.prestadorServico.trim() : '',
@@ -292,6 +303,10 @@ export const vistoriasService = {
       categoria: categoriaId,
       possuiSistema: formData.possuiSistema || null,
       servicoPeriodico: formData.servicoPeriodico || null,
+      periodicidadeMeses:
+        formData.servicoPeriodico === 'Sim' && formData.periodicidadeMeses
+          ? Number(formData.periodicidadeMeses)
+          : null,
       prestadorServico: formData.prestadorServico ? formData.prestadorServico.trim() : '',
       numeroArt: formData.numeroArt ? formData.numeroArt.trim() : '',
       dataUltimaVerificacao: formData.dataUltimaVerificacao || null,
