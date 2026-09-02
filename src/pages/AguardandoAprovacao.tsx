@@ -3,7 +3,7 @@ import { Clock, ShieldAlert, RefreshCw, LogOut, Mail, CheckCircle2, XCircle } fr
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import logoCreaPi from '@/assets/logocreapiazul-919d6.png'
+import logoCreaPi from '@/assets/creapi-a5c20.png'
 
 export default function AguardandoAprovacao() {
   const { user, logout, refreshUser, isApproved, isAdmin } = useAuth()
@@ -45,8 +45,8 @@ export default function AguardandoAprovacao() {
       <div className="w-full max-w-lg">
         {/* Branding CREA-PI */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 bg-white rounded-2xl shadow-sm border border-[#D3DFE9] mb-4">
-            <img src={logoCreaPi} alt="CREA-PI" className="h-12 w-auto object-contain" />
+          <div className="inline-flex items-center justify-center p-3.5 bg-[#004B8D] rounded-2xl shadow-md border border-[#003666] mb-4">
+            <img src={logoCreaPi} alt="CREA-PI" className="h-14 sm:h-16 w-auto object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-[#102A43] tracking-tight">Fiscalização Técnica</h1>
           <p className="text-sm text-[#486581] mt-1">CREA-PI • Controle de Acesso e Segurança</p>

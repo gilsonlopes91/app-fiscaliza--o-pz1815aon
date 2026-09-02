@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePwa } from '@/hooks/use-pwa'
 import { useToast } from '@/hooks/use-toast'
-import logoCreaPi from '@/assets/logocreapiazul-919d6.png'
+import logoCreaPi from '@/assets/creapi-a5c20.png'
 
 export default function Login() {
   const { login, register, isAuthenticated, isApproved, isAdmin } = useAuth()
@@ -162,13 +162,11 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Branding CREA-PI */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 bg-white rounded-2xl shadow-sm border border-[#D3DFE9] mb-4">
-            <img src={logoCreaPi} alt="CREA-PI" className="h-12 w-auto object-contain" />
+          <div className="inline-flex items-center justify-center p-3.5 bg-[#004B8D] rounded-2xl shadow-md border border-[#003666] mb-4">
+            <img src={logoCreaPi} alt="CREA-PI" className="h-14 sm:h-16 w-auto object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-[#102A43] tracking-tight">Fiscalização Técnica</h1>
-          <p className="text-sm text-[#486581] mt-1">
-            CREA-PI • Conselho Regional de Engenharia e Agronomia do Piauí
-          </p>
+          <p className="text-sm text-[#486581] mt-1">CREA-PI • Sistema Integrado de Fiscalização</p>
         </div>
 
         {/* Card Container */}

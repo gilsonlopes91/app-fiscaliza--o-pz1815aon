@@ -14,7 +14,7 @@ import {
   LayoutDashboard,
   CheckSquare,
 } from 'lucide-react'
-import logoCreaPi from '@/assets/logocreapiazul-919d6.png'
+import logoCreaPi from '@/assets/creapi-a5c20.png'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePwa } from '@/hooks/use-pwa'
 import { Button } from '@/components/ui/button'
@@ -97,18 +97,22 @@ export function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo & Brand Identity CREA-PI */}
           <div className="flex items-center gap-3">
-            <div className="bg-white p-1.5 rounded-lg shadow-xs flex items-center justify-center">
-              <img src={logoCreaPi} alt="CREA-PI" className="h-8 sm:h-9 w-auto object-contain" />
+            <div className="flex items-center justify-center py-1">
+              <img
+                src={logoCreaPi}
+                alt="CREA-PI - Conselho Regional de Engenharia e Agronomia do Piauí"
+                className="h-10 sm:h-11 w-auto max-w-[200px] sm:max-w-[240px] object-contain drop-shadow-sm"
+              />
             </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-base sm:text-lg tracking-tight leading-none text-white flex items-center gap-1.5">
+            <div className="hidden sm:flex flex-col border-l border-white/20 pl-3">
+              <span className="font-bold text-sm sm:text-base tracking-tight leading-none text-white flex items-center gap-1.5">
                 Fiscalização
-                <span className="text-[10px] uppercase font-extrabold tracking-wider bg-[#E5A812] text-[#102A43] px-1.5 py-0.5 rounded-sm">
+                <span className="text-[9px] uppercase font-extrabold tracking-wider bg-[#E5A812] text-[#102A43] px-1.5 py-0.5 rounded-sm">
                   Técnica
                 </span>
               </span>
-              <span className="text-[11px] text-blue-100 font-medium tracking-wide">
-                Conselho Regional de Engenharia e Agronomia do Piauí
+              <span className="text-[10px] text-blue-100 font-medium tracking-wide">
+                Sistema Integrado de Vistorias
               </span>
             </div>
           </div>
