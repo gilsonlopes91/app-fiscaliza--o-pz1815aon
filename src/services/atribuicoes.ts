@@ -57,7 +57,11 @@ export interface AtribuicaoDetail {
 export function isVistoriaCompleta(
   itens: VistoriaItem[],
   subitensChecklist: SubitemChecklist[],
+  vistoriaStatus?: string,
 ): boolean {
+  if (vistoriaStatus === 'concluida') {
+    return true
+  }
   if (subitensChecklist.length === 0) {
     return itens.length > 0
   }
@@ -65,7 +69,12 @@ export function isVistoriaCompleta(
     const item = itens.find(
       (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
     )
-    return item && (item.possuiSistema === 'Sim' || item.possuiSistema === 'Não')
+    return (
+      item &&
+      (item.possuiSistema === 'Sim' ||
+        item.possuiSistema === 'Não' ||
+        item.possuiSistema === 'Não se aplica')
+    )
   })
   return respondidos.length >= subitensChecklist.length
 }
@@ -262,12 +271,19 @@ export const atribuicoesService = {
           const item = itens.find(
             (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
           )
-          if (item && (item.possuiSistema === 'Sim' || item.possuiSistema === 'Não')) {
+          if (
+            item &&
+            (item.possuiSistema === 'Sim' ||
+              item.possuiSistema === 'Não' ||
+              item.possuiSistema === 'Não se aplica')
+          ) {
             respondidos++
           }
         })
 
-        const isConcluida = totalItens > 0 ? respondidos >= totalItens : itens.length > 0
+        const isConcluida =
+          vistoria?.status === 'concluida' ||
+          (totalItens > 0 ? respondidos >= totalItens : itens.length > 0)
         const percentual = totalItens > 0 ? Math.round((respondidos / totalItens) * 100) : 0
 
         return {

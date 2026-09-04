@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T12:34:40.726Z",
+  "generatedAt": "2026-09-04T12:54:05.193Z",
   "collections": [
     {
       "name": "users",
@@ -293,7 +293,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Sim", "Não"]
+          "selectValues": ["Sim", "Não", "Não se aplica"]
         },
         {
           "name": "prestadorServico",

@@ -331,7 +331,7 @@ export default function FiscalDashboard() {
                       <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-xs font-semibold">
                         {hospTipo}
                       </Badge>
-                      {detail.isConcluida ? (
+                      {detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
                         <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           Concluída
@@ -339,7 +339,7 @@ export default function FiscalDashboard() {
                       ) : (
                         <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold gap-1">
                           <Clock className="w-3 h-3 text-amber-600" />
-                          Pendente
+                          Em andamento
                         </Badge>
                       )}
                     </div>

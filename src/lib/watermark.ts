@@ -125,25 +125,40 @@ export async function applyWatermarkToImage(
           // Desenha a imagem base
           ctx.drawImage(img, 0, 0, width, height)
 
-          // Proporção de tamanho para fontes e paddings baseado no tamanho da imagem
+          // Proporção de escala para fontes e paddings baseado no tamanho da imagem
           const baseScale = Math.max(width, height) / 1000
-          const fontSizeTitle = Math.max(14, Math.round(15 * baseScale))
-          const fontSizeDetails = Math.max(12, Math.round(13 * baseScale))
-          const padding = Math.max(12, Math.round(14 * baseScale))
-          const barHeight = Math.max(50, Math.round(60 * baseScale))
+          const fontSizeMain = Math.max(13, Math.round(14 * baseScale))
+          const fontSizeSub = Math.max(11, Math.round(12 * baseScale))
+          const padX = Math.max(14, Math.round(16 * baseScale))
+          const padY = Math.max(10, Math.round(12 * baseScale))
+          const marginOffset = Math.max(12, Math.round(16 * baseScale))
 
-          // Tarja no canto inferior direito ou em toda a base
-          // Vamos desenhar uma caixa retangular estilizada no canto inferior direito
-          const boxWidth = Math.min(width - padding * 2, Math.max(320 * baseScale, 360))
-          const boxHeight = barHeight
-          const boxX = width - boxWidth - padding
-          const boxY = height - boxHeight - padding
+          // Linhas de texto:
+          // Linha 1: CREA-PI • FISCALIZAÇÃO | Data/Hora
+          // Linha 2: Coordenadas Lat/Long
+          const line1 = `CREA-PI • FISCALIZAÇÃO  |  ${formattedDateTime}`
+          const line2 = `📍 Coordenadas: ${formattedLocation}`
 
-          // Desenha fundo escuro com transparência (azul escuro elegante CREA-PI #002244)
+          // Mede o texto para dimensionar o retângulo cinza semitransparente
+          ctx.font = `bold ${fontSizeMain}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+          const w1 = ctx.measureText(line1).width
+          ctx.font = `600 ${fontSizeSub}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace`
+          const w2 = ctx.measureText(line2).width
+
+          const textBlockWidth = Math.max(w1, w2)
+          const boxWidth = Math.min(width - marginOffset * 2, textBlockWidth + padX * 2)
+          const boxHeight =
+            padY * 2 + fontSizeMain + fontSizeSub + Math.max(6, Math.round(7 * baseScale))
+
+          // Posição: parte inferior da foto (canto inferior esquerdo com margem segura)
+          const boxX = marginOffset
+          const boxY = height - boxHeight - marginOffset
+
           ctx.save()
-          ctx.fillStyle = 'rgba(0, 34, 68, 0.85)'
-          // Cantos arredondados na caixa de água
-          const radius = Math.max(6, Math.round(8 * baseScale))
+
+          // Fundo retangular cinza escuro semitransparente (ex: rgba(30, 35, 42, 0.78))
+          ctx.fillStyle = 'rgba(28, 32, 38, 0.78)'
+          const radius = Math.max(5, Math.round(6 * baseScale))
           ctx.beginPath()
           ctx.moveTo(boxX + radius, boxY)
           ctx.lineTo(boxX + boxWidth - radius, boxY)
@@ -162,39 +177,30 @@ export async function applyWatermarkToImage(
           ctx.closePath()
           ctx.fill()
 
-          // Borda sutil azul claro CREA
-          ctx.strokeStyle = '#004B8D'
-          ctx.lineWidth = Math.max(1.5, 2 * baseScale)
+          // Borda discreta cinza clara / semitransparente para acabamento fino
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)'
+          ctx.lineWidth = Math.max(1, 1.2 * baseScale)
           ctx.stroke()
 
-          // Detalhe indicador (faixa lateral esquerda do badge)
-          ctx.fillStyle = '#004B8D'
-          ctx.fillRect(boxX, boxY + radius, Math.max(4, 5 * baseScale), boxHeight - radius * 2)
+          // Textos em letras brancas de alta legibilidade com leve sombra para contraste perfeito
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.85)'
+          ctx.shadowBlur = Math.max(2, 3 * baseScale)
+          ctx.shadowOffsetX = 0
+          ctx.shadowOffsetY = 1
 
-          // Textos da marca d'água
-          const textX = boxX + padding + Math.max(4, 5 * baseScale)
-          let currentY = boxY + padding + fontSizeTitle * 0.75
+          const textStartX = boxX + padX
+          let textY = boxY + padY + fontSizeMain * 0.85
 
-          // Linha 1: CREA-PI • Vistoria Técnica
-          ctx.font = `bold ${fontSizeTitle}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+          // Linha 1: CREA-PI • FISCALIZAÇÃO | Data/Hora
+          ctx.font = `bold ${fontSizeMain}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
           ctx.fillStyle = '#FFFFFF'
-          ctx.fillText('CREA-PI • FISCALIZAÇÃO', textX, currentY)
+          ctx.fillText(line1, textStartX, textY)
 
-          // Data e hora à direita da linha 1
-          ctx.font = `normal ${fontSizeDetails}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
-          ctx.fillStyle = '#E8F1F8'
-          const dateText = formattedDateTime
-          const dateTextWidth = ctx.measureText(dateText).width
-          const dateX = boxX + boxWidth - padding - dateTextWidth
-          if (dateX > textX + ctx.measureText('CREA-PI • FISCALIZAÇÃO').width + 10) {
-            ctx.fillText(dateText, dateX, currentY)
-          }
-
-          // Linha 2: Coordenadas GPS (ou 'Localização indisponível') + Data caso não coube acima
-          currentY += fontSizeDetails * 1.35
-          ctx.font = `500 ${fontSizeDetails}px "Courier New", Courier, monospace`
-          ctx.fillStyle = geo.latitude !== null ? '#4CD964' : '#FFCC00' // Verde para GPS ativo, âmbar se indisponível
-          ctx.fillText(`📍 ${formattedLocation}`, textX, currentY)
+          // Linha 2: Coordenadas Lat/Long
+          textY += fontSizeSub + Math.max(6, Math.round(7 * baseScale))
+          ctx.font = `600 ${fontSizeSub}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace`
+          ctx.fillStyle = '#FFFFFF'
+          ctx.fillText(line2, textStartX, textY)
 
           ctx.restore()
 

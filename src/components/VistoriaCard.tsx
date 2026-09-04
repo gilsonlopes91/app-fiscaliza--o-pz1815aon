@@ -63,12 +63,28 @@ export function VistoriaCard({
         {/* Top Header inside Card */}
         <div className="flex items-start justify-between gap-3 mb-3.5">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#E8F1F8] group-hover:bg-[#004B8D] flex items-center justify-center text-[#004B8D] group-hover:text-white transition-colors duration-200 shrink-0 shadow-xs">
-              <ClipboardList className="w-5 h-5 stroke-[2]" />
+            <div
+              className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors duration-200 shrink-0 shadow-xs ${
+                vistoria.status === 'concluida'
+                  ? 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white'
+                  : 'bg-[#E8F1F8] group-hover:bg-[#004B8D] text-[#004B8D] group-hover:text-white'
+              }`}
+            >
+              {vistoria.status === 'concluida' ? (
+                <CheckCircle2 className="w-5 h-5 stroke-[2]" />
+              ) : (
+                <ClipboardList className="w-5 h-5 stroke-[2]" />
+              )}
             </div>
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded">
-                Vistoria Aberta
+              <span
+                className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded inline-flex items-center gap-1 ${
+                  vistoria.status === 'concluida'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-[#E8F1F8] text-[#004B8D]'
+                }`}
+              >
+                {vistoria.status === 'concluida' ? 'Concluída' : 'Em Andamento'}
               </span>
               <div className="text-xs text-[#486581] flex items-center gap-1 mt-1">
                 <Calendar className="w-3 h-3 text-[#004B8D]" />

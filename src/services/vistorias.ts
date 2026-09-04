@@ -16,13 +16,15 @@ export interface Vistoria {
   }
 }
 
+export type PossuiSistemaOption = 'Sim' | 'Não' | 'Não se aplica' | '' | null
+
 export interface VistoriaItem {
   id: string
   vistoria: string
   hospital: string
   categoria: string // ID da CategoriaVistoria (Item Principal)
   subitem?: string // ID do SubitemChecklist (Subitem Nível 2)
-  possuiSistema?: 'Sim' | 'Não' | '' | null
+  possuiSistema?: PossuiSistemaOption
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
   periodicidadeMeses?: number | null
   prestadorServico?: string
@@ -49,7 +51,7 @@ export interface VistoriaItem {
 }
 
 export interface VistoriaItemFormData {
-  possuiSistema?: 'Sim' | 'Não' | '' | null
+  possuiSistema?: PossuiSistemaOption
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
   periodicidadeMeses?: number | null
   prestadorServico?: string
@@ -88,7 +90,7 @@ export function getVistoriaItemPhotoUrl(
  */
 export function calculateItemSituacao(
   data: {
-    possuiSistema?: 'Sim' | 'Não' | '' | null
+    possuiSistema?: PossuiSistemaOption
     servicoPeriodico?: 'Sim' | 'Não' | '' | null
     prestadorServico?: string
     numeroArt?: string
@@ -99,7 +101,7 @@ export function calculateItemSituacao(
     periodicidadeDias?: number | null
   },
 ): SituacaoChecklist {
-  if (data.possuiSistema === 'Não') {
+  if (data.possuiSistema === 'Não' || data.possuiSistema === 'Não se aplica') {
     return 'não se aplica'
   }
 
@@ -382,6 +384,23 @@ export const vistoriasService = {
 
     return await pb.collection('vistoria_itens').create<VistoriaItem>(payload, {
       expand: 'categoria,subitem,hospital',
+    })
+  },
+
+  /**
+   * Update the status of a vistoria ('em_andamento' | 'concluida')
+   */
+  async updateStatus(
+    id: string,
+    status: 'em_andamento' | 'concluida',
+    observacoes?: string,
+  ): Promise<Vistoria> {
+    const payload: Record<string, unknown> = { status }
+    if (observacoes !== undefined) {
+      payload.observacoes = observacoes
+    }
+    return await pb.collection('vistorias').update<Vistoria>(id, payload, {
+      expand: 'hospital',
     })
   },
 

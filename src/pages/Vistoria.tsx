@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
   ClipboardCheck,
+  ClipboardList,
   CheckCircle2,
   AlertTriangle,
   Clock,
@@ -22,8 +23,20 @@ import {
   FileText,
   Download,
   FolderArchive,
+  Lock,
+  Unlock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -81,6 +94,7 @@ export default function VistoriaPage() {
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [allCategorias, setAllCategorias] = useState<CategoriaVistoria[]>([])
   const [allSubitens, setAllSubitens] = useState<SubitemChecklist[]>([])
+  const [allVistorias, setAllVistorias] = useState<Vistoria[]>([])
   const [openVistorias, setOpenVistorias] = useState<Vistoria[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -101,6 +115,19 @@ export default function VistoriaPage() {
   >({})
   const [deletedPhotos, setDeletedPhotos] = useState<Record<string, string[]>>({})
   const [savingSubitemIds, setSavingSubitemIds] = useState<Record<string, boolean>>({})
+
+  // Auto-save state indicator: 'idle' | 'saving' | 'saved' | 'error'
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>(
+    'idle',
+  )
+  const [lastSavedTime, setLastSavedTime] = useState<string>('')
+  const autoSaveTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const isInitialLoadRef = React.useRef(true)
+
+  // Finalizar / Reabrir Vistoria dialogs & actions
+  const [isFinalizarDialogOpen, setIsFinalizarDialogOpen] = useState(false)
+  const [isFinalizando, setIsFinalizando] = useState(false)
+  const [isReabrindo, setIsReabrindo] = useState(false)
 
   // Loading states for PDF report generation and ZIP download
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
@@ -123,18 +150,19 @@ export default function VistoriaPage() {
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [tiposList, hospList, catList, subList, openList] = await Promise.all([
+      const [tiposList, hospList, catList, subList, vistoriasList] = await Promise.all([
         tiposEmpreendimentoService.getAll(),
         hospitaisService.getAll(),
         categoriasVistoriaService.getAll(),
         categoriasVistoriaService.getAllSubitens(),
-        vistoriasService.getOpenVistorias(),
+        vistoriasService.getAll(),
       ])
       setTiposEmpreendimento(tiposList)
       setHospitais(hospList)
       setAllCategorias(catList)
       setAllSubitens(subList)
-      setOpenVistorias(openList)
+      setAllVistorias(vistoriasList)
+      setOpenVistorias(vistoriasList.filter((v) => v.status !== 'concluida'))
     } catch (err) {
       console.error('Erro ao carregar dados de vistoria:', err)
       toast({
@@ -174,6 +202,11 @@ export default function VistoriaPage() {
       })
       .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
   }, [allCategorias, currentHospitalTipo])
+
+  // Is current vistoria completed / read-only
+  const isVistoriaConcluida = useMemo(() => {
+    return currentVistoria?.status === 'concluida'
+  }, [currentVistoria?.status])
 
   // Subitens (Nível 2) grouped by Categoria (Nível 1)
   const subitensByCategoria = useMemo(() => {
@@ -267,9 +300,11 @@ export default function VistoriaPage() {
               : '',
           }
         })
+        isInitialLoadRef.current = true
         setItemForms(initialForm)
         setPendingPhotos({})
         setDeletedPhotos({})
+        setAutoSaveStatus('idle')
       } catch (err) {
         console.error('Erro ao carregar vistoria da unidade:', err)
         toast({
@@ -308,15 +343,154 @@ export default function VistoriaPage() {
     setSearchParams(newParams)
   }
 
-  // Update a form field for a subitem
-  const handleFieldChange = (subitemId: string, field: keyof VistoriaItemFormData, value: any) => {
-    setItemForms((prev) => ({
-      ...prev,
-      [subitemId]: {
-        ...prev[subitemId],
+  // Trigger auto-save of a specific subitem when its form changes
+  const triggerAutoSaveForSubitem = useCallback(
+    (
+      subKey: string,
+      updatedForm: VistoriaItemFormData,
+      targetSub: SubitemChecklist,
+      targetCat: CategoriaVistoria,
+    ) => {
+      if (!currentVistoria || isVistoriaConcluida || !selectedHospitalId) return
+
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+
+      setAutoSaveStatus('saving')
+
+      autoSaveTimerRef.current = setTimeout(async () => {
+        try {
+          const existingItem = vistoriaItens.find(
+            (i) => i.subitem === targetSub.id || (!i.subitem && i.categoria === targetCat.id),
+          )
+          const newFiles = pendingPhotos[subKey] || []
+          const deletedNames = deletedPhotos[subKey] || []
+          const metas = pendingPhotosMeta[subKey] || []
+
+          let updatedFotoMetadata = existingItem?.fotoMetadata ? [...existingItem.fotoMetadata] : []
+          if (newFiles.length > 0) {
+            newFiles.forEach((file, idx) => {
+              const meta = metas[idx]
+              updatedFotoMetadata.push({
+                fileName: file.name,
+                latitude: meta?.latitude ?? null,
+                longitude: meta?.longitude ?? null,
+                dataCaptura: meta?.dataCaptura || new Date().toISOString(),
+              })
+            })
+          }
+          if (deletedNames.length > 0) {
+            updatedFotoMetadata = updatedFotoMetadata.filter(
+              (m) => !deletedNames.includes(m.fileName),
+            )
+          }
+
+          const payloadWithMeta: VistoriaItemFormData = {
+            ...updatedForm,
+            fotoMetadata: updatedFotoMetadata,
+            latitude: updatedForm.latitude ?? metas[0]?.latitude ?? existingItem?.latitude ?? null,
+            longitude:
+              updatedForm.longitude ?? metas[0]?.longitude ?? existingItem?.longitude ?? null,
+            dataCaptura:
+              updatedForm.dataCaptura || metas[0]?.dataCaptura || existingItem?.dataCaptura || null,
+          }
+
+          const isRealSubitem = targetSub.id !== targetCat.id
+          const saved = await vistoriasService.saveItem(
+            currentVistoria.id,
+            selectedHospitalId,
+            targetCat.id,
+            payloadWithMeta,
+            {
+              exigeArt: targetSub.exigeArt,
+              periodicidadeDias: targetSub.periodicidadeDias,
+            },
+            existingItem?.id,
+            newFiles.length > 0 ? newFiles : undefined,
+            deletedNames.length > 0 ? deletedNames : undefined,
+            isRealSubitem ? targetSub.id : undefined,
+          )
+
+          setVistoriaItens((prev) => {
+            const index = prev.findIndex(
+              (i) => i.subitem === targetSub.id || (!i.subitem && i.categoria === targetCat.id),
+            )
+            if (index >= 0) {
+              const updated = [...prev]
+              updated[index] = saved
+              return updated
+            }
+            return [...prev, saved]
+          })
+
+          if (newFiles.length > 0 || deletedNames.length > 0) {
+            setPendingPhotos((prev) => ({ ...prev, [subKey]: [] }))
+            setPendingPhotosMeta((prev) => ({ ...prev, [subKey]: [] }))
+            setDeletedPhotos((prev) => ({ ...prev, [subKey]: [] }))
+          }
+
+          setAutoSaveStatus('saved')
+          const now = new Date()
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
+            now.getMinutes(),
+          ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+          setLastSavedTime(timeStr)
+        } catch (err) {
+          console.error('Erro no salvamento automático do subitem:', err)
+          setAutoSaveStatus('error')
+        }
+      }, 800) // Debounce ~800ms
+    },
+    [
+      currentVistoria,
+      isVistoriaConcluida,
+      selectedHospitalId,
+      vistoriaItens,
+      pendingPhotos,
+      deletedPhotos,
+      pendingPhotosMeta,
+    ],
+  )
+
+  // Update a form field for a subitem and trigger autosave
+  const handleFieldChange = (
+    subitemId: string,
+    field: keyof VistoriaItemFormData,
+    value: any,
+    targetSub?: SubitemChecklist,
+    targetCat?: CategoriaVistoria,
+  ) => {
+    if (isVistoriaConcluida) return
+
+    setItemForms((prev) => {
+      const current = prev[subitemId] || {}
+      let updated: VistoriaItemFormData = {
+        ...current,
         [field]: value,
-      },
-    }))
+      }
+
+      // Se marcou "Não se aplica", limpa os campos condicionais
+      if (field === 'possuiSistema' && value === 'Não se aplica') {
+        updated = {
+          ...updated,
+          prestadorServico: '',
+          numeroArt: '',
+          dataUltimaVerificacao: '',
+          servicoPeriodico: '',
+          periodicidadeMeses: null,
+        }
+      }
+
+      if (targetSub && targetCat) {
+        triggerAutoSaveForSubitem(subitemId, updated, targetSub, targetCat)
+      }
+
+      return {
+        ...prev,
+        [subitemId]: updated,
+      }
+    })
   }
 
   // Add pending photo files with watermarked metadata
@@ -523,9 +697,10 @@ export default function VistoriaPage() {
     }
   }, [allRelevantSubitens, vistoriaItens, itemForms])
 
-  // Filter open vistorias for the open list view by Tipo and Search
+  // Filter vistorias for the list view by Tipo and Search (includes all, displaying their status badges)
   const filteredOpenVistorias = useMemo(() => {
-    return openVistorias.filter((v) => {
+    const sourceList = allVistorias.length > 0 ? allVistorias : openVistorias
+    return sourceList.filter((v) => {
       const hospTipo = (v.expand?.hospital?.tipo || 'Hospital').trim().toLowerCase()
       const matchTipo =
         selectedTipoFiltro === 'todos' || hospTipo === selectedTipoFiltro.trim().toLowerCase()
@@ -540,7 +715,7 @@ export default function VistoriaPage() {
         v.expand?.hospital?.cnes?.includes(q)
       )
     })
-  }, [openVistorias, selectedTipoFiltro, searchOpenVistorias])
+  }, [allVistorias, openVistorias, selectedTipoFiltro, searchOpenVistorias])
 
   // Hospitais list for the selection dropdown (filtered by selectedTipoFiltro if active)
   const selectableHospitais = useMemo(() => {
@@ -555,6 +730,56 @@ export default function VistoriaPage() {
   const totalPhotosInCurrentVistoria = useMemo(() => {
     return vistoriaItens.reduce((acc, item) => acc + (item.fotos?.length || 0), 0)
   }, [vistoriaItens])
+
+  // Finalizar Vistoria
+  const handleFinalizarVistoria = async () => {
+    if (!currentVistoria) return
+    try {
+      setIsFinalizando(true)
+      const updated = await vistoriasService.updateStatus(currentVistoria.id, 'concluida')
+      setCurrentVistoria(updated)
+      setIsFinalizarDialogOpen(false)
+      toast({
+        title: 'Vistoria finalizada com sucesso!',
+        description:
+          'A vistoria foi marcada como concluída e o checklist está travado para edição.',
+      })
+      await loadInitialData()
+    } catch (err) {
+      console.error('Erro ao finalizar vistoria:', err)
+      toast({
+        title: 'Erro ao finalizar vistoria',
+        description: 'Não foi possível alterar o status da vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsFinalizando(false)
+    }
+  }
+
+  // Reabrir Vistoria
+  const handleReabrirVistoria = async () => {
+    if (!currentVistoria) return
+    try {
+      setIsReabrindo(true)
+      const updated = await vistoriasService.updateStatus(currentVistoria.id, 'em_andamento')
+      setCurrentVistoria(updated)
+      toast({
+        title: 'Vistoria reaberta!',
+        description: 'A edição do checklist foi liberada novamente.',
+      })
+      await loadInitialData()
+    } catch (err) {
+      console.error('Erro ao reabrir vistoria:', err)
+      toast({
+        title: 'Erro ao reabrir vistoria',
+        description: 'Não foi possível reabrir a vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsReabrindo(false)
+    }
+  }
 
   // 1. Geração de Relatório em PDF na tela da vistoria específica
   const handleGeneratePdf = async () => {
@@ -911,13 +1136,43 @@ export default function VistoriaPage() {
               </span>
             </div>
 
-            {/* Ações Rápidas: Gerar Relatório PDF + Baixar Todas as Fotos */}
+            {/* Ações Rápidas: Gerar Relatório PDF + Baixar Todas as Fotos + Finalizar / Reabrir */}
             <div className="flex flex-wrap items-center gap-2">
+              {/* Botão Finalizar / Reabrir Vistoria */}
+              {isVistoriaConcluida ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isReabrindo}
+                  onClick={handleReabrirVistoria}
+                  className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
+                  title="Reabrir vistoria para permitir novas edições"
+                >
+                  {isReabrindo ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Unlock className="w-4 h-4 text-amber-700" />
+                  )}
+                  <span>Reabrir Vistoria</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={() => setIsFinalizarDialogOpen(true)}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
+                  title="Finalizar vistoria e travar checklist"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Finalizar Vistoria</span>
+                </Button>
+              )}
+
               <Button
                 type="button"
                 disabled={isGeneratingPdf}
                 onClick={handleGeneratePdf}
-                className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer shadow-xs"
+                variant="outline"
+                className="border-[#004B8D] text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer shadow-xs"
                 title="Gerar e baixar relatório técnico oficial em PDF com cabeçalho CREA-PI"
               >
                 {isGeneratingPdf ? (
@@ -955,6 +1210,26 @@ export default function VistoriaPage() {
               </Button>
             </div>
           </div>
+
+          {/* Banner de Vistoria Concluída / Travada */}
+          {isVistoriaConcluida && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-between gap-3 text-xs text-emerald-900">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <strong className="font-bold">Vistoria Concluída (Modo Somente Leitura):</strong>
+                  <span className="ml-1 text-emerald-800">
+                    O checklist desta vistoria está finalizado e travado contra alterações
+                    acidentais. Para fazer correções, utilize o botão &ldquo;Reabrir
+                    Vistoria&rdquo;.
+                  </span>
+                </div>
+              </div>
+              <Badge className="bg-emerald-600 text-white font-bold text-[11px] shrink-0">
+                Concluída
+              </Badge>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
             <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
@@ -1227,32 +1502,62 @@ export default function VistoriaPage() {
                                 O estabelecimento possui esta atividade / sistema?{' '}
                                 <span className="text-rose-600">*</span>
                               </Label>
-                              <div className="flex items-center gap-2.5">
+                              <div className="flex items-center gap-2.5 flex-wrap">
                                 <Button
                                   type="button"
                                   size="sm"
+                                  disabled={isVistoriaConcluida}
                                   variant={form.possuiSistema === 'Sim' ? 'default' : 'outline'}
-                                  onClick={() => handleFieldChange(subKey, 'possuiSistema', 'Sim')}
+                                  onClick={() =>
+                                    handleFieldChange(subKey, 'possuiSistema', 'Sim', sub, cat)
+                                  }
                                   className={`h-8 px-4 text-xs font-bold cursor-pointer ${
                                     form.possuiSistema === 'Sim'
                                       ? 'bg-[#004B8D] text-white'
                                       : 'border-[#D3DFE9] text-[#486581]'
-                                  }`}
+                                  } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
                                 >
                                   Sim
                                 </Button>
                                 <Button
                                   type="button"
                                   size="sm"
+                                  disabled={isVistoriaConcluida}
                                   variant={form.possuiSistema === 'Não' ? 'default' : 'outline'}
-                                  onClick={() => handleFieldChange(subKey, 'possuiSistema', 'Não')}
+                                  onClick={() =>
+                                    handleFieldChange(subKey, 'possuiSistema', 'Não', sub, cat)
+                                  }
                                   className={`h-8 px-4 text-xs font-bold cursor-pointer ${
                                     form.possuiSistema === 'Não'
                                       ? 'bg-slate-700 text-white'
                                       : 'border-[#D3DFE9] text-[#486581]'
-                                  }`}
+                                  } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
                                 >
                                   Não
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={isVistoriaConcluida}
+                                  variant={
+                                    form.possuiSistema === 'Não se aplica' ? 'default' : 'outline'
+                                  }
+                                  onClick={() =>
+                                    handleFieldChange(
+                                      subKey,
+                                      'possuiSistema',
+                                      'Não se aplica',
+                                      sub,
+                                      cat,
+                                    )
+                                  }
+                                  className={`h-8 px-3.5 text-xs font-bold cursor-pointer ${
+                                    form.possuiSistema === 'Não se aplica'
+                                      ? 'bg-[#486581] text-white'
+                                      : 'border-[#D3DFE9] text-[#486581] hover:bg-[#F4F6F9]'
+                                  } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                >
+                                  Não se aplica
                                 </Button>
                               </div>
                             </div>
@@ -1268,15 +1573,18 @@ export default function VistoriaPage() {
                                     </Label>
                                     <Input
                                       placeholder="Ex: Empresa de Engenharia Ltda"
+                                      disabled={isVistoriaConcluida}
                                       value={form.prestadorServico || ''}
                                       onChange={(e) =>
                                         handleFieldChange(
                                           subKey,
                                           'prestadorServico',
                                           e.target.value,
+                                          sub,
+                                          cat,
                                         )
                                       }
-                                      className="border-[#D3DFE9] bg-white text-xs h-9"
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
                                     />
                                   </div>
 
@@ -1298,11 +1606,18 @@ export default function VistoriaPage() {
                                     </div>
                                     <Input
                                       placeholder="Ex: PI20240012345"
+                                      disabled={isVistoriaConcluida}
                                       value={form.numeroArt || ''}
                                       onChange={(e) =>
-                                        handleFieldChange(subKey, 'numeroArt', e.target.value)
+                                        handleFieldChange(
+                                          subKey,
+                                          'numeroArt',
+                                          e.target.value,
+                                          sub,
+                                          cat,
+                                        )
                                       }
-                                      className="border-[#D3DFE9] bg-white text-xs h-9 font-mono"
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 font-mono disabled:bg-slate-100 disabled:opacity-80"
                                     />
                                   </div>
 
@@ -1320,15 +1635,18 @@ export default function VistoriaPage() {
                                     </div>
                                     <Input
                                       type="date"
+                                      disabled={isVistoriaConcluida}
                                       value={form.dataUltimaVerificacao || ''}
                                       onChange={(e) =>
                                         handleFieldChange(
                                           subKey,
                                           'dataUltimaVerificacao',
                                           e.target.value,
+                                          sub,
+                                          cat,
                                         )
                                       }
-                                      className="border-[#D3DFE9] bg-white text-xs h-9"
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
                                     />
                                   </div>
 
@@ -1338,11 +1656,18 @@ export default function VistoriaPage() {
                                       Este serviço é feito periodicamente?
                                     </Label>
                                     <Select
+                                      disabled={isVistoriaConcluida}
                                       value={form.servicoPeriodico || ''}
                                       onValueChange={(val) => {
-                                        handleFieldChange(subKey, 'servicoPeriodico', val)
+                                        handleFieldChange(subKey, 'servicoPeriodico', val, sub, cat)
                                         if (val !== 'Sim') {
-                                          handleFieldChange(subKey, 'periodicidadeMeses', null)
+                                          handleFieldChange(
+                                            subKey,
+                                            'periodicidadeMeses',
+                                            null,
+                                            sub,
+                                            cat,
+                                          )
                                         }
                                       }}
                                     >
@@ -1376,6 +1701,7 @@ export default function VistoriaPage() {
                                         <Input
                                           id={`period-meses-${subKey}`}
                                           type="number"
+                                          disabled={isVistoriaConcluida}
                                           min={1}
                                           max={120}
                                           placeholder="Ex: 1 (mensal), 3 (trimestral), 6 (semestral), 12 (anual)..."
@@ -1388,9 +1714,15 @@ export default function VistoriaPage() {
                                           onChange={(e) => {
                                             const raw = e.target.value
                                             const val = raw ? parseInt(raw, 10) : null
-                                            handleFieldChange(subKey, 'periodicidadeMeses', val)
+                                            handleFieldChange(
+                                              subKey,
+                                              'periodicidadeMeses',
+                                              val,
+                                              sub,
+                                              cat,
+                                            )
                                           }}
-                                          className="border-[#D3DFE9] text-xs h-9 bg-white max-w-xs focus-visible:ring-[#004B8D]"
+                                          className="border-[#D3DFE9] text-xs h-9 bg-white max-w-xs focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
                                         />
                                         {form.periodicidadeMeses ? (
                                           <span className="text-xs font-semibold text-[#004B8D]">
@@ -1408,15 +1740,18 @@ export default function VistoriaPage() {
                                   <PhotoUploadSection
                                     itemId={item?.id}
                                     subitemCode={subCode}
+                                    disabled={isVistoriaConcluida}
                                     existingPhotos={item?.fotos || []}
                                     pendingFiles={pending}
                                     onAddFiles={(files, metaList) =>
                                       handleAddPendingPhotos(subKey, files, metaList)
                                     }
                                     onRemovePendingFile={(index) =>
+                                      !isVistoriaConcluida &&
                                       handleRemovePendingPhoto(subKey, index)
                                     }
                                     onDeleteExistingPhoto={(filename) =>
+                                      !isVistoriaConcluida &&
                                       handleDeleteExistingPhoto(subKey, filename)
                                     }
                                   />
@@ -1424,23 +1759,30 @@ export default function VistoriaPage() {
                               </div>
                             )}
 
-                            {/* Subitem Save Action */}
-                            <div className="flex justify-end pt-1">
+                            {/* Subitem Save Action (ou indicador de salvamento automático) */}
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-[11px] text-[#627D98] italic">
+                                {isVistoriaConcluida
+                                  ? 'Item em modo somente leitura (vistoria concluída).'
+                                  : 'As alterações são salvas automaticamente.'}
+                              </span>
+
                               <Button
                                 type="button"
                                 onClick={() => handleSaveSubitem(sub, cat)}
-                                disabled={isSaving}
-                                className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-8 px-4 gap-1.5 cursor-pointer shadow-xs"
+                                disabled={isSaving || isVistoriaConcluida}
+                                variant="outline"
+                                className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-7 px-3 gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
                               >
                                 {isSaving ? (
                                   <>
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <Loader2 className="w-3 h-3 animate-spin" />
                                     Salvando...
                                   </>
                                 ) : (
                                   <>
-                                    <Save className="w-3.5 h-3.5" />
-                                    Salvar Resposta do Subitem {subCode}
+                                    <Save className="w-3 h-3" />
+                                    Salvar agora
                                   </>
                                 )}
                               </Button>
@@ -1458,23 +1800,66 @@ export default function VistoriaPage() {
       ) : (
         /* 5. Lista de Vistorias Abertas organizadas pelo tipo selecionado */
         <div className="space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Métricas rápidas: Total, Em Andamento e Concluídas */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-white p-3.5 rounded-xl border border-[#D3DFE9] shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-[#627D98] uppercase tracking-wider">
+                  Total de Vistorias
+                </p>
+                <p className="text-xl font-bold text-[#102A43] mt-0.5">{allVistorias.length}</p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D]">
+                <ClipboardList className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-amber-200 bg-amber-50/30 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">
+                  Em Andamento
+                </p>
+                <p className="text-xl font-bold text-amber-900 mt-0.5">
+                  {allVistorias.filter((v) => v.status !== 'concluida').length}
+                </p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-800">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="col-span-2 sm:col-span-1 bg-white p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+                  Concluídas
+                </p>
+                <p className="text-xl font-bold text-emerald-900 mt-0.5">
+                  {allVistorias.filter((v) => v.status === 'concluida').length}
+                </p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-800">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
             <div>
               <h2 className="text-lg font-bold text-[#102A43]">
                 {selectedTipoFiltro === 'todos'
-                  ? 'Todas as Vistorias em Andamento'
-                  : `Vistorias em Andamento: ${selectedTipoFiltro}`}
+                  ? 'Vistorias Cadastradas'
+                  : `Vistorias: ${selectedTipoFiltro}`}
               </h2>
               <p className="text-xs text-[#486581]">
-                Selecione uma vistoria aberta abaixo ou escolha uma unidade acima para iniciar o
-                checklist em dois níveis
+                Selecione uma vistoria abaixo para abrir o checklist em dois níveis ou gerar o
+                relatório
               </p>
             </div>
 
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 text-[#486581] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <Input
-                placeholder="Buscar vistoria aberta..."
+                placeholder="Buscar vistoria..."
                 value={searchOpenVistorias}
                 onChange={(e) => setSearchOpenVistorias(e.target.value)}
                 className="pl-9 h-9 text-xs border-[#D3DFE9] focus-visible:ring-[#004B8D]"
@@ -1550,6 +1935,75 @@ export default function VistoriaPage() {
           handleSelectHospital(hospId)
         }}
       />
+
+      {/* Caixa Flutuante Discreta de Status do Salvamento Automático */}
+      {selectedHospitalId && !isVistoriaConcluida && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-6 right-6 z-50 transition-all duration-300 pointer-events-none sm:pointer-events-auto ${
+            autoSaveStatus === 'idle' ? 'opacity-0 translate-y-3' : 'opacity-100 translate-y-0'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-full bg-[#102A43]/90 text-white shadow-lg backdrop-blur-sm border border-white/10 text-xs font-semibold">
+            {autoSaveStatus === 'saving' && (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+                <span className="text-white">Salvando alterações...</span>
+              </>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-100">
+                  Salvo {lastSavedTime ? `às ${lastSavedTime}` : ''}
+                </span>
+              </>
+            )}
+            {autoSaveStatus === 'error' && (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <span className="text-rose-200">Falha ao salvar automaticamente</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Finalizar Vistoria Dialog */}
+      <AlertDialog open={isFinalizarDialogOpen} onOpenChange={setIsFinalizarDialogOpen}>
+        <AlertDialogContent className="border-[#D3DFE9] bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-bold text-[#102A43] flex items-center gap-2">
+              <Lock className="w-5 h-5 text-emerald-600" />
+              Finalizar Vistoria Técnica
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-[#486581] space-y-2">
+              <p>
+                Tem certeza que deseja finalizar a vistoria de &ldquo;
+                <strong>{selectedHospital?.nome}</strong>&rdquo;?
+              </p>
+              <p className="text-xs text-[#627D98] bg-[#F4F6F9] p-3 rounded-lg border border-[#D3DFE9]">
+                Ao finalizar, o checklist ficará travado para novas edições e a vistoria passará a
+                constar como <strong>Concluída</strong> nos relatórios e no Painel Geral. Você
+                poderá reabri-la a qualquer momento se precisar fazer correções posteriores.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#D3DFE9] text-[#486581] cursor-pointer">
+              Continuar Editando
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleFinalizarVistoria}
+              disabled={isFinalizando}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold cursor-pointer"
+            >
+              {isFinalizando ? 'Finalizando...' : 'Sim, Finalizar Vistoria'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

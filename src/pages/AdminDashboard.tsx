@@ -54,6 +54,7 @@ import { usersService, UserProfile } from '@/services/auth'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
+import { vistoriasService, Vistoria } from '@/services/vistorias'
 import {
   atribuicoesService,
   Atribuicao,
@@ -74,6 +75,7 @@ export default function AdminDashboard() {
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [tipos, setTipos] = useState<TipoEmpreendimento[]>([])
   const [allCategorias, setAllCategorias] = useState<CategoriaVistoria[]>([])
+  const [allVistorias, setAllVistorias] = useState<Vistoria[]>([])
   const [atribuicoes, setAtribuicoes] = useState<Atribuicao[]>([])
   const [details, setDetails] = useState<AtribuicaoDetail[]>([])
 
@@ -93,19 +95,23 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [usersList, hospList, tiposList, catList, atribList] = await Promise.all([
-        usersService.getAll(),
-        hospitaisService.getAll(),
-        tiposEmpreendimentoService.getAll(),
-        categoriasVistoriaService.getAll(),
-        atribuicoesService.getAll(),
-      ])
+      const [usersList, hospList, tiposList, catList, atribList, vistoriasList] = await Promise.all(
+        [
+          usersService.getAll(),
+          hospitaisService.getAll(),
+          tiposEmpreendimentoService.getAll(),
+          categoriasVistoriaService.getAll(),
+          atribuicoesService.getAll(),
+          vistoriasService.getAll(),
+        ],
+      )
 
       const approvedUsers = usersList.filter((u) => u.approved || u.approvalStatus === 'aprovado')
       setFiscais(approvedUsers)
       setHospitais(hospList)
       setTipos(tiposList)
       setAllCategorias(catList)
+      setAllVistorias(vistoriasList)
       setAtribuicoes(atribList)
 
       // Compute details
@@ -131,7 +137,7 @@ export default function AdminDashboard() {
     loadData()
   }, [loadData])
 
-  // Overall statistics
+  // Overall statistics (unindo atribuições e status global das vistorias registradas)
   const stats = useMemo(() => {
     const totalAtribuicoes = details.length
     const concluidas = details.filter((d) => d.isConcluida).length
@@ -141,6 +147,11 @@ export default function AdminDashboard() {
 
     const fiscaisComAtribuicaoCount = new Set(details.map((d) => d.atribuicao.fiscal)).size
 
+    // Contagem direta da base de vistorias
+    const totalVistoriasRegistradas = allVistorias.length
+    const vistoriasConcluidasCount = allVistorias.filter((v) => v.status === 'concluida').length
+    const vistoriasEmAndamentoCount = allVistorias.filter((v) => v.status !== 'concluida').length
+
     return {
       totalAtribuicoes,
       concluidas,
@@ -149,8 +160,11 @@ export default function AdminDashboard() {
       fiscaisComAtribuicaoCount,
       totalFiscais: fiscais.length,
       totalEmpreendimentos: hospitais.length,
+      totalVistoriasRegistradas,
+      vistoriasConcluidasCount,
+      vistoriasEmAndamentoCount,
     }
-  }, [details, fiscais, hospitais])
+  }, [details, fiscais, hospitais, allVistorias])
 
   // Group by fiscal summary
   const fiscaisSummary = useMemo<FiscalProgressSummary[]>(() => {
@@ -276,8 +290,40 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* 2. Cards de Métricas Gerais do Administrador */}
+      {/* 2. Cards de Métricas Gerais do Administrador (Vistorias Em Andamento / Concluídas e Atribuições) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Vistorias em Andamento */}
+        <div className="bg-white p-5 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-amber-800 uppercase tracking-wider">
+            <span>Vistorias em Andamento</span>
+            <Clock className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-amber-900">
+              {stats.vistoriasEmAndamentoCount}
+            </span>
+            <span className="text-xs font-semibold text-amber-700">em campo</span>
+          </div>
+          <div className="text-[11px] text-[#627D98]">Checklists abertos para preenchimento</div>
+        </div>
+
+        {/* Vistorias Concluídas */}
+        <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-emerald-800 uppercase tracking-wider">
+            <span>Vistorias Concluídas</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-emerald-900">
+              {stats.vistoriasConcluidasCount}
+            </span>
+            <span className="text-xs font-bold text-emerald-700">
+              de {stats.totalVistoriasRegistradas} vistorias
+            </span>
+          </div>
+          <div className="text-[11px] text-emerald-700">Finalizadas e travadas</div>
+        </div>
+
         {/* Total Atribuições */}
         <div className="bg-white p-5 rounded-2xl border border-[#D3DFE9] shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-[#486581] uppercase tracking-wider">
@@ -289,36 +335,8 @@ export default function AdminDashboard() {
             <span className="text-xs text-[#627D98]">unidades</span>
           </div>
           <div className="text-[11px] text-[#627D98]">
-            Distribuídas em {stats.fiscaisComAtribuicaoCount} fiscal(is) ativo(s)
+            Distribuídas em {stats.fiscaisComAtribuicaoCount} fiscal(is)
           </div>
-        </div>
-
-        {/* Concluídas */}
-        <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-emerald-800 uppercase tracking-wider">
-            <span>Concluídas</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-emerald-900">{stats.concluidas}</span>
-            <span className="text-xs font-bold text-emerald-700">({stats.percentualGeral}%)</span>
-          </div>
-          <div className="text-[11px] text-emerald-700">Checklist 100% preenchido</div>
-        </div>
-
-        {/* Pendentes */}
-        <div className="bg-amber-50/70 p-5 rounded-2xl border border-amber-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-amber-800 uppercase tracking-wider">
-            <span>Pendentes / Em Aberto</span>
-            <Clock className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-amber-900">{stats.pendentes}</span>
-            <span className="text-xs font-bold text-amber-700">
-              ({100 - stats.percentualGeral}%)
-            </span>
-          </div>
-          <div className="text-[11px] text-amber-700">Aguardando ou em andamento</div>
         </div>
 
         {/* Fiscais na Equipe */}
@@ -601,7 +619,7 @@ export default function AdminDashboard() {
                       <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold">
                         {hospTipo}
                       </Badge>
-                      {detail.isConcluida ? (
+                      {detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
                         <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           Concluída
@@ -609,7 +627,7 @@ export default function AdminDashboard() {
                       ) : (
                         <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold gap-1">
                           <Clock className="w-3 h-3 text-amber-600" />
-                          Pendente ({detail.itensRespondidosCount}/{detail.totalItensChecklist})
+                          Em andamento ({detail.itensRespondidosCount}/{detail.totalItensChecklist})
                         </Badge>
                       )}
                     </div>
