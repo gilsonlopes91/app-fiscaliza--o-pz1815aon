@@ -255,6 +255,7 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
 
   let totalItens = 0
   let totalConforme = 0
+  let totalNaoConforme = 0
   let totalVencido = 0
   let totalNaoSeAplica = 0
   let totalPendente = 0
@@ -308,6 +309,7 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
 
       let situacao = item?.situacaoCalculada || 'Pendente'
       if (situacao === 'conforme') totalConforme++
+      else if (situacao === 'nao_conforme') totalNaoConforme++
       else if (situacao === 'vencido') totalVencido++
       else if (situacao === 'não se aplica') totalNaoSeAplica++
       else totalPendente++
@@ -318,6 +320,9 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
       if (situacao === 'conforme') {
         situacaoLabel = 'CONFORME'
         situacaoColor = [16, 122, 60] // verde
+      } else if (situacao === 'nao_conforme') {
+        situacaoLabel = 'NÃO CONFORME'
+        situacaoColor = [220, 38, 38] // vermelho
       } else if (situacao === 'vencido') {
         situacaoLabel = 'VENCIDO'
         situacaoColor = [220, 38, 38] // vermelho
@@ -330,6 +335,9 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
       const detalhesList: string[] = []
       if (item?.possuiSistema) {
         detalhesList.push(`Possui: ${item.possuiSistema}`)
+      }
+      if (item?.possuiSistema === 'Sim' && item?.atividadeRegularizada) {
+        detalhesList.push(`Regularizada: ${item.atividadeRegularizada}`)
       }
       if (item?.prestadorServico) {
         detalhesList.push(`Prestador: ${item.prestadorServico}`)

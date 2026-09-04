@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T14:29:33.464Z",
+  "generatedAt": "2026-09-04T14:38:48.147Z",
   "collections": [
     {
       "name": "users",
@@ -401,6 +401,13 @@
           "type": "date",
           "required": false,
           "system": false
+        },
+        {
+          "name": "atividadeRegularizada",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Sim", "Não"]
         }
       ],
       "indexes": [

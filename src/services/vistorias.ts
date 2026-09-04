@@ -8,6 +8,7 @@ export type SituacaoChecklist =
   | 'vencido'
   | 'vencendo_em_breve'
   | 'conforme'
+  | 'nao_conforme'
   | null
 
 export interface StatusVencimentoItem {
@@ -39,6 +40,7 @@ export interface VistoriaItem {
   categoria: string // ID da CategoriaVistoria (Item Principal)
   subitem?: string // ID do SubitemChecklist (Subitem Nível 2)
   possuiSistema?: PossuiSistemaOption
+  atividadeRegularizada?: 'Sim' | 'Não' | '' | null
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
   periodicidadeMeses?: number | null
   prestadorServico?: string
@@ -68,6 +70,7 @@ export interface VistoriaItem {
 
 export interface VistoriaItemFormData {
   possuiSistema?: PossuiSistemaOption
+  atividadeRegularizada?: 'Sim' | 'Não' | '' | null
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
   periodicidadeMeses?: number | null
   prestadorServico?: string
@@ -248,6 +251,7 @@ export function calcularVencimentoSubitem(
 export function calculateItemSituacao(
   data: {
     possuiSistema?: PossuiSistemaOption
+    atividadeRegularizada?: 'Sim' | 'Não' | '' | null
     servicoPeriodico?: 'Sim' | 'Não' | '' | null
     periodicidadeMeses?: number | null
     prestadorServico?: string
@@ -267,6 +271,12 @@ export function calculateItemSituacao(
 
   if (data.possuiSistema !== 'Sim') {
     return null
+  }
+
+  // Quando possui o sistema ("Sim") e o fiscal marcou atividadeRegularizada como "Não":
+  // Subitem passa a ser marcado automaticamente como "Não conforme"
+  if (data.atividadeRegularizada === 'Não') {
+    return 'nao_conforme'
   }
 
   // Hospital possui o sistema ("Sim")
@@ -468,6 +478,11 @@ export const vistoriasService = {
       data.append('categoria', categoriaId)
       if (subitemId) data.append('subitem', subitemId)
       if (formData.possuiSistema) data.append('possuiSistema', formData.possuiSistema)
+      if (formData.atividadeRegularizada) {
+        data.append('atividadeRegularizada', formData.atividadeRegularizada)
+      } else {
+        data.append('atividadeRegularizada', '')
+      }
       if (formData.servicoPeriodico) data.append('servicoPeriodico', formData.servicoPeriodico)
       if (
         formData.servicoPeriodico === 'Sim' &&
@@ -564,6 +579,7 @@ export const vistoriasService = {
       categoria: categoriaId,
       subitem: subitemId || null,
       possuiSistema: formData.possuiSistema || null,
+      atividadeRegularizada: formData.atividadeRegularizada || null,
       servicoPeriodico: formData.servicoPeriodico || null,
       periodicidadeMeses:
         formData.servicoPeriodico === 'Sim' && formData.periodicidadeMeses
