@@ -128,7 +128,7 @@ export default function VistoriaPage() {
   const autoSaveTimerRef = React.useRef<NodeJS.Timeout | null>(null)
   const isInitialLoadRef = React.useRef(true)
 
-  // Batch "Não" marking loading tracking per category (Nível 1)
+  // Batch "Não se aplica" marking loading tracking per category (Nível 1)
   const [batchMarkingCatIds, setBatchMarkingCatIds] = useState<Record<string, boolean>>({})
 
   // Finalizar / Reabrir Vistoria dialogs & actions
@@ -698,8 +698,11 @@ export default function VistoriaPage() {
     }
   }
 
-  // Batch mark all subitems of a categoria (item principal) as "Não"
-  const handleBatchMarkCategoryNao = async (cat: CategoriaVistoria, subs: SubitemChecklist[]) => {
+  // Batch mark all subitems of a categoria (item principal) as "Não se aplica"
+  const handleBatchMarkCategoryNaoSeAplica = async (
+    cat: CategoriaVistoria,
+    subs: SubitemChecklist[],
+  ) => {
     if (isVistoriaConcluida || !currentVistoria || !selectedHospitalId || subs.length === 0) return
 
     // Cancela qualquer timer de autosave pendente
@@ -711,6 +714,7 @@ export default function VistoriaPage() {
     setAutoSaveStatus('saving')
 
     // 1. Atualiza imediatamente o estado de formulário local (itemForms) de todos os subitens
+    // Limpando campos condicionais (prestador, ART, datas, periodicidade)
     const updatedFormMap: Record<string, VistoriaItemFormData> = {}
     setItemForms((prev) => {
       const next = { ...prev }
@@ -718,7 +722,14 @@ export default function VistoriaPage() {
         const current = next[sub.id] || {}
         const updated: VistoriaItemFormData = {
           ...current,
-          possuiSistema: 'Não',
+          possuiSistema: 'Não se aplica',
+          prestadorServico: '',
+          numeroArt: '',
+          dataUltimaArt: '',
+          dataUltimaVerificacao: '',
+          dataUltimoServico: '',
+          servicoPeriodico: '',
+          periodicidadeMeses: null,
         }
         next[sub.id] = updated
         updatedFormMap[sub.id] = updated
@@ -731,7 +742,14 @@ export default function VistoriaPage() {
       const savePromises = subs.map(async (sub) => {
         const subKey = sub.id
         const formPayload = updatedFormMap[subKey] || {
-          possuiSistema: 'Não',
+          possuiSistema: 'Não se aplica',
+          prestadorServico: '',
+          numeroArt: '',
+          dataUltimaArt: '',
+          dataUltimaVerificacao: '',
+          dataUltimoServico: '',
+          servicoPeriodico: '',
+          periodicidadeMeses: null,
         }
         const existingItem = vistoriaItens.find(
           (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
@@ -783,11 +801,11 @@ export default function VistoriaPage() {
       setLastSavedTime(timeStr)
 
       toast({
-        title: 'Item marcado como "Não"',
-        description: `Todos os ${subs.length} subitens de "${cat.nome}" foram marcados como Não.`,
+        title: 'Item marcado como "Não se aplica"',
+        description: `Todos os ${subs.length} subitens de "${cat.nome}" foram marcados como Não se aplica.`,
       })
     } catch (err) {
-      console.error('Erro ao marcar subitens em lote como Não:', err)
+      console.error('Erro ao marcar subitens em lote como Não se aplica:', err)
       setAutoSaveStatus('error')
       toast({
         title: 'Erro ao marcar item',
@@ -1525,7 +1543,7 @@ export default function VistoriaPage() {
 
                         {/* Ações e Badges de situação agregadas no Tema */}
                         <div className="flex items-center gap-2 shrink-0">
-                          {/* Botão Não em lote para o item principal */}
+                          {/* Botão Não se aplica em lote para o item principal */}
                           {!isVistoriaConcluida && subs.length > 0 && (
                             <Button
                               type="button"
@@ -1534,17 +1552,17 @@ export default function VistoriaPage() {
                               disabled={batchMarkingCatIds[cat.id]}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleBatchMarkCategoryNao(cat, subs)
+                                handleBatchMarkCategoryNaoSeAplica(cat, subs)
                               }}
-                              className="h-7 px-2.5 text-xs font-bold border-rose-300 text-rose-700 bg-rose-50/60 hover:bg-rose-100 hover:text-rose-800 hover:border-rose-400 transition-colors cursor-pointer shadow-2xs"
-                              title="Marcar todos os subitens deste item como Não"
+                              className="h-7 px-2.5 text-xs font-bold border-orange-300 text-orange-700 bg-orange-50/70 hover:bg-orange-100 hover:text-orange-800 hover:border-orange-400 transition-colors cursor-pointer shadow-2xs"
+                              title="Marcar todos os subitens deste item como Não se aplica"
                             >
                               {batchMarkingCatIds[cat.id] ? (
-                                <Loader2 className="w-3 h-3 animate-spin mr-1 text-rose-600" />
+                                <Loader2 className="w-3 h-3 animate-spin mr-1 text-orange-600" />
                               ) : (
-                                <XCircle className="w-3.5 h-3.5 mr-1 text-rose-600" />
+                                <XCircle className="w-3.5 h-3.5 mr-1 text-orange-600" />
                               )}
-                              Não
+                              Não se aplica
                             </Button>
                           )}
 
