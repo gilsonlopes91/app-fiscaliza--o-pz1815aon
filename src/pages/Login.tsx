@@ -165,8 +165,10 @@ export default function Login() {
           <div className="inline-flex items-center justify-center p-3.5 bg-[#004B8D] rounded-2xl shadow-md border border-[#003666] mb-4">
             <img src={logoCreaPi} alt="CREA-PI" className="h-14 sm:h-16 w-auto object-contain" />
           </div>
-          <h1 className="text-2xl font-bold text-[#102A43] tracking-tight">Fiscalização Técnica</h1>
-          <p className="text-sm text-[#486581] mt-1">CREA-PI • Sistema Integrado de Fiscalização</p>
+          <h1 className="text-2xl font-bold text-[#102A43] tracking-tight">Fiscalização</h1>
+          <p className="text-sm text-[#486581] mt-1">
+            CREA-PI • Sistema integrado de fiscalização por empreendimento
+          </p>
         </div>
 
         {/* Card Container */}

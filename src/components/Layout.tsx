@@ -107,12 +107,9 @@ export function Layout() {
             <div className="hidden sm:flex flex-col border-l border-white/20 pl-3">
               <span className="font-bold text-sm sm:text-base tracking-tight leading-none text-white flex items-center gap-1.5">
                 Fiscalização
-                <span className="text-[9px] uppercase font-extrabold tracking-wider bg-[#E5A812] text-[#102A43] px-1.5 py-0.5 rounded-sm">
-                  Técnica
-                </span>
               </span>
               <span className="text-[10px] text-blue-100 font-medium tracking-wide">
-                Sistema Integrado de Vistorias
+                Sistema integrado de fiscalização por empreendimento
               </span>
             </div>
           </div>
@@ -267,7 +264,7 @@ export function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>CREA-PI • Conselho Regional de Engenharia e Agronomia do Estado do Piauí</span>
           <span className="text-[11px] text-[#829AB1]">
-            Sistema Integrado de Fiscalização Técnica Hospitalar & Predial
+            Sistema integrado de fiscalização por empreendimento
           </span>
         </div>
       </footer>

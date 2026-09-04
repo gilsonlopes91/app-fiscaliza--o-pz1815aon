@@ -408,11 +408,6 @@ export default function TipoEmpreendimentoDetalhePage() {
               <h1 className="text-xl sm:text-2xl font-bold text-[#102A43] tracking-tight leading-tight">
                 {tipo.nome}
               </h1>
-              {isStandardHospital && (
-                <Badge className="bg-[#E5A812] text-[#102A43] hover:bg-[#E5A812] text-[10px] font-bold px-2 py-0.5">
-                  Padrão CREA-PI
-                </Badge>
-              )}
             </div>
             <p className="text-xs sm:text-sm text-[#486581] max-w-2xl leading-relaxed">
               {tipo.descricao ||

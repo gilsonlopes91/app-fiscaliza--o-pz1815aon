@@ -536,11 +536,6 @@ export default function TiposEmpreendimentoPage() {
                           <h3 className="font-bold text-base text-[#102A43] leading-tight group-hover:text-[#004B8D] transition-colors">
                             {tipo.nome}
                           </h3>
-                          {isStandardHospital && (
-                            <Badge className="bg-[#E5A812] text-[#102A43] hover:bg-[#E5A812] text-[10px] font-bold px-1.5 py-0">
-                              Padrão
-                            </Badge>
-                          )}
                         </div>
                         <p className="text-xs text-[#486581] mt-1.5 line-clamp-2 leading-relaxed">
                           {tipo.descricao ||

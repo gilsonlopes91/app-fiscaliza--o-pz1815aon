@@ -1,7 +1,7 @@
 {
-  "name": "Fiscalização Técnica CREA-PI",
+  "name": "Fiscalização CREA-PI",
   "short_name": "Fiscalização",
-  "description": "Sistema de Fiscalização Técnica e Gestão de Vistorias Hospitalares e Prediais - CREA-PI",
+  "description": "Sistema integrado de fiscalização por empreendimento - CREA-PI",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
