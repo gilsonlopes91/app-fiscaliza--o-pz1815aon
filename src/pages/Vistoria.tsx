@@ -26,6 +26,7 @@ import {
   Lock,
   Unlock,
   Calendar,
+  XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -126,6 +127,9 @@ export default function VistoriaPage() {
   const [lastSavedTime, setLastSavedTime] = useState<string>('')
   const autoSaveTimerRef = React.useRef<NodeJS.Timeout | null>(null)
   const isInitialLoadRef = React.useRef(true)
+
+  // Batch "Não" marking loading tracking per category (Nível 1)
+  const [batchMarkingCatIds, setBatchMarkingCatIds] = useState<Record<string, boolean>>({})
 
   // Finalizar / Reabrir Vistoria dialogs & actions
   const [isFinalizarDialogOpen, setIsFinalizarDialogOpen] = useState(false)
@@ -688,6 +692,107 @@ export default function VistoriaPage() {
       })
     } finally {
       setSavingSubitemIds((prev) => ({ ...prev, [subKey]: false }))
+    }
+  }
+
+  // Batch mark all subitems of a categoria (item principal) as "Não"
+  const handleBatchMarkCategoryNao = async (cat: CategoriaVistoria, subs: SubitemChecklist[]) => {
+    if (isVistoriaConcluida || !currentVistoria || !selectedHospitalId || subs.length === 0) return
+
+    // Cancela qualquer timer de autosave pendente
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
+    setBatchMarkingCatIds((prev) => ({ ...prev, [cat.id]: true }))
+    setAutoSaveStatus('saving')
+
+    // 1. Atualiza imediatamente o estado de formulário local (itemForms) de todos os subitens
+    const updatedFormMap: Record<string, VistoriaItemFormData> = {}
+    setItemForms((prev) => {
+      const next = { ...prev }
+      subs.forEach((sub) => {
+        const current = next[sub.id] || {}
+        const updated: VistoriaItemFormData = {
+          ...current,
+          possuiSistema: 'Não',
+        }
+        next[sub.id] = updated
+        updatedFormMap[sub.id] = updated
+      })
+      return next
+    })
+
+    // 2. Persiste todos os subitens no backend via vistoriasService.saveItem
+    try {
+      const savePromises = subs.map(async (sub) => {
+        const subKey = sub.id
+        const formPayload = updatedFormMap[subKey] || {
+          possuiSistema: 'Não',
+        }
+        const existingItem = vistoriaItens.find(
+          (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
+        )
+        const isRealSubitem = sub.id !== cat.id
+
+        return await vistoriasService.saveItem(
+          currentVistoria.id,
+          selectedHospitalId,
+          cat.id,
+          formPayload,
+          {
+            exigeArt: sub.exigeArt,
+            periodicidadeDias: sub.periodicidadeDias,
+          },
+          existingItem?.id,
+          undefined,
+          undefined,
+          isRealSubitem ? sub.id : undefined,
+          user?.id,
+        )
+      })
+
+      const savedRecords = await Promise.all(savePromises)
+
+      // Atualiza lista local de vistoriaItens com os registros retornados
+      setVistoriaItens((prev) => {
+        const next = [...prev]
+        savedRecords.forEach((saved) => {
+          const idx = next.findIndex(
+            (i) =>
+              (saved.subitem && i.subitem === saved.subitem) ||
+              (!saved.subitem && !i.subitem && i.categoria === saved.categoria),
+          )
+          if (idx >= 0) {
+            next[idx] = saved
+          } else {
+            next.push(saved)
+          }
+        })
+        return next
+      })
+
+      setAutoSaveStatus('saved')
+      const now = new Date()
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
+        now.getMinutes(),
+      ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+      setLastSavedTime(timeStr)
+
+      toast({
+        title: 'Item marcado como "Não"',
+        description: `Todos os ${subs.length} subitens de "${cat.nome}" foram marcados como Não.`,
+      })
+    } catch (err) {
+      console.error('Erro ao marcar subitens em lote como Não:', err)
+      setAutoSaveStatus('error')
+      toast({
+        title: 'Erro ao marcar item',
+        description: 'Não foi possível salvar as alterações em lote.',
+        variant: 'destructive',
+      })
+    } finally {
+      setBatchMarkingCatIds((prev) => ({ ...prev, [cat.id]: false }))
     }
   }
 
@@ -1415,12 +1520,52 @@ export default function VistoriaPage() {
                           </div>
                         </div>
 
-                        {/* Badges de situação agregadas no Tema */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Ações e Badges de situação agregadas no Tema */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Botão Não em lote para o item principal */}
+                          {!isVistoriaConcluida && subs.length > 0 && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={batchMarkingCatIds[cat.id]}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleBatchMarkCategoryNao(cat, subs)
+                              }}
+                              className="h-7 px-2.5 text-xs font-bold border-rose-300 text-rose-700 bg-rose-50/60 hover:bg-rose-100 hover:text-rose-800 hover:border-rose-400 transition-colors cursor-pointer shadow-2xs"
+                              title="Marcar todos os subitens deste item como Não"
+                            >
+                              {batchMarkingCatIds[cat.id] ? (
+                                <Loader2 className="w-3 h-3 animate-spin mr-1 text-rose-600" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5 mr-1 text-rose-600" />
+                              )}
+                              Não
+                            </Button>
+                          )}
+
                           {temaVencido > 0 && (
                             <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-[11px] font-bold gap-1">
-                              <AlertTriangle className="w-3 h-3 text-rose-600" />
-                              {temaVencido} vencido(s)
+                              {subs.length > 0 &&
+                              subs.every((sub) => {
+                                const f = itemForms[sub.id]
+                                const i = vistoriaItens.find((it) => it.subitem === sub.id)
+                                return (
+                                  f?.possuiSistema === 'Não' ||
+                                  (!f?.possuiSistema && i?.possuiSistema === 'Não')
+                                )
+                              }) ? (
+                                <>
+                                  <XCircle className="w-3 h-3 text-rose-600" />
+                                  Não conforme
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                  {temaVencido} vencido(s)
+                                </>
+                              )}
                             </Badge>
                           )}
                           {temaPendente > 0 && (
