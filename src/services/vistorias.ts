@@ -1,6 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { Hospital } from './hospitais'
-import { CategoriaVistoria } from './categoriasVistoria'
+import { CategoriaVistoria, SubitemChecklist } from './categoriasVistoria'
 
 export type SituacaoChecklist = 'não se aplica' | 'pendente' | 'vencido' | 'conforme' | null
 
@@ -20,7 +20,8 @@ export interface VistoriaItem {
   id: string
   vistoria: string
   hospital: string
-  categoria: string
+  categoria: string // ID da CategoriaVistoria (Item Principal)
+  subitem?: string // ID do SubitemChecklist (Subitem Nível 2)
   possuiSistema?: 'Sim' | 'Não' | '' | null
   servicoPeriodico?: 'Sim' | 'Não' | '' | null
   periodicidadeMeses?: number | null
@@ -33,6 +34,7 @@ export interface VistoriaItem {
   updated: string
   expand?: {
     categoria?: CategoriaVistoria
+    subitem?: SubitemChecklist
     hospital?: Hospital
   }
 }
@@ -58,12 +60,12 @@ export function getVistoriaItemPhotoUrl(
 }
 
 /**
- * Calculates checklist item situation:
+ * Calculates checklist subitem situation:
  * Precedência:
  * 1. "Não" -> "não se aplica"
- * 2. Se não respondeu possuiSistema ("Sim" ou "Não"), retorna null (não avaliado)
+ * 2. Se não respondeu possuiSistema ("Sim" ou "Não"), retorna null (não avaliado / pendente)
  * 3. Se possui ("Sim"):
- *    a. "vencido" - se a categoria ou serviço é periódico com periodicidadeDias > 0 e a data da última verificação passou da periodicidade ou não foi informada
+ *    a. "vencido" - se o subitem (ou serviço periódico) tem periodicidade fixa e a data da última verificação expirou ou não foi preenchida
  *    b. "conforme" - preenchido e regular
  */
 export function calculateItemSituacao(
@@ -74,7 +76,7 @@ export function calculateItemSituacao(
     numeroArt?: string
     dataUltimaVerificacao?: string | null
   },
-  categoria: {
+  itemInfo: {
     exigeArt?: boolean
     periodicidadeDias?: number | null
   },
@@ -88,14 +90,12 @@ export function calculateItemSituacao(
   }
 
   // Hospital possui o sistema ("Sim")
-  // Se a categoria tem periodicidade fixa definida (> 0) OU se o usuário marcou que o serviço é feito periodicamente
-  const periodicidadeExigida = Boolean(
-    categoria.periodicidadeDias && categoria.periodicidadeDias > 0,
-  )
+  // Se o subitem tem periodicidade fixa definida (> 0)
+  const periodicidadeExigida = Boolean(itemInfo.periodicidadeDias && itemInfo.periodicidadeDias > 0)
 
   if (periodicidadeExigida) {
     if (!data.dataUltimaVerificacao) {
-      // Periodicidade exigida pela categoria técnica mas data não informada
+      // Periodicidade exigida pelo item técnico mas data não informada
       return 'vencido'
     }
 
@@ -108,7 +108,7 @@ export function calculateItemSituacao(
     const diffMs = today.getTime() - verificacaoDate.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-    if (categoria.periodicidadeDias && diffDays > categoria.periodicidadeDias) {
+    if (itemInfo.periodicidadeDias && diffDays > itemInfo.periodicidadeDias) {
       return 'vencido'
     }
   }
@@ -175,17 +175,17 @@ export const vistoriasService = {
   },
 
   /**
-   * Get all checklist items for a specific vistoria
+   * Get all checklist items for a specific vistoria (with expanded subitem and categoria)
    */
   async getItensByVistoria(vistoriaId: string): Promise<VistoriaItem[]> {
     return await pb.collection('vistoria_itens').getFullList<VistoriaItem>({
       filter: `vistoria = "${vistoriaId}"`,
-      expand: 'categoria,hospital',
+      expand: 'categoria,subitem,hospital',
     })
   },
 
   /**
-   * Create a new vistoria for a hospital (allows multiple vistorias over time or for a specific inspection)
+   * Create a new vistoria for a hospital
    */
   async createVistoria(hospitalId: string, observacoes?: string): Promise<Vistoria> {
     return await pb.collection('vistorias').create<Vistoria>(
@@ -212,19 +212,21 @@ export const vistoriasService = {
   },
 
   /**
-   * Save or update a checklist item, with support for File upload (FormData)
+   * Save or update a checklist subitem answer, with support for File uploads.
+   * Links to both the categoria (main item) and subitem (subitem ID).
    */
   async saveItem(
     vistoriaId: string,
     hospitalId: string,
     categoriaId: string,
     formData: VistoriaItemFormData,
-    categoria: { exigeArt?: boolean; periodicidadeDias?: number | null },
+    subitemInfo: { exigeArt?: boolean; periodicidadeDias?: number | null },
     existingItemId?: string,
     newFiles?: File[],
     deletedFileNames?: string[],
+    subitemId?: string,
   ): Promise<VistoriaItem> {
-    const situacao = calculateItemSituacao(formData, categoria)
+    const situacao = calculateItemSituacao(formData, subitemInfo)
 
     // If newFiles or deletedFileNames are present, we use multipart FormData
     if ((newFiles && newFiles.length > 0) || (deletedFileNames && deletedFileNames.length > 0)) {
@@ -232,6 +234,7 @@ export const vistoriasService = {
       data.append('vistoria', vistoriaId)
       data.append('hospital', hospitalId)
       data.append('categoria', categoriaId)
+      if (subitemId) data.append('subitem', subitemId)
       if (formData.possuiSistema) data.append('possuiSistema', formData.possuiSistema)
       if (formData.servicoPeriodico) data.append('servicoPeriodico', formData.servicoPeriodico)
       if (
@@ -271,20 +274,23 @@ export const vistoriasService = {
 
       if (existingItemId) {
         return await pb.collection('vistoria_itens').update<VistoriaItem>(existingItemId, data, {
-          expand: 'categoria,hospital',
+          expand: 'categoria,subitem,hospital',
         })
       }
 
-      // Check if item exists
+      // Check if item exists by vistoria and subitem (or categoria if no subitem)
       try {
+        const filterExpr = subitemId
+          ? `vistoria = "${vistoriaId}" && subitem = "${subitemId}"`
+          : `vistoria = "${vistoriaId}" && categoria = "${categoriaId}"`
         const existing = await pb.collection('vistoria_itens').getList<VistoriaItem>(1, 1, {
-          filter: `vistoria = "${vistoriaId}" && categoria = "${categoriaId}"`,
+          filter: filterExpr,
         })
         if (existing.items.length > 0) {
           return await pb
             .collection('vistoria_itens')
             .update<VistoriaItem>(existing.items[0].id, data, {
-              expand: 'categoria,hospital',
+              expand: 'categoria,subitem,hospital',
             })
         }
       } catch {
@@ -292,7 +298,7 @@ export const vistoriasService = {
       }
 
       return await pb.collection('vistoria_itens').create<VistoriaItem>(data, {
-        expand: 'categoria,hospital',
+        expand: 'categoria,subitem,hospital',
       })
     }
 
@@ -301,6 +307,7 @@ export const vistoriasService = {
       vistoria: vistoriaId,
       hospital: hospitalId,
       categoria: categoriaId,
+      subitem: subitemId || null,
       possuiSistema: formData.possuiSistema || null,
       servicoPeriodico: formData.servicoPeriodico || null,
       periodicidadeMeses:
@@ -315,20 +322,23 @@ export const vistoriasService = {
 
     if (existingItemId) {
       return await pb.collection('vistoria_itens').update<VistoriaItem>(existingItemId, payload, {
-        expand: 'categoria,hospital',
+        expand: 'categoria,subitem,hospital',
       })
     }
 
     // Check if an item already exists in DB to prevent duplicates
     try {
+      const filterExpr = subitemId
+        ? `vistoria = "${vistoriaId}" && subitem = "${subitemId}"`
+        : `vistoria = "${vistoriaId}" && categoria = "${categoriaId}"`
       const existing = await pb.collection('vistoria_itens').getList<VistoriaItem>(1, 1, {
-        filter: `vistoria = "${vistoriaId}" && categoria = "${categoriaId}"`,
+        filter: filterExpr,
       })
       if (existing.items.length > 0) {
         return await pb
           .collection('vistoria_itens')
           .update<VistoriaItem>(existing.items[0].id, payload, {
-            expand: 'categoria,hospital',
+            expand: 'categoria,subitem,hospital',
           })
       }
     } catch {
@@ -336,7 +346,7 @@ export const vistoriasService = {
     }
 
     return await pb.collection('vistoria_itens').create<VistoriaItem>(payload, {
-      expand: 'categoria,hospital',
+      expand: 'categoria,subitem,hospital',
     })
   },
 
@@ -349,7 +359,7 @@ export const vistoriasService = {
       formData.append('fotos', file)
     }
     return await pb.collection('vistoria_itens').update<VistoriaItem>(itemId, formData, {
-      expand: 'categoria,hospital',
+      expand: 'categoria,subitem,hospital',
     })
   },
 
@@ -360,7 +370,7 @@ export const vistoriasService = {
     const formData = new FormData()
     formData.append('fotos-', filename)
     return await pb.collection('vistoria_itens').update<VistoriaItem>(itemId, formData, {
-      expand: 'categoria,hospital',
+      expand: 'categoria,subitem,hospital',
     })
   },
 }

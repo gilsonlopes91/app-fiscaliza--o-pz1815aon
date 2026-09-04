@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T12:00:34.704Z",
+  "generatedAt": "2026-09-04T12:09:38.966Z",
   "collections": [
     {
       "name": "users",
@@ -198,6 +198,12 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "ordem",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX `idx_categorias_vistoria_tipo` ON `categorias_vistoria` (tipo)"]
@@ -352,12 +358,20 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "subitem",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "subitens_checklist"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_vistoria_itens_vistoria ON vistoria_itens (vistoria)",
         "CREATE INDEX idx_vistoria_itens_hospital ON vistoria_itens (hospital)",
-        "CREATE INDEX idx_vistoria_itens_categoria ON vistoria_itens (categoria)"
+        "CREATE INDEX idx_vistoria_itens_categoria ON vistoria_itens (categoria)",
+        "CREATE INDEX `idx_vistoria_itens_subitem` ON `vistoria_itens` (subitem)"
       ]
     },
     {
@@ -539,6 +553,80 @@
       "indexes": [
         "CREATE INDEX idx_atribuicoes_fiscal ON atribuicoes (fiscal)",
         "CREATE INDEX idx_atribuicoes_hospital ON atribuicoes (hospital)"
+      ]
+    },
+    {
+      "name": "subitens_checklist",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "fields": [
+        {
+          "name": "categoria",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "categorias_vistoria"
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ordem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "exigeArt",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "periodicidadeDias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_subitens_categoria ON subitens_checklist (categoria)",
+        "CREATE INDEX idx_subitens_tipo ON subitens_checklist (tipo)"
       ]
     }
   ]

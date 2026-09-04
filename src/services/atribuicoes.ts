@@ -2,15 +2,19 @@ import pb from '@/lib/pocketbase/client'
 import { Hospital } from './hospitais'
 import { UserProfile } from './auth'
 import { Vistoria, VistoriaItem, vistoriasService } from './vistorias'
-import { CategoriaVistoria, categoriasVistoriaService } from './categoriasVistoria'
+import {
+  CategoriaVistoria,
+  SubitemChecklist,
+  categoriasVistoriaService,
+} from './categoriasVistoria'
 
 export interface Atribuicao {
   id: string
-  fiscal: string
-  hospital: string
-  created_by?: string
+  fiscal: string // User ID
+  hospital: string // Hospital ID
+  created_by?: string // Admin User ID who created
+  prazo?: string | null
   observacao?: string
-  prazo?: string
   created: string
   updated: string
   expand?: {
@@ -23,9 +27,8 @@ export interface Atribuicao {
 export interface AtribuicaoFormData {
   fiscal: string
   hospital: string
-  created_by?: string
+  prazo?: string | null
   observacao?: string
-  prazo?: string
 }
 
 export interface FiscalProgressSummary {
@@ -49,30 +52,27 @@ export interface AtribuicaoDetail {
 }
 
 /**
- * Checks if a vistoria is concluded for a given hospital.
- * Rule: A vistoria is considered CONCLUÍDA when ALL checklist items of the hospital's type
- * have been answered (possuiSistema is filled as 'Sim' or 'Não' for every category).
+ * Checks whether all checklist items for a hospital's tipo are answered
  */
 export function isVistoriaCompleta(
   itens: VistoriaItem[],
-  categorias: CategoriaVistoria[],
+  subitensChecklist: SubitemChecklist[],
 ): boolean {
-  if (!categorias || categorias.length === 0) {
-    // If no categories exist, consider complete if vistoria exists and has items
+  if (subitensChecklist.length === 0) {
     return itens.length > 0
   }
-
-  // Check if every category of this type has an item with possuiSistema = 'Sim' or 'Não'
-  return categorias.every((cat) => {
-    const item = itens.find((i) => i.categoria === cat.id)
-    if (!item) return false
-    return item.possuiSistema === 'Sim' || item.possuiSistema === 'Não'
+  const respondidos = subitensChecklist.filter((sub) => {
+    const item = itens.find(
+      (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
+    )
+    return item && (item.possuiSistema === 'Sim' || item.possuiSistema === 'Não')
   })
+  return respondidos.length >= subitensChecklist.length
 }
 
 export const atribuicoesService = {
   /**
-   * List all atribuicoes with expanded fiscal, hospital and creator
+   * List all atribuicoes with expanded relations
    */
   async getAll(): Promise<Atribuicao[]> {
     return await pb.collection('atribuicoes').getFullList<Atribuicao>({
@@ -82,7 +82,7 @@ export const atribuicoesService = {
   },
 
   /**
-   * List atribuicoes assigned to a specific fiscal user
+   * List atribuicoes assigned to a specific fiscal
    */
   async getByFiscal(fiscalId: string): Promise<Atribuicao[]> {
     return await pb.collection('atribuicoes').getFullList<Atribuicao>({
@@ -104,6 +104,63 @@ export const atribuicoesService = {
   },
 
   /**
+   * Create a new atribuicao
+   */
+  async create(data: AtribuicaoFormData): Promise<Atribuicao> {
+    const currentUserId = pb.authStore.record?.id || ''
+    const payload: Record<string, unknown> = {
+      fiscal: data.fiscal,
+      hospital: data.hospital,
+      created_by: currentUserId || null,
+      prazo: data.prazo || null,
+      observacao: data.observacao ? data.observacao.trim() : '',
+    }
+
+    // Check if duplicate assignment exists
+    try {
+      const existing = await pb.collection('atribuicoes').getList<Atribuicao>(1, 1, {
+        filter: `fiscal = "${data.fiscal}" && hospital = "${data.hospital}"`,
+      })
+      if (existing.items.length > 0) {
+        // Update existing instead of creating duplicate
+        return await pb
+          .collection('atribuicoes')
+          .update<Atribuicao>(existing.items[0].id, payload, {
+            expand: 'fiscal,hospital,created_by',
+          })
+      }
+    } catch {
+      // Proceed to create
+    }
+
+    return await pb.collection('atribuicoes').create<Atribuicao>(payload, {
+      expand: 'fiscal,hospital,created_by',
+    })
+  },
+
+  /**
+   * Update atribuicao
+   */
+  async update(id: string, data: Partial<AtribuicaoFormData>): Promise<Atribuicao> {
+    const payload: Record<string, unknown> = {}
+    if (data.fiscal !== undefined) payload.fiscal = data.fiscal
+    if (data.hospital !== undefined) payload.hospital = data.hospital
+    if (data.prazo !== undefined) payload.prazo = data.prazo || null
+    if (data.observacao !== undefined) payload.observacao = data.observacao.trim()
+
+    return await pb.collection('atribuicoes').update<Atribuicao>(id, payload, {
+      expand: 'fiscal,hospital,created_by',
+    })
+  },
+
+  /**
+   * Delete atribuicao
+   */
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('atribuicoes').delete(id)
+  },
+
+  /**
    * Assign multiple hospitals to a single fiscal
    */
   async assignHospitalsToFiscal(
@@ -113,51 +170,32 @@ export const atribuicoesService = {
     observacao?: string,
     prazo?: string,
   ): Promise<Atribuicao[]> {
-    const createdList: Atribuicao[] = []
-
-    for (const hospitalId of hospitalIds) {
-      // Check if assignment already exists to avoid duplicate
-      try {
-        const existing = await pb.collection('atribuicoes').getList<Atribuicao>(1, 1, {
-          filter: `fiscal = "${fiscalId}" && hospital = "${hospitalId}"`,
-        })
-        if (existing.items.length > 0) {
-          createdList.push(existing.items[0])
-          continue
-        }
-      } catch {
-        // Continue to create
-      }
-
-      const record = await pb.collection('atribuicoes').create<Atribuicao>({
+    const results: Atribuicao[] = []
+    for (const hospId of hospitalIds) {
+      const created = await this.create({
         fiscal: fiscalId,
-        hospital: hospitalId,
-        created_by: createdBy || pb.authStore.record?.id || '',
+        hospital: hospId,
         observacao: observacao || '',
         prazo: prazo || null,
       })
-      createdList.push(record)
+      results.push(created)
     }
-
-    return createdList
-  },
-
-  /**
-   * Remove an atribuicao by id
-   */
-  async delete(id: string): Promise<boolean> {
-    return await pb.collection('atribuicoes').delete(id)
+    return results
   },
 
   /**
    * Computes the full detailed progress of an atribuicao list,
-   * calculating whether each unit's vistoria has ALL checklist items completed.
+   * calculating whether each unit's vistoria has ALL checklist subitens completed.
    */
   async computeAtribuicoesProgress(
     atribuicoes: Atribuicao[],
-    allCategorias?: CategoriaVistoria[],
+    allCategoriasOrSubitens?: CategoriaVistoria[] | SubitemChecklist[],
   ): Promise<AtribuicaoDetail[]> {
-    const categoriasList = allCategorias || (await categoriasVistoriaService.getAll())
+    // Carrega tanto categorias quanto subitens para contagem precisa de 2 níveis
+    const [allSubitens, allCategories] = await Promise.all([
+      categoriasVistoriaService.getAllSubitens(),
+      categoriasVistoriaService.getAll(),
+    ])
 
     const details = await Promise.all(
       atribuicoes.map(async (atrib) => {
@@ -177,10 +215,32 @@ export const atribuicoesService = {
         const hospTipo = (hospital.tipo || 'Hospital').trim().toLowerCase()
         const isHospitalType = hospTipo === 'hospital'
 
-        const relevantCats = categoriasList.filter((cat) => {
-          const catTipo = (cat.tipo || (isHospitalType ? 'Hospital' : '')).trim().toLowerCase()
-          return catTipo === hospTipo
+        // Encontrar os subitens do tipo
+        let relevantSubitens = allSubitens.filter((sub) => {
+          const subTipo = (sub.tipo || (isHospitalType ? 'Hospital' : '')).trim().toLowerCase()
+          return subTipo === hospTipo
         })
+
+        // Se o tipo não tem subitens cadastrados mas tem categorias, usar as categorias
+        if (relevantSubitens.length === 0) {
+          const relevantCats = allCategories.filter((cat) => {
+            const catTipo = (cat.tipo || (isHospitalType ? 'Hospital' : '')).trim().toLowerCase()
+            return catTipo === hospTipo
+          })
+          // Fallback se não há subitens
+          relevantSubitens = relevantCats.map((c, i) => ({
+            id: c.id,
+            categoria: c.id,
+            tipo: c.tipo,
+            ordem: i + 1,
+            codigo: `${i + 1}.1`,
+            descricao: c.nome,
+            exigeArt: c.exigeArt ?? true,
+            periodicidadeDias: c.periodicidadeDias,
+            created: c.created,
+            updated: c.updated,
+          }))
+        }
 
         // Fetch vistoria & items for this hospital
         let vistoria: Vistoria | null = null
@@ -195,11 +255,13 @@ export const atribuicoesService = {
           console.warn('Erro ao carregar vistoria para progresso:', e)
         }
 
-        const totalItens = relevantCats.length
+        const totalItens = relevantSubitens.length
         let respondidos = 0
 
-        relevantCats.forEach((cat) => {
-          const item = itens.find((i) => i.categoria === cat.id)
+        relevantSubitens.forEach((sub) => {
+          const item = itens.find(
+            (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
+          )
           if (item && (item.possuiSistema === 'Sim' || item.possuiSistema === 'Não')) {
             respondidos++
           }

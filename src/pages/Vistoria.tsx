@@ -6,27 +6,19 @@ import {
   AlertTriangle,
   Clock,
   Building2,
-  Calendar,
   Layers,
   ChevronDown,
   ChevronUp,
   FileCheck2,
-  Upload,
-  Camera,
-  Shield,
-  HelpCircle,
   Plus,
   RefreshCw,
   Search,
-  Filter,
-  Eye,
   X,
-  FileText,
-  AlertCircle,
-  Save,
   Loader2,
   CheckCircle,
-  Building,
+  Save,
+  HelpCircle,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,7 +38,11 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { hospitaisService, Hospital } from '@/services/hospitais'
-import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
+import {
+  categoriasVistoriaService,
+  CategoriaVistoria,
+  SubitemChecklist,
+} from '@/services/categoriasVistoria'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import {
   vistoriasService,
@@ -61,7 +57,7 @@ import { NovaVistoriaDialog } from '@/components/NovaVistoriaDialog'
 import { VistoriaCard } from '@/components/VistoriaCard'
 import { getIconComponent } from '@/pages/TiposEmpreendimento'
 import { useToast } from '@/hooks/use-toast'
-import { formatCNPJ, formatCNES } from '@/lib/formatters'
+import { formatCNPJ } from '@/lib/formatters'
 
 export default function VistoriaPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -76,6 +72,7 @@ export default function VistoriaPage() {
   const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [allCategorias, setAllCategorias] = useState<CategoriaVistoria[]>([])
+  const [allSubitens, setAllSubitens] = useState<SubitemChecklist[]>([])
   const [openVistorias, setOpenVistorias] = useState<Vistoria[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -88,11 +85,11 @@ export default function VistoriaPage() {
   const [vistoriaItens, setVistoriaItens] = useState<VistoriaItem[]>([])
   const [isLoadingChecklist, setIsLoadingChecklist] = useState(false)
 
-  // Local Form state for each category checklist item
+  // Local Form state for each SUBITEM (keyed by subitem.id or categoria.id fallback)
   const [itemForms, setItemForms] = useState<Record<string, VistoriaItemFormData>>({})
   const [pendingPhotos, setPendingPhotos] = useState<Record<string, File[]>>({})
   const [deletedPhotos, setDeletedPhotos] = useState<Record<string, string[]>>({})
-  const [savingCategoryIds, setSavingCategoryIds] = useState<Record<string, boolean>>({})
+  const [savingSubitemIds, setSavingSubitemIds] = useState<Record<string, boolean>>({})
 
   // Modal for new inspection
   const [isNovaVistoriaOpen, setIsNovaVistoriaOpen] = useState(false)
@@ -104,19 +101,21 @@ export default function VistoriaPage() {
     document.title = 'Vistorias & Checklist por Tipo · CREA-PI Fiscalização'
   }, [])
 
-  // 1. Initial load of Tipos, Hospitais, Categorias, and Open Vistorias
+  // 1. Initial load of Tipos, Hospitais, Categorias, Subitens, and Open Vistorias
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [tiposList, hospList, catList, openList] = await Promise.all([
+      const [tiposList, hospList, catList, subList, openList] = await Promise.all([
         tiposEmpreendimentoService.getAll(),
         hospitaisService.getAll(),
         categoriasVistoriaService.getAll(),
+        categoriasVistoriaService.getAllSubitens(),
         vistoriasService.getOpenVistorias(),
       ])
       setTiposEmpreendimento(tiposList)
       setHospitais(hospList)
       setAllCategorias(catList)
+      setAllSubitens(subList)
       setOpenVistorias(openList)
     } catch (err) {
       console.error('Erro ao carregar dados de vistoria:', err)
@@ -147,14 +146,56 @@ export default function VistoriaPage() {
     return selectedTipoFiltro !== 'todos' ? selectedTipoFiltro : 'Hospital'
   }, [selectedHospital, selectedTipoFiltro])
 
-  // Categorias filtered for the active hospital's tipo
+  // Categorias (Itens Principais Nível 1) filtered for the active hospital's tipo
   const relevantCategorias = useMemo(() => {
     const isHospital = currentHospitalTipo.toLowerCase() === 'hospital'
-    return allCategorias.filter((cat) => {
-      const catTipo = (cat.tipo || (isHospital ? 'Hospital' : '')).trim()
-      return catTipo.toLowerCase() === currentHospitalTipo.toLowerCase()
-    })
+    return allCategorias
+      .filter((cat) => {
+        const catTipo = (cat.tipo || (isHospital ? 'Hospital' : '')).trim()
+        return catTipo.toLowerCase() === currentHospitalTipo.toLowerCase()
+      })
+      .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
   }, [allCategorias, currentHospitalTipo])
+
+  // Subitens (Nível 2) grouped by Categoria (Nível 1)
+  const subitensByCategoria = useMemo(() => {
+    const map = new Map<string, SubitemChecklist[]>()
+    relevantCategorias.forEach((cat) => {
+      let subs = allSubitens.filter((s) => s.categoria === cat.id)
+      // Se não há subitem cadastrado na tabela subitens_checklist para esta categoria,
+      // cria um fallback virtual usando a própria categoria para manter a tela 100% utilizável
+      if (subs.length === 0) {
+        subs = [
+          {
+            id: cat.id,
+            categoria: cat.id,
+            tipo: cat.tipo,
+            ordem: 1,
+            codigo: `${cat.ordem || 1}.1`,
+            descricao: cat.nome,
+            exigeArt: cat.exigeArt ?? true,
+            periodicidadeDias: cat.periodicidadeDias,
+            created: cat.created,
+            updated: cat.updated,
+          },
+        ]
+      } else {
+        subs.sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+      }
+      map.set(cat.id, subs)
+    })
+    return map
+  }, [relevantCategorias, allSubitens])
+
+  // Flat list of all relevant subitems for computing stats
+  const allRelevantSubitens = useMemo(() => {
+    const list: SubitemChecklist[] = []
+    relevantCategorias.forEach((cat) => {
+      const subs = subitensByCategoria.get(cat.id) || []
+      list.push(...subs)
+    })
+    return list
+  }, [relevantCategorias, subitensByCategoria])
 
   // 2. When hospital is selected, load or create its vistoria & items
   const loadVistoriaForHospital = useCallback(
@@ -190,10 +231,11 @@ export default function VistoriaPage() {
         const items = await vistoriasService.getItensByVistoria(vistoria.id)
         setVistoriaItens(items)
 
-        // Initialize form states
+        // Initialize form states per subitem (or per category if legacy item)
         const initialForm: Record<string, VistoriaItemFormData> = {}
         items.forEach((item) => {
-          initialForm[item.categoria] = {
+          const key = item.subitem || item.categoria
+          initialForm[key] = {
             possuiSistema: item.possuiSistema || '',
             servicoPeriodico: item.servicoPeriodico || '',
             periodicidadeMeses:
@@ -248,48 +290,45 @@ export default function VistoriaPage() {
     setSearchParams(newParams)
   }
 
-  // Update a form field for a category
-  const handleFieldChange = (
-    categoriaId: string,
-    field: keyof VistoriaItemFormData,
-    value: any,
-  ) => {
+  // Update a form field for a subitem
+  const handleFieldChange = (subitemId: string, field: keyof VistoriaItemFormData, value: any) => {
     setItemForms((prev) => ({
       ...prev,
-      [categoriaId]: {
-        ...prev[categoriaId],
+      [subitemId]: {
+        ...prev[subitemId],
         [field]: value,
       },
     }))
   }
 
   // Add pending photo files
-  const handleAddPendingPhotos = (categoriaId: string, files: File[]) => {
+  const handleAddPendingPhotos = (subitemId: string, files: File[]) => {
     setPendingPhotos((prev) => ({
       ...prev,
-      [categoriaId]: [...(prev[categoriaId] || []), ...files],
+      [subitemId]: [...(prev[subitemId] || []), ...files],
     }))
   }
 
   // Remove pending photo file
-  const handleRemovePendingPhoto = (categoriaId: string, index: number) => {
+  const handleRemovePendingPhoto = (subitemId: string, index: number) => {
     setPendingPhotos((prev) => {
-      const current = [...(prev[categoriaId] || [])]
+      const current = [...(prev[subitemId] || [])]
       current.splice(index, 1)
-      return { ...prev, [categoriaId]: current }
+      return { ...prev, [subitemId]: current }
     })
   }
 
   // Mark existing photo for deletion
-  const handleDeleteExistingPhoto = (categoriaId: string, filename: string) => {
+  const handleDeleteExistingPhoto = (subitemId: string, filename: string) => {
     setDeletedPhotos((prev) => ({
       ...prev,
-      [categoriaId]: [...(prev[categoriaId] || []), filename],
+      [subitemId]: [...(prev[subitemId] || []), filename],
     }))
     // Also remove from local vistoriaItens display
     setVistoriaItens((prev) =>
       prev.map((item) => {
-        if (item.categoria === categoriaId && item.fotos) {
+        const itemKey = item.subitem || item.categoria
+        if (itemKey === subitemId && item.fotos) {
           return {
             ...item,
             fotos: item.fotos.filter((f) => f !== filename),
@@ -300,11 +339,12 @@ export default function VistoriaPage() {
     )
   }
 
-  // Save Item to Backend
-  const handleSaveItem = async (cat: CategoriaVistoria) => {
+  // Save Subitem to Backend
+  const handleSaveSubitem = async (sub: SubitemChecklist, cat: CategoriaVistoria) => {
     if (!currentVistoria || !selectedHospitalId) return
 
-    const formData = itemForms[cat.id] || {
+    const subKey = sub.id
+    const formData = itemForms[subKey] || {
       possuiSistema: '',
       servicoPeriodico: '',
       periodicidadeMeses: null,
@@ -313,27 +353,36 @@ export default function VistoriaPage() {
       dataUltimaVerificacao: '',
     }
 
-    const existingItem = vistoriaItens.find((i) => i.categoria === cat.id)
-    const newFiles = pendingPhotos[cat.id] || []
-    const deletedNames = deletedPhotos[cat.id] || []
+    const existingItem = vistoriaItens.find(
+      (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
+    )
+    const newFiles = pendingPhotos[subKey] || []
+    const deletedNames = deletedPhotos[subKey] || []
 
     try {
-      setSavingCategoryIds((prev) => ({ ...prev, [cat.id]: true }))
+      setSavingSubitemIds((prev) => ({ ...prev, [subKey]: true }))
 
+      const isRealSubitem = sub.id !== cat.id
       const saved = await vistoriasService.saveItem(
         currentVistoria.id,
         selectedHospitalId,
         cat.id,
         formData,
-        cat,
+        {
+          exigeArt: sub.exigeArt,
+          periodicidadeDias: sub.periodicidadeDias,
+        },
         existingItem?.id,
         newFiles.length > 0 ? newFiles : undefined,
         deletedNames.length > 0 ? deletedNames : undefined,
+        isRealSubitem ? sub.id : undefined,
       )
 
       // Update local items state
       setVistoriaItens((prev) => {
-        const index = prev.findIndex((i) => i.categoria === cat.id)
+        const index = prev.findIndex(
+          (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
+        )
         if (index >= 0) {
           const updated = [...prev]
           updated[index] = saved
@@ -342,41 +391,43 @@ export default function VistoriaPage() {
         return [...prev, saved]
       })
 
-      // Clear pending/deleted tracking for this category
-      setPendingPhotos((prev) => ({ ...prev, [cat.id]: [] }))
-      setDeletedPhotos((prev) => ({ ...prev, [cat.id]: [] }))
+      // Clear pending/deleted tracking for this subitem
+      setPendingPhotos((prev) => ({ ...prev, [subKey]: [] }))
+      setDeletedPhotos((prev) => ({ ...prev, [subKey]: [] }))
 
       toast({
-        title: 'Item salvo com sucesso!',
-        description: `Informações de "${cat.nome}" foram sincronizadas.`,
+        title: 'Subitem salvo com sucesso!',
+        description: `Informações de "${sub.codigo || ''} ${sub.descricao}" foram sincronizadas.`,
       })
     } catch (err) {
-      console.error('Erro ao salvar item:', err)
+      console.error('Erro ao salvar subitem da vistoria:', err)
       toast({
-        title: 'Erro ao salvar item',
-        description: 'Não foi possível salvar o item da vistoria.',
+        title: 'Erro ao salvar subitem',
+        description: 'Não foi possível salvar os dados da vistoria.',
         variant: 'destructive',
       })
     } finally {
-      setSavingCategoryIds((prev) => ({ ...prev, [cat.id]: false }))
+      setSavingSubitemIds((prev) => ({ ...prev, [subKey]: false }))
     }
   }
 
-  // Calculate situation summary for the active vistoria based ONLY on relevant categories of this type
+  // Calculate situation summary for the active vistoria based on SUBITENS
   const stats = useMemo(() => {
     let conformeCount = 0
     let vencidoCount = 0
     let naoSeAplicaCount = 0
     let pendenteCount = 0
 
-    relevantCategorias.forEach((cat) => {
-      const item = vistoriaItens.find((i) => i.categoria === cat.id)
-      const form = itemForms[cat.id]
+    allRelevantSubitens.forEach((sub) => {
+      const item = vistoriaItens.find(
+        (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
+      )
+      const form = itemForms[sub.id]
 
       let situacao: SituacaoChecklist = null
 
       if (form) {
-        situacao = calculateItemSituacao(form, cat)
+        situacao = calculateItemSituacao(form, sub)
       } else if (item) {
         situacao = item.situacaoCalculada || null
       }
@@ -388,13 +439,13 @@ export default function VistoriaPage() {
     })
 
     return {
-      total: relevantCategorias.length,
+      total: allRelevantSubitens.length,
       conforme: conformeCount,
       vencido: vencidoCount,
       naoSeAplica: naoSeAplicaCount,
       pendente: pendenteCount,
     }
-  }, [relevantCategorias, vistoriaItens, itemForms])
+  }, [allRelevantSubitens, vistoriaItens, itemForms])
 
   // Filter open vistorias for the open list view by Tipo and Search
   const filteredOpenVistorias = useMemo(() => {
@@ -435,7 +486,8 @@ export default function VistoriaPage() {
             </h1>
           </div>
           <p className="text-sm text-[#486581] mt-0.5">
-            Organização das vistorias técnicas e checklist exclusivo por segmento de empreendimento
+            Checklist técnico em dois níveis: temas principais como agrupadores e fiscalização
+            detalhada por subitem
           </p>
         </div>
 
@@ -583,7 +635,7 @@ export default function VistoriaPage() {
               <Button
                 variant="outline"
                 onClick={() => handleSelectHospital('')}
-                className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] h-11 text-xs gap-1.5"
+                className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] h-11 text-xs gap-1.5 cursor-pointer"
               >
                 <X className="w-4 h-4" />
                 Limpar seleção de unidade
@@ -621,17 +673,17 @@ export default function VistoriaPage() {
         </div>
       </div>
 
-      {/* 3. Resumo Técnico da Vistoria (Card no Topo) se hospital estiver selecionado */}
+      {/* 3. Resumo Técnico da Vistoria (Card no Topo) calculado a nível de subitem */}
       {selectedHospitalId && (
         <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#D3DFE9] pb-3 gap-2">
             <h3 className="text-base font-bold text-[#102A43] flex items-center gap-2">
               <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
-              Resumo Técnico do Checklist: {selectedHospital?.tipo || 'Hospital'}
+              Resumo da Fiscalização: {selectedHospital?.tipo || 'Hospital'}
             </h3>
             <span className="text-xs text-[#627D98] font-medium">
-              {stats.total} {stats.total === 1 ? 'item regulatório' : 'itens regulatórios'} para
-              este tipo
+              {stats.total} {stats.total === 1 ? 'subitem fiscalizado' : 'subitens fiscalizados'} em{' '}
+              {relevantCategorias.length} {relevantCategorias.length === 1 ? 'tema' : 'temas'}
             </span>
           </div>
 
@@ -642,7 +694,7 @@ export default function VistoriaPage() {
                 Conforme
               </div>
               <div className="text-2xl font-bold text-emerald-900">{stats.conforme}</div>
-              <div className="text-[11px] text-emerald-700">Sistemas regulares</div>
+              <div className="text-[11px] text-emerald-700">Subitens regulares</div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
@@ -651,7 +703,7 @@ export default function VistoriaPage() {
                 Vencido
               </div>
               <div className="text-2xl font-bold text-rose-900">{stats.vencido}</div>
-              <div className="text-[11px] text-rose-700">Prazo expirado</div>
+              <div className="text-[11px] text-rose-700">Periodicidade expirada</div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-[#D3DFE9]">
@@ -660,7 +712,7 @@ export default function VistoriaPage() {
                 Não se aplica
               </div>
               <div className="text-2xl font-bold text-[#102A43]">{stats.naoSeAplica}</div>
-              <div className="text-[11px] text-[#627D98]">Não possui sistema</div>
+              <div className="text-[11px] text-[#627D98]">Não possui a atividade</div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
@@ -669,30 +721,31 @@ export default function VistoriaPage() {
                 Pendente
               </div>
               <div className="text-2xl font-bold text-amber-900">{stats.pendente}</div>
-              <div className="text-[11px] text-amber-700">Ainda não preenchido</div>
+              <div className="text-[11px] text-amber-700">Ainda não respondido</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. Checklist Expansível (Accordion) com Categorias do Tipo Específico */}
+      {/* 4. Checklist Agrupado em 2 Níveis: Itens Principais (Accordion) + Subitens (Cards com perguntas) */}
       {selectedHospitalId ? (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-[#102A43] flex items-center gap-2">
                 <ClipboardCheck className="w-5 h-5 text-[#004B8D]" />
-                Checklist Técnico: {selectedHospital?.tipo || 'Hospital'}
+                Checklist Específico: {selectedHospital?.tipo || 'Hospital'}
               </h2>
               <p className="text-xs text-[#486581]">
-                Itens específicos de fiscalização para {selectedHospital?.tipo || 'Hospital'}.
+                Abra cada tema principal abaixo para preencher os subitens de fiscalização (marcação
+                de serviço, ART e fotos).
               </p>
             </div>
 
             {isLoadingChecklist && (
               <div className="flex items-center gap-1.5 text-xs text-[#004B8D] font-semibold">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Carregando itens...
+                Carregando checklist...
               </div>
             )}
           </div>
@@ -704,9 +757,8 @@ export default function VistoriaPage() {
                 Checklist de {selectedHospital?.tipo || 'este segmento'} está vazio
               </h4>
               <p className="text-xs text-[#486581] max-w-md mx-auto">
-                Este tipo de empreendimento ainda não possui itens de checklist cadastrados. Acesse
-                a página do tipo em &ldquo;Tipos de Empreendimento&rdquo; para adicionar os itens
-                regulatórios.
+                Este tipo de empreendimento ainda não possui temas ou subitens de checklist
+                cadastrados. Acesse a página do tipo para cadastrar ou importar via planilha CSV.
               </p>
               <Button
                 variant="outline"
@@ -725,21 +777,31 @@ export default function VistoriaPage() {
               </Button>
             </div>
           ) : (
-            <Accordion type="multiple" className="space-y-3">
+            <Accordion type="multiple" className="space-y-3.5">
               {relevantCategorias.map((cat, idx) => {
-                const item = vistoriaItens.find((i) => i.categoria === cat.id)
-                const form = itemForms[cat.id] || {
-                  possuiSistema: '',
-                  servicoPeriodico: '',
-                  periodicidadeMeses: null,
-                  prestadorServico: '',
-                  numeroArt: '',
-                  dataUltimaVerificacao: '',
-                }
+                const itemNumber = cat.ordem || idx + 1
+                const subs = subitensByCategoria.get(cat.id) || []
 
-                const situacao = calculateItemSituacao(form, cat)
-                const isSaving = savingCategoryIds[cat.id] || false
-                const pending = pendingPhotos[cat.id] || []
+                // Contar pendências / status do tema principal
+                let temaConforme = 0
+                let temaVencido = 0
+                let temaNaoSeAplica = 0
+                let temaPendente = 0
+
+                subs.forEach((sub) => {
+                  const item = vistoriaItens.find(
+                    (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
+                  )
+                  const form = itemForms[sub.id]
+                  let s: SituacaoChecklist = null
+                  if (form) s = calculateItemSituacao(form, sub)
+                  else if (item) s = item.situacaoCalculada || null
+
+                  if (s === 'conforme') temaConforme++
+                  else if (s === 'vencido') temaVencido++
+                  else if (s === 'não se aplica') temaNaoSeAplica++
+                  else temaPendente++
+                })
 
                 return (
                   <AccordionItem
@@ -747,262 +809,373 @@ export default function VistoriaPage() {
                     value={cat.id}
                     className="border border-[#D3DFE9] bg-white rounded-xl overflow-hidden shadow-xs data-[state=open]:border-[#004B8D]/60 transition-all"
                   >
+                    {/* ACCORDION HEADER: ITEM PRINCIPAL (NÍVEL 1) */}
                     <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-slate-50/70">
                       <div className="flex flex-1 items-center justify-between gap-4 text-left pr-4">
-                        <div className="flex items-center gap-3">
-                          <span className="w-8 h-8 rounded-lg bg-[#E8F1F8] text-[#004B8D] font-bold text-xs flex items-center justify-center shrink-0">
-                            {idx + 1}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-8 h-8 rounded-lg bg-[#004B8D] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                            {itemNumber}
                           </span>
-                          <div>
-                            <h4 className="font-bold text-sm text-[#102A43]">{cat.nome}</h4>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
+                              {cat.nome}
+                            </h4>
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#627D98] mt-0.5">
-                              <span>Exige ART: {cat.exigeArt ? 'Sim' : 'Não'}</span>
-                              {cat.periodicidadeDias && cat.periodicidadeDias > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span>Periodicidade: {cat.periodicidadeDias} dias</span>
-                                </>
-                              )}
+                              <span>
+                                {subs.length} {subs.length === 1 ? 'subitem' : 'subitens'} de
+                                fiscalização
+                              </span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Situacao Badge on Header */}
-                        <div>
-                          {situacao === 'conforme' && (
-                            <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        {/* Badges de situação agregadas no Tema */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {temaVencido > 0 && (
+                            <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-[11px] font-bold gap-1">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              {temaVencido} vencido(s)
+                            </Badge>
+                          )}
+                          {temaPendente > 0 && (
+                            <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-medium gap-1">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              {temaPendente} pendente(s)
+                            </Badge>
+                          )}
+                          {temaVencido === 0 && temaPendente === 0 && temaConforme > 0 && (
+                            <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               Conforme
                             </Badge>
                           )}
-                          {situacao === 'vencido' && (
-                            <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-bold gap-1">
-                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-                              Vencido
-                            </Badge>
-                          )}
-                          {situacao === 'não se aplica' && (
-                            <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-xs font-medium">
-                              Não se aplica
-                            </Badge>
-                          )}
-                          {!situacao && (
-                            <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-medium gap-1">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              Pendente
-                            </Badge>
-                          )}
+                          {temaVencido === 0 &&
+                            temaPendente === 0 &&
+                            temaConforme === 0 &&
+                            temaNaoSeAplica > 0 && (
+                              <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-[11px] font-medium">
+                                Não se aplica
+                              </Badge>
+                            )}
                         </div>
                       </div>
                     </AccordionTrigger>
 
-                    <AccordionContent className="px-5 pb-6 pt-2 border-t border-[#D3DFE9]/70 bg-slate-50/30">
-                      <div className="space-y-5 pt-3">
-                        {/* 1. Possui o sistema / instalação? */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-bold text-[#102A43]">
-                            O estabelecimento possui este sistema / instalação?{' '}
-                            <span className="text-rose-600">*</span>
-                          </Label>
-                          <div className="flex items-center gap-3">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={form.possuiSistema === 'Sim' ? 'default' : 'outline'}
-                              onClick={() => handleFieldChange(cat.id, 'possuiSistema', 'Sim')}
-                              className={`h-9 px-5 text-xs font-bold ${
-                                form.possuiSistema === 'Sim'
-                                  ? 'bg-[#004B8D] text-white'
-                                  : 'border-[#D3DFE9] text-[#486581]'
-                              }`}
-                            >
-                              Sim
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={form.possuiSistema === 'Não' ? 'default' : 'outline'}
-                              onClick={() => handleFieldChange(cat.id, 'possuiSistema', 'Não')}
-                              className={`h-9 px-5 text-xs font-bold ${
-                                form.possuiSistema === 'Não'
-                                  ? 'bg-slate-700 text-white'
-                                  : 'border-[#D3DFE9] text-[#486581]'
-                              }`}
-                            >
-                              Não
-                            </Button>
-                          </div>
-                        </div>
+                    {/* ACCORDION CONTENT: LISTA DE SUBITENS (NÍVEL 2) */}
+                    <AccordionContent className="px-4 sm:px-6 pb-6 pt-3 border-t border-[#D3DFE9]/70 bg-slate-50/40 space-y-4">
+                      {subs.map((sub, sIdx) => {
+                        const subKey = sub.id
+                        const item = vistoriaItens.find(
+                          (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
+                        )
+                        const form = itemForms[subKey] || {
+                          possuiSistema: '',
+                          servicoPeriodico: '',
+                          periodicidadeMeses: null,
+                          prestadorServico: '',
+                          numeroArt: '',
+                          dataUltimaVerificacao: '',
+                        }
 
-                        {/* Fields if "Sim" */}
-                        {form.possuiSistema === 'Sim' && (
-                          <div className="p-4 rounded-xl bg-white border border-[#D3DFE9] space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              {/* Prestador do Serviço */}
-                              <div className="space-y-1.5">
-                                <Label className="text-xs font-bold text-[#102A43]">
-                                  Prestador do Serviço / Empresa Mantenedora
-                                </Label>
-                                <Input
-                                  placeholder="Ex: Empresa de Engenharia Ltda"
-                                  value={form.prestadorServico || ''}
-                                  onChange={(e) =>
-                                    handleFieldChange(cat.id, 'prestadorServico', e.target.value)
-                                  }
-                                  className="border-[#D3DFE9] text-xs h-9"
-                                />
-                              </div>
+                        const situacao = calculateItemSituacao(form, sub)
+                        const isSaving = savingSubitemIds[subKey] || false
+                        const pending = pendingPhotos[subKey] || []
+                        const subCode = sub.codigo || `${itemNumber}.${sIdx + 1}`
 
-                              {/* Número da ART (Opcional) */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-xs font-bold text-[#102A43]">
-                                    Número da ART (CREA)
-                                  </Label>
-                                  <span className="text-[10px] text-[#627D98] bg-[#F4F6F9] px-1.5 py-0.5 rounded border border-[#D3DFE9]">
-                                    Opcional
+                        return (
+                          <div
+                            key={sub.id}
+                            className="bg-white rounded-xl border border-[#D3DFE9] p-4 sm:p-5 shadow-xs space-y-4 hover:border-[#004B8D]/30 transition-colors"
+                          >
+                            {/* Subitem Title + Metadata Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-[#D3DFE9]/70 pb-3">
+                              <div className="space-y-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-bold text-[#004B8D] bg-[#E8F1F8] px-2.5 py-0.5 rounded-md border border-[#004B8D]/20">
+                                    {subCode}
+                                  </span>
+                                  <h5 className="font-bold text-sm text-[#102A43] leading-snug">
+                                    {sub.descricao}
+                                  </h5>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#627D98] pt-0.5">
+                                  <span className="flex items-center gap-1">
+                                    Exige ART:{' '}
+                                    <strong
+                                      className={sub.exigeArt ? 'text-[#004B8D]' : 'text-[#627D98]'}
+                                    >
+                                      {sub.exigeArt ? 'Sim' : 'Não'}
+                                    </strong>
+                                  </span>
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1">
+                                    Periodicidade:{' '}
+                                    {sub.periodicidadeDias && sub.periodicidadeDias > 0 ? (
+                                      <strong className="text-[#102A43]">
+                                        {sub.periodicidadeDias} dias
+                                      </strong>
+                                    ) : (
+                                      <span className="text-[#829AB1] italic">
+                                        Sem periodicidade fixa
+                                      </span>
+                                    )}
                                   </span>
                                 </div>
-                                <Input
-                                  placeholder="Ex: PI20240012345"
-                                  value={form.numeroArt || ''}
-                                  onChange={(e) =>
-                                    handleFieldChange(cat.id, 'numeroArt', e.target.value)
-                                  }
-                                  className="border-[#D3DFE9] text-xs h-9 font-mono"
-                                />
                               </div>
 
-                              {/* Data da Última Verificação */}
-                              <div className="space-y-1.5">
-                                <Label className="text-xs font-bold text-[#102A43]">
-                                  Data da Última Verificação / Manutenção
-                                </Label>
-                                <Input
-                                  type="date"
-                                  value={form.dataUltimaVerificacao || ''}
-                                  onChange={(e) =>
-                                    handleFieldChange(
-                                      cat.id,
-                                      'dataUltimaVerificacao',
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="border-[#D3DFE9] text-xs h-9"
-                                />
+                              {/* Status Badge */}
+                              <div className="shrink-0 self-start sm:self-auto">
+                                {situacao === 'conforme' && (
+                                  <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    Conforme
+                                  </Badge>
+                                )}
+                                {situacao === 'vencido' && (
+                                  <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-bold gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                                    Vencido
+                                  </Badge>
+                                )}
+                                {situacao === 'não se aplica' && (
+                                  <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-xs font-medium">
+                                    Não se aplica
+                                  </Badge>
+                                )}
+                                {!situacao && (
+                                  <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-medium gap-1">
+                                    <Clock className="w-3 h-3 text-amber-600" />
+                                    Pendente
+                                  </Badge>
+                                )}
                               </div>
-
-                              {/* Este serviço é feito periodicamente? */}
-                              <div className="space-y-1.5">
-                                <Label className="text-xs font-bold text-[#102A43]">
-                                  Este serviço é feito periodicamente?
-                                </Label>
-                                <Select
-                                  value={form.servicoPeriodico || ''}
-                                  onValueChange={(val) => {
-                                    handleFieldChange(cat.id, 'servicoPeriodico', val)
-                                    if (val !== 'Sim') {
-                                      handleFieldChange(cat.id, 'periodicidadeMeses', null)
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className="border-[#D3DFE9] text-xs h-9 bg-white">
-                                    <SelectValue placeholder="Selecione..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="Sim">Sim (periódico)</SelectItem>
-                                    <SelectItem value="Não">Não (eventual/único)</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              {/* Periodicidade em meses (Condicional: aparece quando servicoPeriodico === 'Sim') */}
-                              {form.servicoPeriodico === 'Sim' && (
-                                <div className="space-y-1.5 sm:col-span-2 p-3 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter">
-                                  <div className="flex items-center justify-between">
-                                    <Label
-                                      htmlFor={`period-meses-${cat.id}`}
-                                      className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
-                                    >
-                                      <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
-                                      De quantos em quantos meses esse serviço é realizado? (em
-                                      meses)
-                                    </Label>
-                                    <span className="text-[10px] text-[#486581] font-semibold bg-white px-2 py-0.5 rounded border border-[#D3DFE9]">
-                                      Informado nesta vistoria
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <Input
-                                      id={`period-meses-${cat.id}`}
-                                      type="number"
-                                      min={1}
-                                      max={120}
-                                      placeholder="Ex: 1 (mensal), 3 (trimestral), 6 (semestral), 12 (anual)..."
-                                      value={
-                                        form.periodicidadeMeses !== undefined &&
-                                        form.periodicidadeMeses !== null
-                                          ? form.periodicidadeMeses
-                                          : ''
-                                      }
-                                      onChange={(e) => {
-                                        const raw = e.target.value
-                                        const val = raw ? parseInt(raw, 10) : null
-                                        handleFieldChange(cat.id, 'periodicidadeMeses', val)
-                                      }}
-                                      className="border-[#D3DFE9] text-xs h-9 bg-white max-w-xs focus-visible:ring-[#004B8D]"
-                                    />
-                                    {form.periodicidadeMeses ? (
-                                      <span className="text-xs font-semibold text-[#004B8D]">
-                                        Realizado a cada {form.periodicidadeMeses}{' '}
-                                        {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              )}
                             </div>
 
-                            {/* Seção de Fotos (Até 3 por item) */}
-                            <div className="pt-3 border-t border-[#D3DFE9]">
-                              <PhotoUploadSection
-                                itemId={item?.id}
-                                existingPhotos={item?.fotos || []}
-                                pendingFiles={pending}
-                                onAddFiles={(files) => handleAddPendingPhotos(cat.id, files)}
-                                onRemovePendingFile={(index) =>
-                                  handleRemovePendingPhoto(cat.id, index)
-                                }
-                                onDeleteExistingPhoto={(filename) =>
-                                  handleDeleteExistingPhoto(cat.id, filename)
-                                }
-                              />
+                            {/* 1. Possui o serviço / sistema? */}
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-bold text-[#102A43]">
+                                O estabelecimento possui esta atividade / sistema?{' '}
+                                <span className="text-rose-600">*</span>
+                              </Label>
+                              <div className="flex items-center gap-2.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={form.possuiSistema === 'Sim' ? 'default' : 'outline'}
+                                  onClick={() => handleFieldChange(subKey, 'possuiSistema', 'Sim')}
+                                  className={`h-8 px-4 text-xs font-bold cursor-pointer ${
+                                    form.possuiSistema === 'Sim'
+                                      ? 'bg-[#004B8D] text-white'
+                                      : 'border-[#D3DFE9] text-[#486581]'
+                                  }`}
+                                >
+                                  Sim
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={form.possuiSistema === 'Não' ? 'default' : 'outline'}
+                                  onClick={() => handleFieldChange(subKey, 'possuiSistema', 'Não')}
+                                  className={`h-8 px-4 text-xs font-bold cursor-pointer ${
+                                    form.possuiSistema === 'Não'
+                                      ? 'bg-slate-700 text-white'
+                                      : 'border-[#D3DFE9] text-[#486581]'
+                                  }`}
+                                >
+                                  Não
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Conditional Form Fields if "Sim" */}
+                            {form.possuiSistema === 'Sim' && (
+                              <div className="p-4 rounded-xl bg-[#F4F6F9]/70 border border-[#D3DFE9] space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                  {/* Prestador do Serviço */}
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs font-bold text-[#102A43]">
+                                      Prestador do Serviço / Empresa Mantenedora
+                                    </Label>
+                                    <Input
+                                      placeholder="Ex: Empresa de Engenharia Ltda"
+                                      value={form.prestadorServico || ''}
+                                      onChange={(e) =>
+                                        handleFieldChange(
+                                          subKey,
+                                          'prestadorServico',
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="border-[#D3DFE9] bg-white text-xs h-9"
+                                    />
+                                  </div>
+
+                                  {/* Número da ART */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs font-bold text-[#102A43]">
+                                        Número da ART (CREA)
+                                      </Label>
+                                      {sub.exigeArt ? (
+                                        <span className="text-[10px] text-[#004B8D] font-bold bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20">
+                                          Exigida
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-[#627D98] bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                          Opcional
+                                        </span>
+                                      )}
+                                    </div>
+                                    <Input
+                                      placeholder="Ex: PI20240012345"
+                                      value={form.numeroArt || ''}
+                                      onChange={(e) =>
+                                        handleFieldChange(subKey, 'numeroArt', e.target.value)
+                                      }
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 font-mono"
+                                    />
+                                  </div>
+
+                                  {/* Data da Última Verificação */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs font-bold text-[#102A43]">
+                                        Data da Última Verificação / Manutenção
+                                      </Label>
+                                      {sub.periodicidadeDias && sub.periodicidadeDias > 0 && (
+                                        <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                          Periodicidade: {sub.periodicidadeDias}d
+                                        </span>
+                                      )}
+                                    </div>
+                                    <Input
+                                      type="date"
+                                      value={form.dataUltimaVerificacao || ''}
+                                      onChange={(e) =>
+                                        handleFieldChange(
+                                          subKey,
+                                          'dataUltimaVerificacao',
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="border-[#D3DFE9] bg-white text-xs h-9"
+                                    />
+                                  </div>
+
+                                  {/* Este serviço é feito periodicamente? */}
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs font-bold text-[#102A43]">
+                                      Este serviço é feito periodicamente?
+                                    </Label>
+                                    <Select
+                                      value={form.servicoPeriodico || ''}
+                                      onValueChange={(val) => {
+                                        handleFieldChange(subKey, 'servicoPeriodico', val)
+                                        if (val !== 'Sim') {
+                                          handleFieldChange(subKey, 'periodicidadeMeses', null)
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="border-[#D3DFE9] text-xs h-9 bg-white">
+                                        <SelectValue placeholder="Selecione..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Sim">Sim (periódico)</SelectItem>
+                                        <SelectItem value="Não">Não (eventual/único)</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  {/* Periodicidade em meses (Condicional) */}
+                                  {form.servicoPeriodico === 'Sim' && (
+                                    <div className="space-y-1.5 sm:col-span-2 p-3 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter">
+                                      <div className="flex items-center justify-between">
+                                        <Label
+                                          htmlFor={`period-meses-${subKey}`}
+                                          className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
+                                        >
+                                          <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
+                                          De quantos em quantos meses esse serviço é realizado? (em
+                                          meses)
+                                        </Label>
+                                        <span className="text-[10px] text-[#486581] font-semibold bg-white px-2 py-0.5 rounded border border-[#D3DFE9]">
+                                          Informado nesta vistoria
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <Input
+                                          id={`period-meses-${subKey}`}
+                                          type="number"
+                                          min={1}
+                                          max={120}
+                                          placeholder="Ex: 1 (mensal), 3 (trimestral), 6 (semestral), 12 (anual)..."
+                                          value={
+                                            form.periodicidadeMeses !== undefined &&
+                                            form.periodicidadeMeses !== null
+                                              ? form.periodicidadeMeses
+                                              : ''
+                                          }
+                                          onChange={(e) => {
+                                            const raw = e.target.value
+                                            const val = raw ? parseInt(raw, 10) : null
+                                            handleFieldChange(subKey, 'periodicidadeMeses', val)
+                                          }}
+                                          className="border-[#D3DFE9] text-xs h-9 bg-white max-w-xs focus-visible:ring-[#004B8D]"
+                                        />
+                                        {form.periodicidadeMeses ? (
+                                          <span className="text-xs font-semibold text-[#004B8D]">
+                                            Realizado a cada {form.periodicidadeMeses}{' '}
+                                            {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Seção de Fotos (Até 3 fotos com preview e remoção) */}
+                                <div className="pt-3 border-t border-[#D3DFE9]">
+                                  <PhotoUploadSection
+                                    itemId={item?.id}
+                                    existingPhotos={item?.fotos || []}
+                                    pendingFiles={pending}
+                                    onAddFiles={(files) => handleAddPendingPhotos(subKey, files)}
+                                    onRemovePendingFile={(index) =>
+                                      handleRemovePendingPhoto(subKey, index)
+                                    }
+                                    onDeleteExistingPhoto={(filename) =>
+                                      handleDeleteExistingPhoto(subKey, filename)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Subitem Save Action */}
+                            <div className="flex justify-end pt-1">
+                              <Button
+                                type="button"
+                                onClick={() => handleSaveSubitem(sub, cat)}
+                                disabled={isSaving}
+                                className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-8 px-4 gap-1.5 cursor-pointer shadow-xs"
+                              >
+                                {isSaving ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    Salvando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-3.5 h-3.5" />
+                                    Salvar Resposta do Subitem {subCode}
+                                  </>
+                                )}
+                              </Button>
                             </div>
                           </div>
-                        )}
-
-                        {/* Save Item Action Button */}
-                        <div className="flex justify-end pt-2">
-                          <Button
-                            type="button"
-                            onClick={() => handleSaveItem(cat)}
-                            disabled={isSaving}
-                            className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 px-4 gap-1.5 cursor-pointer shadow-xs"
-                          >
-                            {isSaving ? (
-                              <>
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                Salvando...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="w-3.5 h-3.5" />
-                                Salvar Respostas de {cat.nome}
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
+                        )
+                      })}
                     </AccordionContent>
                   </AccordionItem>
                 )
@@ -1022,7 +1195,7 @@ export default function VistoriaPage() {
               </h2>
               <p className="text-xs text-[#486581]">
                 Selecione uma vistoria aberta abaixo ou escolha uma unidade acima para iniciar o
-                checklist
+                checklist em dois níveis
               </p>
             </div>
 
@@ -1073,7 +1246,7 @@ export default function VistoriaPage() {
                   pendentesCount={0}
                   vencidosCount={0}
                   conformesCount={0}
-                  totalItensCount={relevantCategorias.length}
+                  totalItensCount={allRelevantSubitens.length}
                   onClick={() => {
                     if (vistoria.hospital) {
                       handleSelectHospital(vistoria.hospital)
