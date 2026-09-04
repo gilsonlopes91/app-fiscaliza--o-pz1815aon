@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T13:07:56.698Z",
+  "generatedAt": "2026-09-04T13:16:23.095Z",
   "collections": [
     {
       "name": "users",
@@ -387,6 +387,12 @@
         {
           "name": "fotoMetadata",
           "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dataUltimoServico",
+          "type": "date",
           "required": false,
           "system": false
         }

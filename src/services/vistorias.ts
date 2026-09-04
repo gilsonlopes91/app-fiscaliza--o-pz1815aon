@@ -2,7 +2,21 @@ import pb from '@/lib/pocketbase/client'
 import { Hospital } from './hospitais'
 import { CategoriaVistoria, SubitemChecklist } from './categoriasVistoria'
 
-export type SituacaoChecklist = 'não se aplica' | 'pendente' | 'vencido' | 'conforme' | null
+export type SituacaoChecklist =
+  | 'não se aplica'
+  | 'pendente'
+  | 'vencido'
+  | 'vencendo_em_breve'
+  | 'conforme'
+  | null
+
+export interface StatusVencimentoItem {
+  status: 'vencido' | 'vencendo_em_breve' | 'regular' | 'nao_aplicavel' | 'sem_data'
+  diasAteVencimento: number | null
+  diasVencido: number | null
+  dataVencimento: Date | null
+  dataVencimentoStr: string | null
+}
 
 export interface Vistoria {
   id: string
@@ -31,6 +45,7 @@ export interface VistoriaItem {
   numeroArt?: string
   fotos?: string[]
   dataUltimaVerificacao?: string | null
+  dataUltimoServico?: string | null
   situacaoCalculada?: SituacaoChecklist
   latitude?: number | null
   longitude?: number | null
@@ -58,6 +73,7 @@ export interface VistoriaItemFormData {
   numeroArt?: string
   fotos?: string[]
   dataUltimaVerificacao?: string | null
+  dataUltimoServico?: string | null
   latitude?: number | null
   longitude?: number | null
   dataCaptura?: string | null
@@ -80,13 +96,120 @@ export function getVistoriaItemPhotoUrl(
 }
 
 /**
+ * Normaliza uma data no formato YYYY-MM-DD para meia-noite local,
+ * evitando discrepâncias de fuso horário UTC na virada do dia.
+ */
+export function parseLocalDate(dateStr: string): Date | null {
+  if (!dateStr) return null
+  const clean = dateStr.split('T')[0]
+  const parts = clean.split('-')
+  if (parts.length !== 3) return null
+  const year = parseInt(parts[0], 10)
+  const month = parseInt(parts[1], 10) - 1
+  const day = parseInt(parts[2], 10)
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null
+  return new Date(year, month, day, 0, 0, 0, 0)
+}
+
+/**
+ * Calcula o vencimento exato de um subitem que possui periodicidade (em dias) e data do último serviço.
+ *
+ * Regra do usuário:
+ * - Data de vencimento = data do último serviço + periodicidade (em dias)
+ * - Vencido: já passou do prazo (dias até o vencimento < 0)
+ * - Vencendo em breve: faltam 30 dias ou menos para completar a periodicidade (0 <= diasAteVencimento <= 30)
+ * - Regular: faltam mais de 30 dias
+ */
+export function calcularVencimentoSubitem(
+  dataServicoStr: string | null | undefined,
+  periodicidadeDias: number | null | undefined,
+): StatusVencimentoItem {
+  if (!periodicidadeDias || periodicidadeDias <= 0) {
+    return {
+      status: 'nao_aplicavel',
+      diasAteVencimento: null,
+      diasVencido: null,
+      dataVencimento: null,
+      dataVencimentoStr: null,
+    }
+  }
+
+  if (!dataServicoStr) {
+    return {
+      status: 'sem_data',
+      diasAteVencimento: null,
+      diasVencido: null,
+      dataVencimento: null,
+      dataVencimentoStr: null,
+    }
+  }
+
+  const servicoDate = parseLocalDate(dataServicoStr)
+  if (!servicoDate || isNaN(servicoDate.getTime())) {
+    return {
+      status: 'sem_data',
+      diasAteVencimento: null,
+      diasVencido: null,
+      dataVencimento: null,
+      dataVencimentoStr: null,
+    }
+  }
+
+  // Data de vencimento = servicoDate + periodicidadeDias
+  const vencimentoDate = new Date(servicoDate.getTime() + periodicidadeDias * 24 * 60 * 60 * 1000)
+
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+
+  const diffMs = vencimentoDate.getTime() - hoje.getTime()
+  const diasAteVencimento = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+  const ano = vencimentoDate.getFullYear()
+  const mes = String(vencimentoDate.getMonth() + 1).padStart(2, '0')
+  const dia = String(vencimentoDate.getDate()).padStart(2, '0')
+  const dataVencimentoStr = `${dia}/${mes}/${ano}`
+
+  if (diasAteVencimento < 0) {
+    return {
+      status: 'vencido',
+      diasAteVencimento,
+      diasVencido: Math.abs(diasAteVencimento),
+      dataVencimento: vencimentoDate,
+      dataVencimentoStr,
+    }
+  }
+
+  if (diasAteVencimento <= 30) {
+    return {
+      status: 'vencendo_em_breve',
+      diasAteVencimento,
+      diasVencido: null,
+      dataVencimento: vencimentoDate,
+      dataVencimentoStr,
+    }
+  }
+
+  return {
+    status: 'regular',
+    diasAteVencimento,
+    diasVencido: null,
+    dataVencimento: vencimentoDate,
+    dataVencimentoStr,
+  }
+}
+
+/**
  * Calculates checklist subitem situation:
  * Precedência:
- * 1. "Não" -> "não se aplica"
+ * 1. "Não" ou "Não se aplica" -> "não se aplica"
  * 2. Se não respondeu possuiSistema ("Sim" ou "Não"), retorna null (não avaliado / pendente)
  * 3. Se possui ("Sim"):
- *    a. "vencido" - se o subitem (ou serviço periódico) tem periodicidade fixa e a data da última verificação expirou ou não foi preenchida
- *    b. "conforme" - preenchido e regular
+ *    a. Se subitem tem periodicidade fixa definida:
+ *       - Sem data de serviço: 'vencido' (pendente de documento ou fora de conformidade)
+ *       - Prazo expirado (diasAteVencimento < 0): 'vencido'
+ *       - Vencendo em breve (<= 30 dias): 'vencendo_em_breve'
+ *       - Regular (> 30 dias): 'conforme'
+ *    b. Se não exige periodicidade: 'conforme'
  */
 export function calculateItemSituacao(
   data: {
@@ -95,6 +218,7 @@ export function calculateItemSituacao(
     prestadorServico?: string
     numeroArt?: string
     dataUltimaVerificacao?: string | null
+    dataUltimoServico?: string | null
   },
   itemInfo: {
     exigeArt?: boolean
@@ -114,23 +238,22 @@ export function calculateItemSituacao(
   const periodicidadeExigida = Boolean(itemInfo.periodicidadeDias && itemInfo.periodicidadeDias > 0)
 
   if (periodicidadeExigida) {
-    if (!data.dataUltimaVerificacao) {
-      // Periodicidade exigida pelo item técnico mas data não informada
+    const dataServico = data.dataUltimoServico || data.dataUltimaVerificacao
+    if (!dataServico) {
       return 'vencido'
     }
 
-    const verificacaoDate = new Date(data.dataUltimaVerificacao)
-    if (isNaN(verificacaoDate.getTime())) {
+    const calc = calcularVencimentoSubitem(dataServico, itemInfo.periodicidadeDias)
+    if (calc.status === 'vencido') {
       return 'vencido'
     }
-
-    const today = new Date()
-    const diffMs = today.getTime() - verificacaoDate.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-    if (itemInfo.periodicidadeDias && diffDays > itemInfo.periodicidadeDias) {
+    if (calc.status === 'vencendo_em_breve') {
+      return 'vencendo_em_breve'
+    }
+    if (calc.status === 'sem_data') {
       return 'vencido'
     }
+    return 'conforme'
   }
 
   return 'conforme'
@@ -192,6 +315,16 @@ export const vistoriasService = {
     )
 
     return record
+  },
+
+  /**
+   * Get all checklist items across all vistorias (with expanded relations)
+   */
+  async getAllItens(): Promise<VistoriaItem[]> {
+    return await pb.collection('vistoria_itens').getFullList<VistoriaItem>({
+      sort: '-created',
+      expand: 'vistoria,vistoria.hospital,categoria,subitem,hospital',
+    })
   },
 
   /**
@@ -293,8 +426,13 @@ export const vistoriasService = {
         formData.prestadorServico ? formData.prestadorServico.trim() : '',
       )
       data.append('numeroArt', formData.numeroArt ? formData.numeroArt.trim() : '')
-      if (formData.dataUltimaVerificacao) {
-        data.append('dataUltimaVerificacao', formData.dataUltimaVerificacao)
+      const dateToSave = formData.dataUltimoServico || formData.dataUltimaVerificacao
+      if (dateToSave) {
+        data.append('dataUltimoServico', dateToSave)
+        data.append('dataUltimaVerificacao', dateToSave)
+      } else {
+        data.append('dataUltimoServico', '')
+        data.append('dataUltimaVerificacao', '')
       }
       if (situacao) {
         data.append('situacaoCalculada', situacao)
@@ -371,7 +509,8 @@ export const vistoriasService = {
           : null,
       prestadorServico: formData.prestadorServico ? formData.prestadorServico.trim() : '',
       numeroArt: formData.numeroArt ? formData.numeroArt.trim() : '',
-      dataUltimaVerificacao: formData.dataUltimaVerificacao || null,
+      dataUltimaVerificacao: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
+      dataUltimoServico: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       situacaoCalculada: situacao,
       latitude: formData.latitude !== undefined ? formData.latitude : null,
       longitude: formData.longitude !== undefined ? formData.longitude : null,

@@ -21,6 +21,7 @@ import {
   FileCheck2,
   Check,
   TrendingUp,
+  ClipboardList,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,11 +51,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { usersService, UserProfile } from '@/services/auth'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
-import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
-import { vistoriasService, Vistoria } from '@/services/vistorias'
+import {
+  categoriasVistoriaService,
+  CategoriaVistoria,
+  SubitemChecklist,
+} from '@/services/categoriasVistoria'
+import {
+  vistoriasService,
+  Vistoria,
+  VistoriaItem,
+  calcularVencimentoSubitem,
+} from '@/services/vistorias'
 import {
   atribuicoesService,
   Atribuicao,
@@ -75,9 +93,15 @@ export default function AdminDashboard() {
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [tipos, setTipos] = useState<TipoEmpreendimento[]>([])
   const [allCategorias, setAllCategorias] = useState<CategoriaVistoria[]>([])
+  const [allSubitens, setAllSubitens] = useState<SubitemChecklist[]>([])
   const [allVistorias, setAllVistorias] = useState<Vistoria[]>([])
+  const [allVistoriaItens, setAllVistoriaItens] = useState<VistoriaItem[]>([])
   const [atribuicoes, setAtribuicoes] = useState<Atribuicao[]>([])
   const [details, setDetails] = useState<AtribuicaoDetail[]>([])
+
+  // Modal de Itens com Vencimento
+  const [isVencimentoModalOpen, setIsVencimentoModalOpen] = useState(false)
+  const [vencimentoTab, setVencimentoTab] = useState<'todos' | 'vencidos' | 'vencendo'>('todos')
 
   // Filters & State
   const [selectedFiscalFiltro, setSelectedFiscalFiltro] = useState<string>('todos')
@@ -95,23 +119,34 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [usersList, hospList, tiposList, catList, atribList, vistoriasList] = await Promise.all(
-        [
-          usersService.getAll(),
-          hospitaisService.getAll(),
-          tiposEmpreendimentoService.getAll(),
-          categoriasVistoriaService.getAll(),
-          atribuicoesService.getAll(),
-          vistoriasService.getAll(),
-        ],
-      )
+      const [
+        usersList,
+        hospList,
+        tiposList,
+        catList,
+        subList,
+        atribList,
+        vistoriasList,
+        itensList,
+      ] = await Promise.all([
+        usersService.getAll(),
+        hospitaisService.getAll(),
+        tiposEmpreendimentoService.getAll(),
+        categoriasVistoriaService.getAll(),
+        categoriasVistoriaService.getAllSubitens(),
+        atribuicoesService.getAll(),
+        vistoriasService.getAll(),
+        vistoriasService.getAllItens(),
+      ])
 
       const approvedUsers = usersList.filter((u) => u.approved || u.approvalStatus === 'aprovado')
       setFiscais(approvedUsers)
       setHospitais(hospList)
       setTipos(tiposList)
       setAllCategorias(catList)
+      setAllSubitens(subList)
       setAllVistorias(vistoriasList)
+      setAllVistoriaItens(itensList)
       setAtribuicoes(atribList)
 
       // Compute details
@@ -136,6 +171,144 @@ export default function AdminDashboard() {
     document.title = 'Painel do Administrador · CREA-PI Fiscalização'
     loadData()
   }, [loadData])
+
+  // Estrutura detalhada de itens com alerta de vencimento em todos os empreendimentos
+  interface ItemAlertaVencimento {
+    itemId: string
+    vistoriaId: string
+    hospitalId: string
+    hospitalNome: string
+    hospitalTipo: string
+    hospitalMunicipio: string
+    hospitalCnes: string
+    subitemDescricao: string
+    subitemCodigo: string
+    categoriaNome: string
+    dataUltimoServicoStr: string
+    periodicidadeDias: number
+    status: 'vencido' | 'vencendo_em_breve'
+    diasAteVencimento: number | null
+    diasVencido: number | null
+    dataVencimentoStr: string | null
+    prestadorServico?: string
+    numeroArt?: string
+  }
+
+  // Agrupa e calcula vencimento para todos os subitens preenchidos
+  const { itensComAlerta, vencimentoStats } = useMemo(() => {
+    // Mapa de subitens por ID para consulta rápida
+    const subitensMap = new Map<string, SubitemChecklist>()
+    allSubitens.forEach((s) => subitensMap.set(s.id, s))
+
+    // Mapa de hospitais por ID
+    const hospitaisMap = new Map<string, Hospital>()
+    hospitais.forEach((h) => hospitaisMap.set(h.id, h))
+
+    // Mapa de vistorias por ID
+    const vistoriasMap = new Map<string, Vistoria>()
+    allVistorias.forEach((v) => vistoriasMap.set(v.id, v))
+
+    // Mapa de categorias por ID
+    const categoriasMap = new Map<string, CategoriaVistoria>()
+    allCategorias.forEach((c) => categoriasMap.set(c.id, c))
+
+    const list: ItemAlertaVencimento[] = []
+    let vencidos = 0
+    let vencendo = 0
+
+    allVistoriaItens.forEach((item) => {
+      // Ignora itens onde o hospital marcou "Não" ou "Não se aplica"
+      if (item.possuiSistema === 'Não' || item.possuiSistema === 'Não se aplica') {
+        return
+      }
+
+      // Procura subitem correspondente
+      const sub = item.subitem ? subitensMap.get(item.subitem) : null
+      const cat = item.categoria ? categoriasMap.get(item.categoria) : null
+
+      // Periodicidade em dias (do subitem ou herdada da categoria)
+      const periodicidade =
+        sub?.periodicidadeDias && sub.periodicidadeDias > 0
+          ? sub.periodicidadeDias
+          : cat?.periodicidadeDias && cat.periodicidadeDias > 0
+            ? cat.periodicidadeDias
+            : 0
+
+      if (periodicidade <= 0) {
+        return
+      }
+
+      const dataServico = item.dataUltimoServico || item.dataUltimaVerificacao
+      if (!dataServico) {
+        return
+      }
+
+      const calc = calcularVencimentoSubitem(dataServico, periodicidade)
+      if (calc.status === 'vencido' || calc.status === 'vencendo_em_breve') {
+        // Obter dados do hospital
+        const vistoria = item.vistoria ? vistoriasMap.get(item.vistoria) : null
+        const hospId = item.hospital || vistoria?.hospital || ''
+        const hosp = hospId ? hospitaisMap.get(hospId) : null
+
+        const rawDate = dataServico.split('T')[0]
+        const [y, m, d] = rawDate.split('-')
+        const dataFormatada = y && m && d ? `${d}/${m}/${y}` : rawDate
+
+        if (calc.status === 'vencido') vencidos++
+        if (calc.status === 'vencendo_em_breve') vencendo++
+
+        list.push({
+          itemId: item.id,
+          vistoriaId: item.vistoria || '',
+          hospitalId: hospId,
+          hospitalNome: hosp?.nome || 'Estabelecimento sem nome',
+          hospitalTipo: hosp?.tipo || 'Hospital',
+          hospitalMunicipio: hosp?.municipio || 'PI',
+          hospitalCnes: hosp?.cnes || '',
+          subitemDescricao: sub?.descricao || cat?.nome || 'Subitem do checklist',
+          subitemCodigo: sub?.codigo || '',
+          categoriaNome: cat?.nome || '',
+          dataUltimoServicoStr: dataFormatada,
+          periodicidadeDias: periodicidade,
+          status: calc.status,
+          diasAteVencimento: calc.diasAteVencimento,
+          diasVencido: calc.diasVencido,
+          dataVencimentoStr: calc.dataVencimentoStr,
+          prestadorServico: item.prestadorServico,
+          numeroArt: item.numeroArt,
+        })
+      }
+    })
+
+    // Ordenar: primeiro os mais vencidos (maior atraso), depois os mais próximos do vencimento
+    list.sort((a, b) => {
+      if (a.status === 'vencido' && b.status !== 'vencido') return -1
+      if (a.status !== 'vencido' && b.status === 'vencido') return 1
+      const diasA = a.diasAteVencimento ?? 0
+      const diasB = b.diasAteVencimento ?? 0
+      return diasA - diasB
+    })
+
+    return {
+      itensComAlerta: list,
+      vencimentoStats: {
+        totalAlertas: vencidos + vencendo,
+        vencidosCount: vencidos,
+        vencendoEmBreveCount: vencendo,
+      },
+    }
+  }, [allVistoriaItens, allSubitens, allCategorias, allVistorias, hospitais])
+
+  // Itens filtrados para o modal de vencimentos
+  const modalFilteredItens = useMemo(() => {
+    if (vencimentoTab === 'vencidos') {
+      return itensComAlerta.filter((i) => i.status === 'vencido')
+    }
+    if (vencimentoTab === 'vencendo') {
+      return itensComAlerta.filter((i) => i.status === 'vencendo_em_breve')
+    }
+    return itensComAlerta
+  }, [itensComAlerta, vencimentoTab])
 
   // Overall statistics (unindo atribuições e status global das vistorias registradas)
   const stats = useMemo(() => {
@@ -290,67 +463,130 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* 2. Cards de Métricas Gerais do Administrador (Vistorias Em Andamento / Concluídas e Atribuições) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. Cards de Métricas Gerais do Administrador (Vistorias Em Andamento / Concluídas, Alerta de Vencimentos e Atribuições) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* Total Vistorias */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#D3DFE9] shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-[#486581] uppercase tracking-wider">
+            <span>Total Vistorias</span>
+            <ClipboardList className="w-4 h-4 text-[#004B8D]" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-[#102A43]">
+              {stats.totalVistoriasRegistradas}
+            </span>
+            <span className="text-xs font-semibold text-[#627D98]">registradas</span>
+          </div>
+          <div className="text-[11px] text-[#627D98]">
+            {stats.totalEmpreendimentos} unidades cadastradas
+          </div>
+        </div>
+
         {/* Vistorias em Andamento */}
-        <div className="bg-white p-5 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-xs space-y-2">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-amber-800 uppercase tracking-wider">
-            <span>Vistorias em Andamento</span>
+            <span>Em Andamento</span>
             <Clock className="w-4 h-4 text-amber-600" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-amber-900">
+            <span className="text-2xl sm:text-3xl font-extrabold text-amber-900">
               {stats.vistoriasEmAndamentoCount}
             </span>
             <span className="text-xs font-semibold text-amber-700">em campo</span>
           </div>
-          <div className="text-[11px] text-[#627D98]">Checklists abertos para preenchimento</div>
+          <div className="text-[11px] text-[#627D98]">Checklists abertos</div>
         </div>
 
         {/* Vistorias Concluídas */}
-        <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2">
+        <div className="bg-emerald-50/70 p-4 sm:p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-emerald-800 uppercase tracking-wider">
-            <span>Vistorias Concluídas</span>
+            <span>Concluídas</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-emerald-900">
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-900">
               {stats.vistoriasConcluidasCount}
             </span>
-            <span className="text-xs font-bold text-emerald-700">
-              de {stats.totalVistoriasRegistradas} vistorias
-            </span>
+            <span className="text-xs font-bold text-emerald-700">finalizadas</span>
           </div>
-          <div className="text-[11px] text-emerald-700">Finalizadas e travadas</div>
+          <div className="text-[11px] text-emerald-700">Checklists travados</div>
         </div>
 
-        {/* Total Atribuições */}
-        <div className="bg-white p-5 rounded-2xl border border-[#D3DFE9] shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-[#486581] uppercase tracking-wider">
-            <span>Total Atribuído</span>
-            <Building2 className="w-4 h-4 text-[#004B8D]" />
+        {/* NOVO CARD: Alerta de Vencimento de Serviços (Clicável) */}
+        <button
+          type="button"
+          onClick={() => {
+            setVencimentoTab('todos')
+            setIsVencimentoModalOpen(true)
+          }}
+          className={`text-left p-4 sm:p-5 rounded-2xl border shadow-xs space-y-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.99] ${
+            vencimentoStats.totalAlertas > 0
+              ? vencimentoStats.vencidosCount > 0
+                ? 'bg-rose-50/80 border-rose-300 hover:border-rose-400 hover:shadow-md'
+                : 'bg-amber-50/80 border-amber-300 hover:border-amber-400 hover:shadow-md'
+              : 'bg-white border-[#D3DFE9] hover:border-[#004B8D]/40'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+            <span
+              className={
+                vencimentoStats.vencidosCount > 0
+                  ? 'text-rose-800'
+                  : vencimentoStats.vencendoEmBreveCount > 0
+                    ? 'text-amber-800'
+                    : 'text-[#486581]'
+              }
+            >
+              Alerta Prazos
+            </span>
+            <AlertTriangle
+              className={`w-4 h-4 ${
+                vencimentoStats.vencidosCount > 0
+                  ? 'text-rose-600 animate-pulse'
+                  : vencimentoStats.vencendoEmBreveCount > 0
+                    ? 'text-amber-600'
+                    : 'text-[#627D98]'
+              }`}
+            />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-[#102A43]">{stats.totalAtribuicoes}</span>
-            <span className="text-xs text-[#627D98]">unidades</span>
+            <span
+              className={`text-2xl sm:text-3xl font-extrabold ${
+                vencimentoStats.vencidosCount > 0
+                  ? 'text-rose-900'
+                  : vencimentoStats.vencendoEmBreveCount > 0
+                    ? 'text-amber-900'
+                    : 'text-[#102A43]'
+              }`}
+            >
+              {vencimentoStats.totalAlertas}
+            </span>
+            <span className="text-xs font-bold text-[#627D98]">itens</span>
           </div>
-          <div className="text-[11px] text-[#627D98]">
-            Distribuídas em {stats.fiscaisComAtribuicaoCount} fiscal(is)
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+              {vencimentoStats.vencidosCount} vencido(s)
+            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+              {vencimentoStats.vencendoEmBreveCount} a vencer
+            </span>
           </div>
-        </div>
+        </button>
 
         {/* Fiscais na Equipe */}
-        <div className="bg-[#E8F1F8]/80 p-5 rounded-2xl border border-[#004B8D]/20 shadow-xs space-y-2">
+        <div className="col-span-2 md:col-span-1 bg-[#E8F1F8]/80 p-4 sm:p-5 rounded-2xl border border-[#004B8D]/20 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-[#004B8D] uppercase tracking-wider">
             <span>Equipe Técnica</span>
             <Users className="w-4 h-4 text-[#004B8D]" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-[#004B8D]">{stats.totalFiscais}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-[#004B8D]">
+              {stats.totalFiscais}
+            </span>
             <span className="text-xs text-[#004B8D]/80">fiscais</span>
           </div>
           <div className="text-[11px] text-[#004B8D]/80">
-            {stats.totalEmpreendimentos} unidades cadastradas
+            {stats.totalAtribuicoes} unidades atribuídas
           </div>
         </div>
       </div>
@@ -762,6 +998,224 @@ export default function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal / Dialog de Alerta de Vencimento de Prazos */}
+      <Dialog open={isVencimentoModalOpen} onOpenChange={setIsVencimentoModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border-[#D3DFE9]">
+          <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-slate-50/50">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1">
+                <DialogTitle className="text-lg font-bold text-[#102A43] flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  Prazos e Vencimentos de Serviços ({vencimentoStats.totalAlertas})
+                </DialogTitle>
+                <DialogDescription className="text-xs text-[#486581]">
+                  Subitens de checklist com periodicidade definida que estão vencidos ou vencendo em
+                  até 30 dias nos estabelecimentos fiscalizados.
+                </DialogDescription>
+              </div>
+            </div>
+
+            {/* Abas de filtro: Todos / Vencidos / Vencendo */}
+            <div className="flex items-center gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setVencimentoTab('todos')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  vencimentoTab === 'todos'
+                    ? 'bg-[#004B8D] text-white shadow-xs'
+                    : 'bg-white text-[#486581] hover:bg-slate-100 border border-[#D3DFE9]'
+                }`}
+              >
+                Todos ({vencimentoStats.totalAlertas})
+              </button>
+              <button
+                type="button"
+                onClick={() => setVencimentoTab('vencidos')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  vencimentoTab === 'vencidos'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-600" />
+                Vencidos ({vencimentoStats.vencidosCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setVencimentoTab('vencendo')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  vencimentoTab === 'vencendo'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-600" />
+                Vencendo em breve ({vencimentoStats.vencendoEmBreveCount})
+              </button>
+            </div>
+          </DialogHeader>
+
+          {/* Lista de Itens com Scroll */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            {modalFilteredItens.length === 0 ? (
+              <div className="p-10 text-center space-y-2">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                <h4 className="text-sm font-bold text-[#102A43]">
+                  Nenhum item com prazo pendente neste filtro!
+                </h4>
+                <p className="text-xs text-[#627D98] max-w-sm mx-auto">
+                  Todos os serviços com periodicidade informada estão regulares ou não foram
+                  preenchidos com data expirada.
+                </p>
+              </div>
+            ) : (
+              modalFilteredItens.map((alerta) => (
+                <div
+                  key={alerta.itemId}
+                  className={`p-4 rounded-xl border transition-all space-y-2.5 ${
+                    alerta.status === 'vencido'
+                      ? 'bg-rose-50/40 border-rose-200 hover:border-rose-300'
+                      : 'bg-amber-50/40 border-amber-200 hover:border-amber-300'
+                  }`}
+                >
+                  {/* Linha Superior: Estabelecimento e Tag de Vencimento */}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 border-b border-[#D3DFE9]/60 pb-2.5">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-[#004B8D] shrink-0" />
+                        <h4 className="font-bold text-sm text-[#102A43]">{alerta.hospitalNome}</h4>
+                        <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold">
+                          {alerta.hospitalTipo}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-[#627D98]">
+                        Município:{' '}
+                        <strong className="text-[#102A43]">{alerta.hospitalMunicipio}</strong> •
+                        CNES: {alerta.hospitalCnes || '—'}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 self-start sm:self-auto">
+                      {alerta.status === 'vencido' ? (
+                        <Badge className="bg-rose-600 text-white font-bold text-xs gap-1 shadow-2xs">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Vencido há {alerta.diasVencido}{' '}
+                          {alerta.diasVencido === 1 ? 'dia' : 'dias'}
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-amber-600 text-white font-bold text-xs gap-1 shadow-2xs">
+                          <Clock className="w-3.5 h-3.5" />
+                          Vence em {alerta.diasAteVencimento}{' '}
+                          {alerta.diasAteVencimento === 1 ? 'dia' : 'dias'}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Detalhes do Subitem */}
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-baseline gap-2">
+                      {alerta.subitemCodigo && (
+                        <span className="font-mono font-bold text-[#004B8D] bg-white px-2 py-0.5 rounded border border-[#004B8D]/20 shrink-0">
+                          {alerta.subitemCodigo}
+                        </span>
+                      )}
+                      <span className="font-semibold text-[#102A43] leading-snug">
+                        {alerta.subitemDescricao}
+                      </span>
+                    </div>
+
+                    {alerta.categoriaNome && (
+                      <p className="text-[11px] text-[#627D98]">
+                        Grupo / Categoria: <strong>{alerta.categoriaNome}</strong>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Informações da Data e Prazo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs bg-white p-2.5 rounded-lg border border-[#D3DFE9]/80">
+                    <div>
+                      <span className="text-[10px] text-[#627D98] block">
+                        Data do Último Serviço:
+                      </span>
+                      <strong className="text-[#102A43] flex items-center gap-1 font-mono">
+                        <Calendar className="w-3 h-3 text-[#004B8D]" />
+                        {alerta.dataUltimoServicoStr}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-[#627D98] block">
+                        Periodicidade Definida:
+                      </span>
+                      <strong className="text-[#102A43]">{alerta.periodicidadeDias} dias</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-[#627D98] block">
+                        Data Limite de Validade:
+                      </span>
+                      <strong
+                        className={`font-mono ${
+                          alerta.status === 'vencido' ? 'text-rose-700' : 'text-amber-800'
+                        }`}
+                      >
+                        {alerta.dataVencimentoStr}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Botão de Ação: Abrir Checklist da Vistoria */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-[11px] text-[#627D98] truncate max-w-sm">
+                      {alerta.prestadorServico && (
+                        <span>
+                          Prestador: <strong>{alerta.prestadorServico}</strong>
+                        </span>
+                      )}
+                      {alerta.numeroArt && (
+                        <span className="ml-2 font-mono">ART: {alerta.numeroArt}</span>
+                      )}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsVencimentoModalOpen(false)
+                        navigate(
+                          `/vistoria?hospitalId=${alerta.hospitalId}${
+                            alerta.vistoriaId ? `&vistoriaId=${alerta.vistoriaId}` : ''
+                          }`,
+                        )
+                      }}
+                      className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs h-7 px-3 font-semibold cursor-pointer gap-1 shrink-0 ml-2"
+                    >
+                      <ClipboardCheck className="w-3 h-3" />
+                      Ver no Checklist
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter className="p-4 border-t border-[#D3DFE9] bg-slate-50/50 flex sm:justify-between items-center">
+            <span className="text-xs text-[#627D98]">
+              {vencimentoStats.vencidosCount} vencido(s) • {vencimentoStats.vencendoEmBreveCount}{' '}
+              vencendo em ≤ 30 dias
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsVencimentoModalOpen(false)}
+              className="border-[#D3DFE9] text-[#486581] cursor-pointer"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
