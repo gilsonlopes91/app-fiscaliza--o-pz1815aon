@@ -498,7 +498,7 @@ export const vistoriasService = {
         formData.prestadorServico ? formData.prestadorServico.trim() : '',
       )
       data.append('numeroArt', formData.numeroArt ? formData.numeroArt.trim() : '')
-      if (formData.servicoPeriodico === 'Sim' && formData.dataUltimaArt) {
+      if (formData.dataUltimaArt) {
         data.append('dataUltimaArt', formData.dataUltimaArt)
       } else {
         data.append('dataUltimaArt', '')
@@ -587,10 +587,7 @@ export const vistoriasService = {
           : null,
       prestadorServico: formData.prestadorServico ? formData.prestadorServico.trim() : '',
       numeroArt: formData.numeroArt ? formData.numeroArt.trim() : '',
-      dataUltimaArt:
-        formData.servicoPeriodico === 'Sim' && formData.dataUltimaArt
-          ? formData.dataUltimaArt
-          : null,
+      dataUltimaArt: formData.dataUltimaArt || null,
       dataUltimaVerificacao: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       dataUltimoServico: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       situacaoCalculada: situacao,

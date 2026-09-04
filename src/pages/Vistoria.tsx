@@ -510,20 +510,6 @@ export default function VistoriaPage() {
         }
       }
 
-      // Se marcou regularização como "Não", limpa os campos técnicos condicionais
-      if (field === 'atividadeRegularizada' && value === 'Não') {
-        updated = {
-          ...updated,
-          prestadorServico: '',
-          numeroArt: '',
-          dataUltimaArt: '',
-          dataUltimaVerificacao: '',
-          dataUltimoServico: '',
-          servicoPeriodico: '',
-          periodicidadeMeses: null,
-        }
-      }
-
       // Sincroniza dataUltimoServico com dataUltimaVerificacao para retrocompatibilidade total
       if (field === 'dataUltimoServico') {
         updated = {
@@ -1874,379 +1860,386 @@ export default function VistoriaPage() {
                               </div>
                             )}
 
-                            {/* Conditional Form Fields if "Sim" no possuiSistema E (atividadeRegularizada === 'Sim' ou vazio para dados existentes) */}
+                            {/* Alerta quando atividadeRegularizada for "Não" */}
                             {form.possuiSistema === 'Sim' &&
-                              form.atividadeRegularizada !== 'Não' && (
-                                <div className="p-4 rounded-xl bg-[#F4F6F9]/70 border border-[#D3DFE9] space-y-4">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                    {/* Prestador do Serviço */}
-                                    <div className="space-y-1.5">
-                                      <Label className="text-xs font-bold text-[#102A43]">
-                                        Prestador do Serviço / Empresa Mantenedora
-                                      </Label>
-                                      <Input
-                                        placeholder="Ex: Empresa de Engenharia Ltda"
-                                        disabled={isVistoriaConcluida}
-                                        value={form.prestadorServico || ''}
-                                        onChange={(e) =>
-                                          handleFieldChange(
-                                            subKey,
-                                            'prestadorServico',
-                                            e.target.value,
-                                            sub,
-                                            cat,
-                                          )
-                                        }
-                                        className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
-                                      />
-                                    </div>
-
-                                    {/* Número da ART */}
-                                    <div className="space-y-1.5">
-                                      <div className="flex items-center justify-between">
-                                        <Label className="text-xs font-bold text-[#102A43]">
-                                          Número da ART (CREA)
-                                        </Label>
-                                        {sub.exigeArt ? (
-                                          <span className="text-[10px] text-[#004B8D] font-bold bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20">
-                                            Exigida
-                                          </span>
-                                        ) : (
-                                          <span className="text-[10px] text-[#627D98] bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
-                                            Opcional
-                                          </span>
-                                        )}
-                                      </div>
-                                      <Input
-                                        placeholder="Ex: PI20240012345"
-                                        disabled={isVistoriaConcluida}
-                                        value={form.numeroArt || ''}
-                                        onChange={(e) =>
-                                          handleFieldChange(
-                                            subKey,
-                                            'numeroArt',
-                                            e.target.value,
-                                            sub,
-                                            cat,
-                                          )
-                                        }
-                                        className="border-[#D3DFE9] bg-white text-xs h-9 font-mono disabled:bg-slate-100 disabled:opacity-80"
-                                      />
-                                    </div>
-
-                                    {/* Data do último serviço (Apenas quando o subitem tiver Periodicidade definida) */}
-                                    {sub.periodicidadeDias && sub.periodicidadeDias > 0 ? (
-                                      <div className="space-y-1.5">
-                                        <div className="flex items-center justify-between">
-                                          <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1">
-                                            <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
-                                            Data do último serviço{' '}
-                                            <span className="text-rose-600">*</span>
-                                          </Label>
-                                          <span className="text-[10px] text-[#004B8D] font-bold bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20">
-                                            Periodicidade: {sub.periodicidadeDias} dias
-                                          </span>
-                                        </div>
-                                        <Input
-                                          type="date"
-                                          disabled={isVistoriaConcluida}
-                                          value={
-                                            form.dataUltimoServico ||
-                                            form.dataUltimaVerificacao ||
-                                            ''
-                                          }
-                                          onChange={(e) => {
-                                            handleFieldChange(
-                                              subKey,
-                                              'dataUltimoServico',
-                                              e.target.value,
-                                              sub,
-                                              cat,
-                                            )
-                                          }}
-                                          className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
-                                        />
-                                        {/* Informações detalhadas de vencimento calculado */}
-                                        {(() => {
-                                          const dateVal =
-                                            form.dataUltimoServico || form.dataUltimaVerificacao
-                                          if (!dateVal) {
-                                            return (
-                                              <p className="text-[11px] text-amber-700 bg-amber-50/70 p-1.5 rounded border border-amber-200">
-                                                Informe a data em que o serviço foi realizado
-                                                conforme laudo/documento para calcular a validade.
-                                              </p>
-                                            )
-                                          }
-                                          const calc = calcularVencimentoSubitem(
-                                            dateVal,
-                                            sub.periodicidadeDias,
-                                          )
-                                          if (calc.status === 'vencido') {
-                                            return (
-                                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-1.5 rounded border border-rose-200">
-                                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                                <span>
-                                                  Vencido há {calc.diasVencido}{' '}
-                                                  {calc.diasVencido === 1 ? 'dia' : 'dias'} (expirou
-                                                  em {calc.dataVencimentoStr})
-                                                </span>
-                                              </div>
-                                            )
-                                          }
-                                          if (calc.status === 'vencendo_em_breve') {
-                                            return (
-                                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-1.5 rounded border border-amber-200">
-                                                <Clock className="w-3.5 h-3.5 shrink-0" />
-                                                <span>
-                                                  Vencendo em breve: restam {calc.diasAteVencimento}{' '}
-                                                  {calc.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
-                                                  (vence em {calc.dataVencimentoStr})
-                                                </span>
-                                              </div>
-                                            )
-                                          }
-                                          return (
-                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200">
-                                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                              <span>
-                                                Válido até {calc.dataVencimentoStr} (faltam{' '}
-                                                {calc.diasAteVencimento} dias)
-                                              </span>
-                                            </div>
-                                          )
-                                        })()}
-                                      </div>
-                                    ) : null}
-
-                                    {/* Este serviço é feito periodicamente? */}
-                                    <div className="space-y-1.5">
-                                      <Label className="text-xs font-bold text-[#102A43]">
-                                        Este serviço é feito periodicamente?
-                                      </Label>
-                                      <Select
-                                        disabled={isVistoriaConcluida}
-                                        value={form.servicoPeriodico || ''}
-                                        onValueChange={(val) => {
-                                          handleFieldChange(
-                                            subKey,
-                                            'servicoPeriodico',
-                                            val,
-                                            sub,
-                                            cat,
-                                          )
-                                          if (val !== 'Sim') {
-                                            handleFieldChange(
-                                              subKey,
-                                              'periodicidadeMeses',
-                                              null,
-                                              sub,
-                                              cat,
-                                            )
-                                            handleFieldChange(subKey, 'dataUltimaArt', '', sub, cat)
-                                          }
-                                        }}
-                                      >
-                                        <SelectTrigger className="border-[#D3DFE9] text-xs h-9 bg-white">
-                                          <SelectValue placeholder="Selecione..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="Sim">Sim (periódico)</SelectItem>
-                                          <SelectItem value="Não">Não (eventual/único)</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-
-                                    {/* Periodicidade em meses e Data da última ART (Condicionais a "Sim (periódico)") */}
-                                    {form.servicoPeriodico === 'Sim' && (
-                                      <div className="sm:col-span-2 p-3.5 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter space-y-3.5">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                          {/* De quantos em quantos meses esse serviço é realizado? */}
-                                          <div className="space-y-1.5">
-                                            <div className="flex items-center justify-between">
-                                              <Label
-                                                htmlFor={`period-meses-${subKey}`}
-                                                className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
-                                              >
-                                                <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
-                                                De quantos em quantos meses esse serviço é
-                                                realizado?
-                                              </Label>
-                                              <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
-                                                (em meses)
-                                              </span>
-                                            </div>
-                                            <Input
-                                              id={`period-meses-${subKey}`}
-                                              type="number"
-                                              disabled={isVistoriaConcluida}
-                                              min={1}
-                                              max={120}
-                                              placeholder="Ex: 1, 3, 6, 12..."
-                                              value={
-                                                form.periodicidadeMeses !== undefined &&
-                                                form.periodicidadeMeses !== null
-                                                  ? form.periodicidadeMeses
-                                                  : ''
-                                              }
-                                              onChange={(e) => {
-                                                const raw = e.target.value
-                                                const val = raw ? parseInt(raw, 10) : null
-                                                handleFieldChange(
-                                                  subKey,
-                                                  'periodicidadeMeses',
-                                                  val,
-                                                  sub,
-                                                  cat,
-                                                )
-                                              }}
-                                              className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
-                                            />
-                                            {form.periodicidadeMeses ? (
-                                              <p className="text-[11px] font-semibold text-[#004B8D]">
-                                                Realizado a cada {form.periodicidadeMeses}{' '}
-                                                {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
-                                              </p>
-                                            ) : null}
-                                          </div>
-
-                                          {/* Data da última ART */}
-                                          <div className="space-y-1.5">
-                                            <div className="flex items-center justify-between">
-                                              <Label
-                                                htmlFor={`data-art-${subKey}`}
-                                                className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
-                                              >
-                                                <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
-                                                Data da última ART
-                                              </Label>
-                                              <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
-                                                Conforme ART
-                                              </span>
-                                            </div>
-                                            <Input
-                                              id={`data-art-${subKey}`}
-                                              type="date"
-                                              disabled={isVistoriaConcluida}
-                                              value={form.dataUltimaArt || ''}
-                                              onChange={(e) => {
-                                                handleFieldChange(
-                                                  subKey,
-                                                  'dataUltimaArt',
-                                                  e.target.value,
-                                                  sub,
-                                                  cat,
-                                                )
-                                              }}
-                                              className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
-                                            />
-                                            {form.dataUltimaArt && (
-                                              <p className="text-[11px] text-[#486581]">
-                                                Data informada da ART para cálculo de validade.
-                                              </p>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        {/* Alerta / Indicador de validade calculado a partir da ART e periodicidade em meses */}
-                                        {(() => {
-                                          if (!form.dataUltimaArt && !form.periodicidadeMeses) {
-                                            return null
-                                          }
-                                          if (
-                                            form.dataUltimaArt &&
-                                            (!form.periodicidadeMeses ||
-                                              form.periodicidadeMeses <= 0)
-                                          ) {
-                                            return (
-                                              <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
-                                                Informe de quantos em quantos meses o serviço é
-                                                realizado para calcular o vencimento da ART.
-                                              </p>
-                                            )
-                                          }
-                                          if (
-                                            !form.dataUltimaArt &&
-                                            form.periodicidadeMeses &&
-                                            form.periodicidadeMeses > 0
-                                          ) {
-                                            return (
-                                              <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
-                                                Informe a <strong>Data da última ART</strong> para
-                                                calcular a vigência do serviço.
-                                              </p>
-                                            )
-                                          }
-                                          const calcArt = calcularVencimentoSubitem(
-                                            form.dataUltimoServico || form.dataUltimaVerificacao,
-                                            sub.periodicidadeDias,
-                                            {
-                                              periodicidadeMeses: form.periodicidadeMeses,
-                                              dataUltimaArt: form.dataUltimaArt,
-                                            },
-                                          )
-                                          if (calcArt.status === 'vencido') {
-                                            return (
-                                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-2 rounded border border-rose-200">
-                                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                                <span>
-                                                  ART vencida há {calcArt.diasVencido}{' '}
-                                                  {calcArt.diasVencido === 1 ? 'dia' : 'dias'}{' '}
-                                                  (expirou em {calcArt.dataVencimentoStr})
-                                                </span>
-                                              </div>
-                                            )
-                                          }
-                                          if (calcArt.status === 'vencendo_em_breve') {
-                                            return (
-                                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
-                                                <Clock className="w-3.5 h-3.5 shrink-0" />
-                                                <span>
-                                                  ART vencendo em breve: restam{' '}
-                                                  {calcArt.diasAteVencimento}{' '}
-                                                  {calcArt.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
-                                                  (vence em {calcArt.dataVencimentoStr})
-                                                </span>
-                                              </div>
-                                            )
-                                          }
-                                          return (
-                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
-                                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                              <span>
-                                                ART válida até {calcArt.dataVencimentoStr} (faltam{' '}
-                                                {calcArt.diasAteVencimento} dias)
-                                              </span>
-                                            </div>
-                                          )
-                                        })()}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Seção de Fotos (Até 3 fotos com preview e remoção) */}
-                                  <div className="pt-3 border-t border-[#D3DFE9]">
-                                    <PhotoUploadSection
-                                      itemId={item?.id}
-                                      subitemCode={subCode}
-                                      disabled={isVistoriaConcluida}
-                                      existingPhotos={item?.fotos || []}
-                                      pendingFiles={pending}
-                                      onAddFiles={(files, metaList) =>
-                                        handleAddPendingPhotos(subKey, files, metaList)
-                                      }
-                                      onRemovePendingFile={(index) =>
-                                        !isVistoriaConcluida &&
-                                        handleRemovePendingPhoto(subKey, index)
-                                      }
-                                      onDeleteExistingPhoto={(filename) =>
-                                        !isVistoriaConcluida &&
-                                        handleDeleteExistingPhoto(subKey, filename)
-                                      }
-                                    />
+                              form.atividadeRegularizada === 'Não' && (
+                                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 animate-page-enter">
+                                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                  <div className="text-xs space-y-0.5">
+                                    <p className="font-semibold text-amber-950">
+                                      Atividade não regularizada (marcada como Não conforme)
+                                    </p>
+                                    <p className="text-amber-800 leading-relaxed">
+                                      Preencha abaixo os dados técnicos disponíveis (prestador do
+                                      serviço contratado, ART, periodicidade e fotos), mesmo que a
+                                      ART esteja ausente ou vencida.
+                                    </p>
                                   </div>
                                 </div>
                               )}
+
+                            {/* Campos técnicos quando o estabelecimento possui a atividade / sistema */}
+                            {form.possuiSistema === 'Sim' && (
+                              <div className="p-4 rounded-xl bg-[#F4F6F9]/70 border border-[#D3DFE9] space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                  {/* Prestador do Serviço */}
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs font-bold text-[#102A43]">
+                                      Prestador do Serviço / Empresa Mantenedora
+                                    </Label>
+                                    <Input
+                                      placeholder="Ex: Empresa de Engenharia Ltda"
+                                      disabled={isVistoriaConcluida}
+                                      value={form.prestadorServico || ''}
+                                      onChange={(e) =>
+                                        handleFieldChange(
+                                          subKey,
+                                          'prestadorServico',
+                                          e.target.value,
+                                          sub,
+                                          cat,
+                                        )
+                                      }
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
+                                    />
+                                  </div>
+
+                                  {/* Número da ART */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs font-bold text-[#102A43]">
+                                        Número da ART (CREA)
+                                      </Label>
+                                      {sub.exigeArt ? (
+                                        <span className="text-[10px] text-[#004B8D] font-bold bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20">
+                                          Exigida
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-[#627D98] bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                          Opcional
+                                        </span>
+                                      )}
+                                    </div>
+                                    <Input
+                                      placeholder="Ex: PI20240012345"
+                                      disabled={isVistoriaConcluida}
+                                      value={form.numeroArt || ''}
+                                      onChange={(e) =>
+                                        handleFieldChange(
+                                          subKey,
+                                          'numeroArt',
+                                          e.target.value,
+                                          sub,
+                                          cat,
+                                        )
+                                      }
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 font-mono disabled:bg-slate-100 disabled:opacity-80"
+                                    />
+                                  </div>
+
+                                  {/* Data do último serviço (Apenas quando o subitem tiver Periodicidade definida) */}
+                                  {sub.periodicidadeDias && sub.periodicidadeDias > 0 ? (
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1">
+                                          <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
+                                          Data do último serviço{' '}
+                                          <span className="text-rose-600">*</span>
+                                        </Label>
+                                        <span className="text-[10px] text-[#004B8D] font-bold bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20">
+                                          Periodicidade: {sub.periodicidadeDias} dias
+                                        </span>
+                                      </div>
+                                      <Input
+                                        type="date"
+                                        disabled={isVistoriaConcluida}
+                                        value={
+                                          form.dataUltimoServico || form.dataUltimaVerificacao || ''
+                                        }
+                                        onChange={(e) => {
+                                          handleFieldChange(
+                                            subKey,
+                                            'dataUltimoServico',
+                                            e.target.value,
+                                            sub,
+                                            cat,
+                                          )
+                                        }}
+                                        className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
+                                      />
+                                      {/* Informações detalhadas de vencimento calculado */}
+                                      {(() => {
+                                        const dateVal =
+                                          form.dataUltimoServico || form.dataUltimaVerificacao
+                                        if (!dateVal) {
+                                          return (
+                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-1.5 rounded border border-amber-200">
+                                              Informe a data em que o serviço foi realizado conforme
+                                              laudo/documento para calcular a validade.
+                                            </p>
+                                          )
+                                        }
+                                        const calc = calcularVencimentoSubitem(
+                                          dateVal,
+                                          sub.periodicidadeDias,
+                                        )
+                                        if (calc.status === 'vencido') {
+                                          return (
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-1.5 rounded border border-rose-200">
+                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                              <span>
+                                                Vencido há {calc.diasVencido}{' '}
+                                                {calc.diasVencido === 1 ? 'dia' : 'dias'} (expirou
+                                                em {calc.dataVencimentoStr})
+                                              </span>
+                                            </div>
+                                          )
+                                        }
+                                        if (calc.status === 'vencendo_em_breve') {
+                                          return (
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-1.5 rounded border border-amber-200">
+                                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                                              <span>
+                                                Vencendo em breve: restam {calc.diasAteVencimento}{' '}
+                                                {calc.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
+                                                (vence em {calc.dataVencimentoStr})
+                                              </span>
+                                            </div>
+                                          )
+                                        }
+                                        return (
+                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200">
+                                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                            <span>
+                                              Válido até {calc.dataVencimentoStr} (faltam{' '}
+                                              {calc.diasAteVencimento} dias)
+                                            </span>
+                                          </div>
+                                        )
+                                      })()}
+                                    </div>
+                                  ) : null}
+
+                                  {/* Este serviço é feito periodicamente? */}
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs font-bold text-[#102A43]">
+                                      Este serviço é feito periodicamente?
+                                    </Label>
+                                    <Select
+                                      disabled={isVistoriaConcluida}
+                                      value={form.servicoPeriodico || ''}
+                                      onValueChange={(val) => {
+                                        handleFieldChange(subKey, 'servicoPeriodico', val, sub, cat)
+                                        if (val !== 'Sim') {
+                                          handleFieldChange(
+                                            subKey,
+                                            'periodicidadeMeses',
+                                            null,
+                                            sub,
+                                            cat,
+                                          )
+                                          handleFieldChange(subKey, 'dataUltimaArt', '', sub, cat)
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="border-[#D3DFE9] text-xs h-9 bg-white">
+                                        <SelectValue placeholder="Selecione..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Sim">Sim (periódico)</SelectItem>
+                                        <SelectItem value="Não">Não (eventual/único)</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  {/* Periodicidade em meses e Data da última ART (Condicionais a "Sim (periódico)") */}
+                                  {form.servicoPeriodico === 'Sim' && (
+                                    <div className="sm:col-span-2 p-3.5 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter space-y-3.5">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                        {/* De quantos em quantos meses esse serviço é realizado? */}
+                                        <div className="space-y-1.5">
+                                          <div className="flex items-center justify-between">
+                                            <Label
+                                              htmlFor={`period-meses-${subKey}`}
+                                              className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
+                                            >
+                                              <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
+                                              De quantos em quantos meses esse serviço é realizado?
+                                            </Label>
+                                            <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                              (em meses)
+                                            </span>
+                                          </div>
+                                          <Input
+                                            id={`period-meses-${subKey}`}
+                                            type="number"
+                                            disabled={isVistoriaConcluida}
+                                            min={1}
+                                            max={120}
+                                            placeholder="Ex: 1, 3, 6, 12..."
+                                            value={
+                                              form.periodicidadeMeses !== undefined &&
+                                              form.periodicidadeMeses !== null
+                                                ? form.periodicidadeMeses
+                                                : ''
+                                            }
+                                            onChange={(e) => {
+                                              const raw = e.target.value
+                                              const val = raw ? parseInt(raw, 10) : null
+                                              handleFieldChange(
+                                                subKey,
+                                                'periodicidadeMeses',
+                                                val,
+                                                sub,
+                                                cat,
+                                              )
+                                            }}
+                                            className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
+                                          />
+                                          {form.periodicidadeMeses ? (
+                                            <p className="text-[11px] font-semibold text-[#004B8D]">
+                                              Realizado a cada {form.periodicidadeMeses}{' '}
+                                              {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
+                                            </p>
+                                          ) : null}
+                                        </div>
+
+                                        {/* Data da última ART */}
+                                        <div className="space-y-1.5">
+                                          <div className="flex items-center justify-between">
+                                            <Label
+                                              htmlFor={`data-art-${subKey}`}
+                                              className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
+                                            >
+                                              <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
+                                              Data da última ART
+                                            </Label>
+                                            <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                              Conforme ART
+                                            </span>
+                                          </div>
+                                          <Input
+                                            id={`data-art-${subKey}`}
+                                            type="date"
+                                            disabled={isVistoriaConcluida}
+                                            value={form.dataUltimaArt || ''}
+                                            onChange={(e) => {
+                                              handleFieldChange(
+                                                subKey,
+                                                'dataUltimaArt',
+                                                e.target.value,
+                                                sub,
+                                                cat,
+                                              )
+                                            }}
+                                            className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
+                                          />
+                                          {form.dataUltimaArt && (
+                                            <p className="text-[11px] text-[#486581]">
+                                              Data informada da ART para cálculo de validade.
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Alerta / Indicador de validade calculado a partir da ART e periodicidade em meses */}
+                                      {(() => {
+                                        if (!form.dataUltimaArt && !form.periodicidadeMeses) {
+                                          return null
+                                        }
+                                        if (
+                                          form.dataUltimaArt &&
+                                          (!form.periodicidadeMeses || form.periodicidadeMeses <= 0)
+                                        ) {
+                                          return (
+                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
+                                              Informe de quantos em quantos meses o serviço é
+                                              realizado para calcular o vencimento da ART.
+                                            </p>
+                                          )
+                                        }
+                                        if (
+                                          !form.dataUltimaArt &&
+                                          form.periodicidadeMeses &&
+                                          form.periodicidadeMeses > 0
+                                        ) {
+                                          return (
+                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
+                                              Informe a <strong>Data da última ART</strong> para
+                                              calcular a vigência do serviço.
+                                            </p>
+                                          )
+                                        }
+                                        const calcArt = calcularVencimentoSubitem(
+                                          form.dataUltimoServico || form.dataUltimaVerificacao,
+                                          sub.periodicidadeDias,
+                                          {
+                                            periodicidadeMeses: form.periodicidadeMeses,
+                                            dataUltimaArt: form.dataUltimaArt,
+                                          },
+                                        )
+                                        if (calcArt.status === 'vencido') {
+                                          return (
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-2 rounded border border-rose-200">
+                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                              <span>
+                                                ART vencida há {calcArt.diasVencido}{' '}
+                                                {calcArt.diasVencido === 1 ? 'dia' : 'dias'}{' '}
+                                                (expirou em {calcArt.dataVencimentoStr})
+                                              </span>
+                                            </div>
+                                          )
+                                        }
+                                        if (calcArt.status === 'vencendo_em_breve') {
+                                          return (
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
+                                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                                              <span>
+                                                ART vencendo em breve: restam{' '}
+                                                {calcArt.diasAteVencimento}{' '}
+                                                {calcArt.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
+                                                (vence em {calcArt.dataVencimentoStr})
+                                              </span>
+                                            </div>
+                                          )
+                                        }
+                                        return (
+                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
+                                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                            <span>
+                                              ART válida até {calcArt.dataVencimentoStr} (faltam{' '}
+                                              {calcArt.diasAteVencimento} dias)
+                                            </span>
+                                          </div>
+                                        )
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Seção de Fotos (Até 3 fotos com preview e remoção) */}
+                                <div className="pt-3 border-t border-[#D3DFE9]">
+                                  <PhotoUploadSection
+                                    itemId={item?.id}
+                                    subitemCode={subCode}
+                                    disabled={isVistoriaConcluida}
+                                    existingPhotos={item?.fotos || []}
+                                    pendingFiles={pending}
+                                    onAddFiles={(files, metaList) =>
+                                      handleAddPendingPhotos(subKey, files, metaList)
+                                    }
+                                    onRemovePendingFile={(index) =>
+                                      !isVistoriaConcluida &&
+                                      handleRemovePendingPhoto(subKey, index)
+                                    }
+                                    onDeleteExistingPhoto={(filename) =>
+                                      !isVistoriaConcluida &&
+                                      handleDeleteExistingPhoto(subKey, filename)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            )}
 
                             {/* Subitem Save Action (ou indicador de salvamento automático) */}
                             <div className="flex items-center justify-between pt-1">
