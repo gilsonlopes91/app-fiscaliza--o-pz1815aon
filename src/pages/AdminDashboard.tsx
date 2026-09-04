@@ -189,6 +189,8 @@ export default function AdminDashboard() {
     categoriaNome: string
     dataUltimoServicoStr: string
     periodicidadeDias: number
+    periodicidadeMeses?: number | null
+    dataUltimaArtStr?: string | null
     status: 'vencido' | 'vencendo_em_breve'
     diasAteVencimento: number | null
     diasVencido: number | null
@@ -237,25 +239,46 @@ export default function AdminDashboard() {
             ? cat.periodicidadeDias
             : 0
 
-      if (periodicidade <= 0) {
-        return
-      }
-
       const dataServico = item.dataUltimoServico || item.dataUltimaVerificacao
-      if (!dataServico) {
+      const dataArt = item.dataUltimaArt
+      const periodMeses = item.periodicidadeMeses
+
+      // Se não tem periodicidade em dias e nem periodicidade em meses válida, não há o que calcular
+      const temPeriodicidade =
+        periodicidade > 0 || (periodMeses !== undefined && periodMeses !== null && periodMeses > 0)
+      if (!temPeriodicidade) {
         return
       }
 
-      const calc = calcularVencimentoSubitem(dataServico, periodicidade)
+      // Se não tem nem data do último serviço nem data da ART, não calcula
+      if (!dataServico && !dataArt) {
+        return
+      }
+
+      const calc = calcularVencimentoSubitem(dataServico, periodicidade, {
+        periodicidadeMeses: periodMeses,
+        dataUltimaArt: dataArt,
+      })
+
       if (calc.status === 'vencido' || calc.status === 'vencendo_em_breve') {
         // Obter dados do hospital
         const vistoria = item.vistoria ? vistoriasMap.get(item.vistoria) : null
         const hospId = item.hospital || vistoria?.hospital || ''
         const hosp = hospId ? hospitaisMap.get(hospId) : null
 
-        const rawDate = dataServico.split('T')[0]
-        const [y, m, d] = rawDate.split('-')
-        const dataFormatada = y && m && d ? `${d}/${m}/${y}` : rawDate
+        let dataFormatada = '—'
+        if (dataServico) {
+          const rawDate = dataServico.split('T')[0]
+          const [y, m, d] = rawDate.split('-')
+          dataFormatada = y && m && d ? `${d}/${m}/${y}` : rawDate
+        }
+
+        let dataArtFormatada: string | null = null
+        if (dataArt) {
+          const rawArt = dataArt.split('T')[0]
+          const [ay, am, ad] = rawArt.split('-')
+          dataArtFormatada = ay && am && ad ? `${ad}/${am}/${ay}` : rawArt
+        }
 
         if (calc.status === 'vencido') vencidos++
         if (calc.status === 'vencendo_em_breve') vencendo++
@@ -273,6 +296,8 @@ export default function AdminDashboard() {
           categoriaNome: cat?.nome || '',
           dataUltimoServicoStr: dataFormatada,
           periodicidadeDias: periodicidade,
+          periodicidadeMeses: periodMeses,
+          dataUltimaArtStr: dataArtFormatada,
           status: calc.status,
           diasAteVencimento: calc.diasAteVencimento,
           diasVencido: calc.diasVencido,
@@ -1184,7 +1209,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Informações da Data e Prazo */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs bg-white p-2.5 rounded-lg border border-[#D3DFE9]/80">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 text-xs bg-white p-2.5 rounded-lg border border-[#D3DFE9]/80">
                     <div>
                       <span className="text-[10px] text-[#627D98] block">
                         Data do Último Serviço:
@@ -1196,10 +1221,22 @@ export default function AdminDashboard() {
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-[#627D98] block">
-                        Periodicidade Definida:
-                      </span>
-                      <strong className="text-[#102A43]">{alerta.periodicidadeDias} dias</strong>
+                      <span className="text-[10px] text-[#627D98] block">Data da Última ART:</span>
+                      <strong className="text-[#004B8D] flex items-center gap-1 font-mono">
+                        <Calendar className="w-3 h-3 text-[#004B8D]" />
+                        {alerta.dataUltimaArtStr || '—'}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-[#627D98] block">Periodicidade:</span>
+                      <strong className="text-[#102A43]">
+                        {alerta.periodicidadeMeses
+                          ? `${alerta.periodicidadeMeses} ${alerta.periodicidadeMeses === 1 ? 'mês' : 'meses'}`
+                          : alerta.periodicidadeDias > 0
+                            ? `${alerta.periodicidadeDias} dias`
+                            : '—'}
+                      </strong>
                     </div>
 
                     <div>

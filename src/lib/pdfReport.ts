@@ -342,6 +342,10 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
         const d = dataServ.split('T')[0].split('-').reverse().join('/')
         detalhesList.push(`Últ. Serviço: ${d}`)
       }
+      if (item?.dataUltimaArt) {
+        const dArt = item.dataUltimaArt.split('T')[0].split('-').reverse().join('/')
+        detalhesList.push(`Data Última ART: ${dArt}`)
+      }
       if (item?.servicoPeriodico === 'Sim' && item.periodicidadeMeses) {
         detalhesList.push(`Período: a cada ${item.periodicidadeMeses} mês(es)`)
       }

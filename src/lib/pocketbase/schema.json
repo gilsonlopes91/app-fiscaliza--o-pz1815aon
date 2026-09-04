@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T14:04:15.912Z",
+  "generatedAt": "2026-09-04T14:11:59.148Z",
   "collections": [
     {
       "name": "users",
@@ -392,6 +392,12 @@
         },
         {
           "name": "dataUltimoServico",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dataUltimaArt",
           "type": "date",
           "required": false,
           "system": false

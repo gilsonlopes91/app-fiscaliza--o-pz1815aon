@@ -43,6 +43,7 @@ export interface VistoriaItem {
   periodicidadeMeses?: number | null
   prestadorServico?: string
   numeroArt?: string
+  dataUltimaArt?: string | null
   fotos?: string[]
   dataUltimaVerificacao?: string | null
   dataUltimoServico?: string | null
@@ -71,6 +72,7 @@ export interface VistoriaItemFormData {
   periodicidadeMeses?: number | null
   prestadorServico?: string
   numeroArt?: string
+  dataUltimaArt?: string | null
   fotos?: string[]
   dataUltimaVerificacao?: string | null
   dataUltimoServico?: string | null
@@ -123,40 +125,72 @@ export function parseLocalDate(dateStr: string): Date | null {
 export function calcularVencimentoSubitem(
   dataServicoStr: string | null | undefined,
   periodicidadeDias: number | null | undefined,
+  options?: {
+    periodicidadeMeses?: number | null
+    dataUltimaArt?: string | null
+  },
 ): StatusVencimentoItem {
-  if (!periodicidadeDias || periodicidadeDias <= 0) {
-    return {
-      status: 'nao_aplicavel',
-      diasAteVencimento: null,
-      diasVencido: null,
-      dataVencimento: null,
-      dataVencimentoStr: null,
+  // Se houver data da última ART e periodicidade em meses informada, usa cálculo por meses via ART
+  const temArtMeses = Boolean(
+    options?.dataUltimaArt && options?.periodicidadeMeses && options.periodicidadeMeses > 0,
+  )
+
+  let baseDate: Date | null = null
+  let vencimentoDate: Date | null = null
+
+  if (temArtMeses) {
+    const artDate = parseLocalDate(options!.dataUltimaArt!)
+    if (artDate && !isNaN(artDate.getTime())) {
+      baseDate = artDate
+      // Adiciona meses à data base da ART
+      vencimentoDate = new Date(artDate.getTime())
+      vencimentoDate.setMonth(vencimentoDate.getMonth() + options!.periodicidadeMeses!)
     }
   }
 
-  if (!dataServicoStr) {
-    return {
-      status: 'sem_data',
-      diasAteVencimento: null,
-      diasVencido: null,
-      dataVencimento: null,
-      dataVencimentoStr: null,
-    }
-  }
+  // Se não calculou via ART em meses, usa a regra tradicional de periodicidade em dias
+  if (!vencimentoDate) {
+    const dias =
+      periodicidadeDias && periodicidadeDias > 0
+        ? periodicidadeDias
+        : options?.periodicidadeMeses && options.periodicidadeMeses > 0
+          ? Math.round(options.periodicidadeMeses * 30.4375)
+          : null
 
-  const servicoDate = parseLocalDate(dataServicoStr)
-  if (!servicoDate || isNaN(servicoDate.getTime())) {
-    return {
-      status: 'sem_data',
-      diasAteVencimento: null,
-      diasVencido: null,
-      dataVencimento: null,
-      dataVencimentoStr: null,
+    if (!dias || dias <= 0) {
+      return {
+        status: 'nao_aplicavel',
+        diasAteVencimento: null,
+        diasVencido: null,
+        dataVencimento: null,
+        dataVencimentoStr: null,
+      }
     }
-  }
 
-  // Data de vencimento = servicoDate + periodicidadeDias
-  const vencimentoDate = new Date(servicoDate.getTime() + periodicidadeDias * 24 * 60 * 60 * 1000)
+    const dataRef = dataServicoStr || options?.dataUltimaArt
+    if (!dataRef) {
+      return {
+        status: 'sem_data',
+        diasAteVencimento: null,
+        diasVencido: null,
+        dataVencimento: null,
+        dataVencimentoStr: null,
+      }
+    }
+
+    baseDate = parseLocalDate(dataRef)
+    if (!baseDate || isNaN(baseDate.getTime())) {
+      return {
+        status: 'sem_data',
+        diasAteVencimento: null,
+        diasVencido: null,
+        dataVencimento: null,
+        dataVencimentoStr: null,
+      }
+    }
+
+    vencimentoDate = new Date(baseDate.getTime() + dias * 24 * 60 * 60 * 1000)
+  }
 
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
@@ -215,8 +249,10 @@ export function calculateItemSituacao(
   data: {
     possuiSistema?: PossuiSistemaOption
     servicoPeriodico?: 'Sim' | 'Não' | '' | null
+    periodicidadeMeses?: number | null
     prestadorServico?: string
     numeroArt?: string
+    dataUltimaArt?: string | null
     dataUltimaVerificacao?: string | null
     dataUltimoServico?: string | null
   },
@@ -234,7 +270,25 @@ export function calculateItemSituacao(
   }
 
   // Hospital possui o sistema ("Sim")
-  // Se o subitem tem periodicidade fixa definida (> 0)
+  // 1. Se serviço for periódico e tiver periodicidade em meses com Data da última ART:
+  if (data.servicoPeriodico === 'Sim' && data.periodicidadeMeses && data.periodicidadeMeses > 0) {
+    if (data.dataUltimaArt) {
+      const calcArt = calcularVencimentoSubitem(
+        data.dataUltimoServico || data.dataUltimaVerificacao,
+        itemInfo.periodicidadeDias,
+        {
+          periodicidadeMeses: data.periodicidadeMeses,
+          dataUltimaArt: data.dataUltimaArt,
+        },
+      )
+      if (calcArt.status === 'vencido') return 'vencido'
+      if (calcArt.status === 'vencendo_em_breve') return 'vencendo_em_breve'
+      if (calcArt.status === 'sem_data') return 'vencido'
+      return 'conforme'
+    }
+  }
+
+  // 2. Se o subitem tem periodicidade fixa definida (> 0)
   const periodicidadeExigida = Boolean(itemInfo.periodicidadeDias && itemInfo.periodicidadeDias > 0)
 
   if (periodicidadeExigida) {
@@ -243,7 +297,10 @@ export function calculateItemSituacao(
       return 'vencido'
     }
 
-    const calc = calcularVencimentoSubitem(dataServico, itemInfo.periodicidadeDias)
+    const calc = calcularVencimentoSubitem(dataServico, itemInfo.periodicidadeDias, {
+      periodicidadeMeses: data.periodicidadeMeses,
+      dataUltimaArt: data.dataUltimaArt,
+    })
     if (calc.status === 'vencido') {
       return 'vencido'
     }
@@ -426,6 +483,11 @@ export const vistoriasService = {
         formData.prestadorServico ? formData.prestadorServico.trim() : '',
       )
       data.append('numeroArt', formData.numeroArt ? formData.numeroArt.trim() : '')
+      if (formData.servicoPeriodico === 'Sim' && formData.dataUltimaArt) {
+        data.append('dataUltimaArt', formData.dataUltimaArt)
+      } else {
+        data.append('dataUltimaArt', '')
+      }
       const dateToSave = formData.dataUltimoServico || formData.dataUltimaVerificacao
       if (dateToSave) {
         data.append('dataUltimoServico', dateToSave)
@@ -509,6 +571,10 @@ export const vistoriasService = {
           : null,
       prestadorServico: formData.prestadorServico ? formData.prestadorServico.trim() : '',
       numeroArt: formData.numeroArt ? formData.numeroArt.trim() : '',
+      dataUltimaArt:
+        formData.servicoPeriodico === 'Sim' && formData.dataUltimaArt
+          ? formData.dataUltimaArt
+          : null,
       dataUltimaVerificacao: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       dataUltimoServico: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       situacaoCalculada: situacao,

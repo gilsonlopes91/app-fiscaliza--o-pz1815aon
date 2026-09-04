@@ -302,6 +302,7 @@ export default function VistoriaPage() {
                 : null,
             prestadorServico: item.prestadorServico || '',
             numeroArt: item.numeroArt || '',
+            dataUltimaArt: item.dataUltimaArt ? item.dataUltimaArt.split('T')[0] : '',
             dataUltimaVerificacao: item.dataUltimoServico
               ? item.dataUltimoServico.split('T')[0]
               : item.dataUltimaVerificacao
@@ -499,6 +500,7 @@ export default function VistoriaPage() {
           ...updated,
           prestadorServico: '',
           numeroArt: '',
+          dataUltimaArt: '',
           dataUltimaVerificacao: '',
           dataUltimoServico: '',
           servicoPeriodico: '',
@@ -604,6 +606,7 @@ export default function VistoriaPage() {
       periodicidadeMeses: null,
       prestadorServico: '',
       numeroArt: '',
+      dataUltimaArt: '',
       dataUltimoServico: '',
       dataUltimaVerificacao: '',
     }
@@ -1605,7 +1608,9 @@ export default function VistoriaPage() {
                           periodicidadeMeses: null,
                           prestadorServico: '',
                           numeroArt: '',
+                          dataUltimaArt: '',
                           dataUltimaVerificacao: '',
+                          dataUltimoServico: '',
                         }
 
                         const situacao = calculateItemSituacao(form, sub)
@@ -1914,6 +1919,7 @@ export default function VistoriaPage() {
                                             sub,
                                             cat,
                                           )
+                                          handleFieldChange(subKey, 'dataUltimaArt', '', sub, cat)
                                         }
                                       }}
                                     >
@@ -1927,56 +1933,167 @@ export default function VistoriaPage() {
                                     </Select>
                                   </div>
 
-                                  {/* Periodicidade em meses (Condicional) */}
+                                  {/* Periodicidade em meses e Data da última ART (Condicionais a "Sim (periódico)") */}
                                   {form.servicoPeriodico === 'Sim' && (
-                                    <div className="space-y-1.5 sm:col-span-2 p-3 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter">
-                                      <div className="flex items-center justify-between">
-                                        <Label
-                                          htmlFor={`period-meses-${subKey}`}
-                                          className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
-                                        >
-                                          <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
-                                          De quantos em quantos meses esse serviço é realizado? (em
-                                          meses)
-                                        </Label>
-                                        <span className="text-[10px] text-[#486581] font-semibold bg-white px-2 py-0.5 rounded border border-[#D3DFE9]">
-                                          Informado nesta vistoria
-                                        </span>
+                                    <div className="sm:col-span-2 p-3.5 rounded-lg bg-[#E8F1F8]/60 border border-[#004B8D]/20 animate-page-enter space-y-3.5">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                        {/* De quantos em quantos meses esse serviço é realizado? */}
+                                        <div className="space-y-1.5">
+                                          <div className="flex items-center justify-between">
+                                            <Label
+                                              htmlFor={`period-meses-${subKey}`}
+                                              className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
+                                            >
+                                              <Clock className="w-3.5 h-3.5 text-[#004B8D]" />
+                                              De quantos em quantos meses esse serviço é realizado?
+                                            </Label>
+                                            <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                              (em meses)
+                                            </span>
+                                          </div>
+                                          <Input
+                                            id={`period-meses-${subKey}`}
+                                            type="number"
+                                            disabled={isVistoriaConcluida}
+                                            min={1}
+                                            max={120}
+                                            placeholder="Ex: 1, 3, 6, 12..."
+                                            value={
+                                              form.periodicidadeMeses !== undefined &&
+                                              form.periodicidadeMeses !== null
+                                                ? form.periodicidadeMeses
+                                                : ''
+                                            }
+                                            onChange={(e) => {
+                                              const raw = e.target.value
+                                              const val = raw ? parseInt(raw, 10) : null
+                                              handleFieldChange(
+                                                subKey,
+                                                'periodicidadeMeses',
+                                                val,
+                                                sub,
+                                                cat,
+                                              )
+                                            }}
+                                            className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
+                                          />
+                                          {form.periodicidadeMeses ? (
+                                            <p className="text-[11px] font-semibold text-[#004B8D]">
+                                              Realizado a cada {form.periodicidadeMeses}{' '}
+                                              {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
+                                            </p>
+                                          ) : null}
+                                        </div>
+
+                                        {/* Data da última ART */}
+                                        <div className="space-y-1.5">
+                                          <div className="flex items-center justify-between">
+                                            <Label
+                                              htmlFor={`data-art-${subKey}`}
+                                              className="text-xs font-bold text-[#004B8D] flex items-center gap-1.5"
+                                            >
+                                              <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
+                                              Data da última ART
+                                            </Label>
+                                            <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
+                                              Conforme ART
+                                            </span>
+                                          </div>
+                                          <Input
+                                            id={`data-art-${subKey}`}
+                                            type="date"
+                                            disabled={isVistoriaConcluida}
+                                            value={form.dataUltimaArt || ''}
+                                            onChange={(e) => {
+                                              handleFieldChange(
+                                                subKey,
+                                                'dataUltimaArt',
+                                                e.target.value,
+                                                sub,
+                                                cat,
+                                              )
+                                            }}
+                                            className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
+                                          />
+                                          {form.dataUltimaArt && (
+                                            <p className="text-[11px] text-[#486581]">
+                                              Data informada da ART para cálculo de validade.
+                                            </p>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-3">
-                                        <Input
-                                          id={`period-meses-${subKey}`}
-                                          type="number"
-                                          disabled={isVistoriaConcluida}
-                                          min={1}
-                                          max={120}
-                                          placeholder="Ex: 1 (mensal), 3 (trimestral), 6 (semestral), 12 (anual)..."
-                                          value={
-                                            form.periodicidadeMeses !== undefined &&
-                                            form.periodicidadeMeses !== null
-                                              ? form.periodicidadeMeses
-                                              : ''
-                                          }
-                                          onChange={(e) => {
-                                            const raw = e.target.value
-                                            const val = raw ? parseInt(raw, 10) : null
-                                            handleFieldChange(
-                                              subKey,
-                                              'periodicidadeMeses',
-                                              val,
-                                              sub,
-                                              cat,
-                                            )
-                                          }}
-                                          className="border-[#D3DFE9] text-xs h-9 bg-white max-w-xs focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
-                                        />
-                                        {form.periodicidadeMeses ? (
-                                          <span className="text-xs font-semibold text-[#004B8D]">
-                                            Realizado a cada {form.periodicidadeMeses}{' '}
-                                            {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
-                                          </span>
-                                        ) : null}
-                                      </div>
+
+                                      {/* Alerta / Indicador de validade calculado a partir da ART e periodicidade em meses */}
+                                      {(() => {
+                                        if (!form.dataUltimaArt && !form.periodicidadeMeses) {
+                                          return null
+                                        }
+                                        if (
+                                          form.dataUltimaArt &&
+                                          (!form.periodicidadeMeses || form.periodicidadeMeses <= 0)
+                                        ) {
+                                          return (
+                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
+                                              Informe de quantos em quantos meses o serviço é
+                                              realizado para calcular o vencimento da ART.
+                                            </p>
+                                          )
+                                        }
+                                        if (
+                                          !form.dataUltimaArt &&
+                                          form.periodicidadeMeses &&
+                                          form.periodicidadeMeses > 0
+                                        ) {
+                                          return (
+                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
+                                              Informe a <strong>Data da última ART</strong> para
+                                              calcular a vigência do serviço.
+                                            </p>
+                                          )
+                                        }
+                                        const calcArt = calcularVencimentoSubitem(
+                                          form.dataUltimoServico || form.dataUltimaVerificacao,
+                                          sub.periodicidadeDias,
+                                          {
+                                            periodicidadeMeses: form.periodicidadeMeses,
+                                            dataUltimaArt: form.dataUltimaArt,
+                                          },
+                                        )
+                                        if (calcArt.status === 'vencido') {
+                                          return (
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-2 rounded border border-rose-200">
+                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                              <span>
+                                                ART vencida há {calcArt.diasVencido}{' '}
+                                                {calcArt.diasVencido === 1 ? 'dia' : 'dias'}{' '}
+                                                (expirou em {calcArt.dataVencimentoStr})
+                                              </span>
+                                            </div>
+                                          )
+                                        }
+                                        if (calcArt.status === 'vencendo_em_breve') {
+                                          return (
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
+                                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                                              <span>
+                                                ART vencendo em breve: restam{' '}
+                                                {calcArt.diasAteVencimento}{' '}
+                                                {calcArt.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
+                                                (vence em {calcArt.dataVencimentoStr})
+                                              </span>
+                                            </div>
+                                          )
+                                        }
+                                        return (
+                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
+                                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                            <span>
+                                              ART válida até {calcArt.dataVencimentoStr} (faltam{' '}
+                                              {calcArt.diasAteVencimento} dias)
+                                            </span>
+                                          </div>
+                                        )
+                                      })()}
                                     </div>
                                   )}
                                 </div>
