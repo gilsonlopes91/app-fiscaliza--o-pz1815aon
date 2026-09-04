@@ -78,6 +78,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { generateVistoriaPdf } from '@/lib/pdfReport'
 import { downloadAllVistoriaPhotosZip } from '@/lib/photoDownload'
 import { PhotoCaptureMetadata } from '@/lib/watermark'
+import { atribuicoesService } from '@/services/atribuicoes'
 
 export default function VistoriaPage() {
   const { user } = useAuth()
@@ -305,6 +306,14 @@ export default function VistoriaPage() {
         setPendingPhotos({})
         setDeletedPhotos({})
         setAutoSaveStatus('idle')
+
+        // Se a vistoria já possui itens preenchidos e não tem atribuição formal,
+        // auto-atribui para o usuário atual para garantir consistência no Painel Geral
+        if (items.length > 0 && user?.id) {
+          atribuicoesService.ensureAssignmentIfUnassigned(hospId, user.id).catch((e) => {
+            console.warn('Erro ao garantir atribuição na abertura da vistoria:', e)
+          })
+        }
       } catch (err) {
         console.error('Erro ao carregar vistoria da unidade:', err)
         toast({
@@ -410,6 +419,7 @@ export default function VistoriaPage() {
             newFiles.length > 0 ? newFiles : undefined,
             deletedNames.length > 0 ? deletedNames : undefined,
             isRealSubitem ? targetSub.id : undefined,
+            user?.id,
           )
 
           setVistoriaItens((prev) => {
@@ -625,6 +635,7 @@ export default function VistoriaPage() {
         newFiles.length > 0 ? newFiles : undefined,
         deletedNames.length > 0 ? deletedNames : undefined,
         isRealSubitem ? sub.id : undefined,
+        user?.id,
       )
 
       // Update local items state

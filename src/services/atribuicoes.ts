@@ -113,6 +113,46 @@ export const atribuicoesService = {
   },
 
   /**
+   * Checks if an enterprise/unit already has any assignment.
+   * If not, automatically creates an assignment linking the given fiscal to this unit.
+   * If it already has an assignment (to this fiscal or someone else), does nothing.
+   */
+  async ensureAssignmentIfUnassigned(
+    hospitalId: string,
+    fiscalId?: string,
+  ): Promise<Atribuicao | null> {
+    const targetFiscalId = fiscalId || pb.authStore.record?.id
+    if (!targetFiscalId || !hospitalId) return null
+
+    try {
+      // 1. Check if ANY assignment already exists for this hospital
+      const existing = await pb.collection('atribuicoes').getList<Atribuicao>(1, 1, {
+        filter: `hospital = "${hospitalId}"`,
+      })
+
+      if (existing.items.length > 0) {
+        // Já existe um fiscal atribuído (mantém como está hoje)
+        return existing.items[0]
+      }
+
+      // 2. Não possui fiscal formalmente atribuído: registrar automaticamente
+      const payload: Record<string, unknown> = {
+        fiscal: targetFiscalId,
+        hospital: hospitalId,
+        created_by: targetFiscalId,
+        observacao: 'Atribuição automática vinculada ao checklist de vistoria',
+      }
+
+      return await pb.collection('atribuicoes').create<Atribuicao>(payload, {
+        expand: 'fiscal,hospital,created_by',
+      })
+    } catch (err) {
+      console.warn('Não foi possível verificar ou auto-atribuir vistoria:', err)
+      return null
+    }
+  },
+
+  /**
    * Create a new atribuicao
    */
   async create(data: AtribuicaoFormData): Promise<Atribuicao> {

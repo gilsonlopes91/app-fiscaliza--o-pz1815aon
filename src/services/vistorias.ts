@@ -245,7 +245,29 @@ export const vistoriasService = {
     newFiles?: File[],
     deletedFileNames?: string[],
     subitemId?: string,
+    fiscalId?: string,
   ): Promise<VistoriaItem> {
+    // Garante que, se a unidade não possui atribuição formal de fiscal,
+    // o fiscal atual seja registrado automaticamente como responsável
+    const targetFiscalId = fiscalId || pb.authStore.record?.id
+    if (targetFiscalId && hospitalId) {
+      try {
+        const existing = await pb.collection('atribuicoes').getList(1, 1, {
+          filter: `hospital = "${hospitalId}"`,
+        })
+        if (existing.items.length === 0) {
+          await pb.collection('atribuicoes').create({
+            fiscal: targetFiscalId,
+            hospital: hospitalId,
+            created_by: targetFiscalId,
+            observacao: 'Atribuição automática vinculada ao checklist de vistoria',
+          })
+        }
+      } catch (e) {
+        console.warn('Erro ao verificar auto-atribuição no salvamento:', e)
+      }
+    }
+
     const situacao = calculateItemSituacao(formData, subitemInfo)
 
     // If newFiles or deletedFileNames are present, we use multipart FormData
