@@ -978,7 +978,7 @@ export default function VistoriaPage() {
             className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            Nova Vistoria
+            Iniciar Fiscalização
           </Button>
           <Button
             variant="outline"
@@ -1992,7 +1992,7 @@ export default function VistoriaPage() {
                 className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs font-bold h-9 px-4 mt-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4 mr-1.5" />
-                Criar Nova Vistoria
+                Iniciar Fiscalização
               </Button>
             </div>
           ) : (

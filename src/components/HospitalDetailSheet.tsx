@@ -312,7 +312,7 @@ export function HospitalDetailSheet({
                     ) : (
                       <ClipboardCheck className="w-4 h-4 mr-1.5 stroke-[2.2]" />
                     )}
-                    Iniciar vistoria
+                    Iniciar Fiscalização
                   </Button>
                   {isAdmin && (
                     <Button
@@ -761,7 +761,7 @@ export function HospitalDetailSheet({
                     ) : (
                       <ClipboardCheck className="w-4 h-4 mr-1.5" />
                     )}
-                    Iniciar vistoria
+                    Iniciar Fiscalização
                   </Button>
                 </div>
 

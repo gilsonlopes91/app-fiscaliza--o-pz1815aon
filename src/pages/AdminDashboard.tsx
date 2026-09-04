@@ -80,6 +80,7 @@ import {
   FiscalProgressSummary,
 } from '@/services/atribuicoes'
 import { AtribuirFiscalizacaoModal } from '@/components/AtribuirFiscalizacaoModal'
+import { IniciarVistoriaModal } from '@/components/IniciarVistoriaModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 
@@ -115,6 +116,8 @@ export default function AdminDashboard() {
   const [modalPreHospitalId, setModalPreHospitalId] = useState<string | undefined>()
   const [atribuicaoToDelete, setAtribuicaoToDelete] = useState<AtribuicaoDetail | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [selectedHospitalForModal, setSelectedHospitalForModal] = useState<Hospital | null>(null)
+  const [isIniciarModalOpen, setIsIniciarModalOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -389,6 +392,46 @@ export default function AdminDashboard() {
       )
     })
   }, [details, selectedFiscalFiltro, selectedStatusFiltro, selectedTipoFiltro, searchQuery])
+
+  // Iniciar Fiscalização na lista de atribuições com modal de conferência pré-vistoria
+  const handleIniciarFiscalizacaoClick = (detail: AtribuicaoDetail) => {
+    const hosp = detail.hospital
+    if (!hosp) return
+    setSelectedHospitalForModal(hosp)
+    setIsIniciarModalOpen(true)
+  }
+
+  const handleConfirmPreVistoria = async (updatedHospital: Hospital) => {
+    try {
+      // Atualiza o hospital localmente na lista caso tenha mudado dados
+      setHospitais((prev) => prev.map((h) => (h.id === updatedHospital.id ? updatedHospital : h)))
+      setDetails((prev) =>
+        prev.map((d) =>
+          d.hospital?.id === updatedHospital.id ? { ...d, hospital: updatedHospital } : d,
+        ),
+      )
+
+      // Cria ou recupera vistoria ativa para o hospital
+      const vistoria = await vistoriasService.getOrCreateForHospital(updatedHospital.id)
+
+      setIsIniciarModalOpen(false)
+      setSelectedHospitalForModal(null)
+
+      toast({
+        title: 'Vistoria carregada',
+        description: `Vistoria vinculada a "${updatedHospital.nome}".`,
+      })
+
+      navigate(`/vistoria?hospitalId=${updatedHospital.id}&vistoriaId=${vistoria.id}`)
+    } catch (err) {
+      console.error('Erro ao iniciar fiscalização:', err)
+      toast({
+        title: 'Erro ao iniciar vistoria',
+        description: 'Não foi possível carregar ou criar a vistoria para este hospital.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   // Open modal with pre-selected fiscal
   const handleOpenAssignForFiscal = (fiscalId: string) => {
@@ -925,17 +968,11 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-2 self-end md:self-center shrink-0">
                     <Button
                       size="sm"
-                      onClick={() => {
-                        if (hosp) {
-                          navigate(
-                            `/vistoria?hospitalId=${hosp.id}${detail.vistoria ? `&vistoriaId=${detail.vistoria.id}` : ''}`,
-                          )
-                        }
-                      }}
+                      onClick={() => handleIniciarFiscalizacaoClick(detail)}
                       className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-8 px-3 cursor-pointer shadow-xs gap-1.5"
                     >
                       <ClipboardCheck className="w-3.5 h-3.5" />
-                      Abrir Checklist
+                      Iniciar Fiscalização
                     </Button>
 
                     <Button
@@ -966,6 +1003,19 @@ export default function AdminDashboard() {
         preSelectedHospitalId={modalPreHospitalId}
         onSuccess={loadData}
       />
+
+      {/* Modal de Conferência de Dados Pré-Vistoria */}
+      {selectedHospitalForModal && (
+        <IniciarVistoriaModal
+          open={isIniciarModalOpen}
+          onOpenChange={(open) => {
+            setIsIniciarModalOpen(open)
+            if (!open) setSelectedHospitalForModal(null)
+          }}
+          hospital={selectedHospitalForModal}
+          onConfirmAndContinue={handleConfirmPreVistoria}
+        />
+      )}
 
       {/* Confirm Delete Atribuição Dialog */}
       <AlertDialog
