@@ -221,7 +221,7 @@ export default function GestaoUsuarios() {
   }, [users, activeTab, pendentesList, aprovadosList, searchQuery])
 
   return (
-    <div className="animate-page-enter space-y-6 pb-16">
+    <div className="animate-page-enter space-y-6 pb-16 w-full max-w-full overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

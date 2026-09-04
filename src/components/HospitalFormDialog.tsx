@@ -157,8 +157,9 @@ export function HospitalFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0 border-[#D3DFE9] bg-white sm:rounded-xl shadow-xl">
-        <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9]">
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-0 border-[#D3DFE9] bg-white rounded-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9]">
+          {' '}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] shrink-0 shadow-xs">
               <Building2 className="w-5 h-5 stroke-[2]" />
@@ -408,7 +409,7 @@ export function HospitalFormDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] hover:bg-[#F4F6F9]"
+              className="order-2 sm:order-1 border-[#D3DFE9] text-[#486581] hover:text-[#102A43] hover:bg-[#F4F6F9] h-10 sm:h-9"
             >
               <X className="w-4 h-4 mr-1.5" />
               Cancelar
@@ -416,7 +417,7 @@ export function HospitalFormDialog({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold"
+              className="order-1 sm:order-2 bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 sm:h-9"
             >
               {isSubmitting ? (
                 <>

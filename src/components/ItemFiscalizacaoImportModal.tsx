@@ -307,8 +307,8 @@ export function ItemFiscalizacaoImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleModalOpenChange}>
-      <DialogContent className="sm:max-w-2xl bg-white border-[#D3DFE9] text-[#102A43] max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9] shrink-0">
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl bg-white border-[#D3DFE9] text-[#102A43] max-h-[92vh] sm:max-h-[90vh] flex flex-col p-0 rounded-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9] shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] shrink-0">

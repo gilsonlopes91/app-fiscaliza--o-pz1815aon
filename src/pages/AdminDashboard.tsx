@@ -490,30 +490,30 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="animate-page-enter space-y-8 pb-16">
+    <div className="animate-page-enter space-y-6 sm:space-y-8 pb-16 w-full max-w-full overflow-x-hidden">
       {/* 1. Header do Administrador */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#D3DFE9] pb-4 sm:pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight flex items-center gap-2.5">
-              <Shield className="w-7 h-7 text-[#004B8D]" />
-              Painel Geral de Fiscalizações
+            <h1 className="text-xl sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight flex items-center gap-2">
+              <Shield className="w-6 h-6 sm:w-7 sm:h-7 text-[#004B8D] shrink-0" />
+              <span>Painel Geral de Fiscalizações</span>
             </h1>
           </div>
-          <p className="text-sm text-[#486581] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#486581] mt-0.5">
             Gestão executiva de atribuição de vistorias, monitoramento por fiscal e progresso de
             checklists
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
           <Button
             onClick={() => {
               setModalPreFiscalId(undefined)
               setModalPreHospitalId(undefined)
               setIsModalOpen(true)
             }}
-            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
+            className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-3.5 sm:px-4 cursor-pointer gap-1.5 text-xs sm:text-sm"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             Atribuir Fiscalização
@@ -523,7 +523,7 @@ export default function AdminDashboard() {
             variant="outline"
             onClick={loadData}
             disabled={isLoading}
-            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer"
+            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer shrink-0"
             title="Atualizar dados"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -532,52 +532,56 @@ export default function AdminDashboard() {
       </div>
 
       {/* 2. Cards de Métricas Gerais do Administrador (Vistorias Em Andamento / Concluídas, Alerta de Vencimentos e Atribuições) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Total Vistorias */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#D3DFE9] shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-[#486581] uppercase tracking-wider">
-            <span>Total Vistorias</span>
-            <ClipboardList className="w-4 h-4 text-[#004B8D]" />
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-[#D3DFE9] shadow-xs space-y-1.5 sm:space-y-2">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-[#486581] uppercase tracking-wider">
+            <span className="truncate">Total Vistorias</span>
+            <ClipboardList className="w-4 h-4 text-[#004B8D] shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#102A43]">
+          <div className="flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xl sm:text-3xl font-extrabold text-[#102A43]">
               {stats.totalVistoriasRegistradas}
             </span>
-            <span className="text-xs font-semibold text-[#627D98]">registradas</span>
+            <span className="text-[11px] sm:text-xs font-semibold text-[#627D98]">reg.</span>
           </div>
-          <div className="text-[11px] text-[#627D98]">
-            {stats.totalEmpreendimentos} unidades cadastradas
+          <div className="text-[10px] sm:text-[11px] text-[#627D98] truncate">
+            {stats.totalEmpreendimentos} cadastradas
           </div>
         </div>
 
         {/* Vistorias em Andamento */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-amber-800 uppercase tracking-wider">
-            <span>Em Andamento</span>
-            <Clock className="w-4 h-4 text-amber-600" />
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-xs space-y-1.5 sm:space-y-2">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider">
+            <span className="truncate">Em Andamento</span>
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-amber-900">
+          <div className="flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xl sm:text-3xl font-extrabold text-amber-900">
               {stats.vistoriasEmAndamentoCount}
             </span>
-            <span className="text-xs font-semibold text-amber-700">em campo</span>
+            <span className="text-[11px] sm:text-xs font-semibold text-amber-700">em campo</span>
           </div>
-          <div className="text-[11px] text-[#627D98]">Checklists abertos</div>
+          <div className="text-[10px] sm:text-[11px] text-[#627D98] truncate">
+            Checklists abertos
+          </div>
         </div>
 
         {/* Vistorias Concluídas */}
-        <div className="bg-emerald-50/70 p-4 sm:p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-emerald-800 uppercase tracking-wider">
-            <span>Concluídas</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="bg-emerald-50/70 p-3.5 sm:p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-1.5 sm:space-y-2">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider">
+            <span className="truncate">Concluídas</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-900">
+          <div className="flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xl sm:text-3xl font-extrabold text-emerald-900">
               {stats.vistoriasConcluidasCount}
             </span>
-            <span className="text-xs font-bold text-emerald-700">finalizadas</span>
+            <span className="text-[11px] sm:text-xs font-bold text-emerald-700">finalizadas</span>
           </div>
-          <div className="text-[11px] text-emerald-700">Checklists travados</div>
+          <div className="text-[10px] sm:text-[11px] text-emerald-700 truncate">
+            Checklists travados
+          </div>
         </div>
 
         {/* NOVO CARD: Alerta de Vencimento de Serviços (Clicável) */}
@@ -587,7 +591,7 @@ export default function AdminDashboard() {
             setVencimentoTab('todos')
             setIsVencimentoModalOpen(true)
           }}
-          className={`text-left p-4 sm:p-5 rounded-2xl border shadow-xs space-y-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.99] ${
+          className={`text-left p-3.5 sm:p-5 rounded-2xl border shadow-xs space-y-1.5 sm:space-y-2 cursor-pointer transition-all active:scale-[0.99] ${
             vencimentoStats.totalAlertas > 0
               ? vencimentoStats.vencidosCount > 0
                 ? 'bg-rose-50/80 border-rose-300 hover:border-rose-400 hover:shadow-md'
@@ -595,20 +599,20 @@ export default function AdminDashboard() {
               : 'bg-white border-[#D3DFE9] hover:border-[#004B8D]/40'
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold uppercase tracking-wider">
             <span
-              className={
+              className={`truncate ${
                 vencimentoStats.vencidosCount > 0
                   ? 'text-rose-800'
                   : vencimentoStats.vencendoEmBreveCount > 0
                     ? 'text-amber-800'
                     : 'text-[#486581]'
-              }
+              }`}
             >
               Alerta Prazos
             </span>
             <AlertTriangle
-              className={`w-4 h-4 ${
+              className={`w-4 h-4 shrink-0 ${
                 vencimentoStats.vencidosCount > 0
                   ? 'text-rose-600 animate-pulse'
                   : vencimentoStats.vencendoEmBreveCount > 0
@@ -617,9 +621,9 @@ export default function AdminDashboard() {
               }`}
             />
           </div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-1.5 sm:gap-2">
             <span
-              className={`text-2xl sm:text-3xl font-extrabold ${
+              className={`text-xl sm:text-3xl font-extrabold ${
                 vencimentoStats.vencidosCount > 0
                   ? 'text-rose-900'
                   : vencimentoStats.vencendoEmBreveCount > 0
@@ -629,31 +633,31 @@ export default function AdminDashboard() {
             >
               {vencimentoStats.totalAlertas}
             </span>
-            <span className="text-xs font-bold text-[#627D98]">itens</span>
+            <span className="text-[11px] sm:text-xs font-bold text-[#627D98]">itens</span>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-              {vencimentoStats.vencidosCount} vencido(s)
+          <div className="flex items-center gap-1 flex-wrap pt-0.5">
+            <span className="text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+              {vencimentoStats.vencidosCount} vencidos
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+            <span className="text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
               {vencimentoStats.vencendoEmBreveCount} a vencer
             </span>
           </div>
         </button>
 
         {/* Fiscais na Equipe */}
-        <div className="col-span-2 md:col-span-1 bg-[#E8F1F8]/80 p-4 sm:p-5 rounded-2xl border border-[#004B8D]/20 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-[#004B8D] uppercase tracking-wider">
+        <div className="col-span-2 md:col-span-1 bg-[#E8F1F8]/80 p-3.5 sm:p-5 rounded-2xl border border-[#004B8D]/20 shadow-xs space-y-1.5 sm:space-y-2">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-[#004B8D] uppercase tracking-wider">
             <span>Equipe Técnica</span>
-            <Users className="w-4 h-4 text-[#004B8D]" />
+            <Users className="w-4 h-4 text-[#004B8D] shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#004B8D]">
+          <div className="flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xl sm:text-3xl font-extrabold text-[#004B8D]">
               {stats.totalFiscais}
             </span>
-            <span className="text-xs text-[#004B8D]/80">fiscais</span>
+            <span className="text-[11px] sm:text-xs text-[#004B8D]/80">fiscais</span>
           </div>
-          <div className="text-[11px] text-[#004B8D]/80">
+          <div className="text-[10px] sm:text-[11px] text-[#004B8D]/80 truncate">
             {stats.totalAtribuicoes} unidades atribuídas
           </div>
         </div>
@@ -915,46 +919,46 @@ export default function AdminDashboard() {
                   className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
                 >
                   {/* Left: Hospital & Fiscal Info */}
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-bold text-sm text-[#102A43] leading-snug">
+                  <div className="space-y-1.5 flex-1 min-w-0 w-full">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <h4 className="font-bold text-sm text-[#102A43] leading-snug break-words">
                         {hosp?.nome || 'Unidade não encontrada'}
                       </h4>
-                      <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold">
+                      <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold shrink-0">
                         {hospTipo}
                       </Badge>
                       {detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
-                        <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold gap-1">
+                        <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold gap-1 shrink-0">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           Concluída
                         </Badge>
                       ) : (
-                        <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold gap-1">
+                        <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold gap-1 shrink-0">
                           <Clock className="w-3 h-3 text-amber-600" />
-                          Em andamento ({detail.itensRespondidosCount}/{detail.totalItensChecklist})
+                          {detail.itensRespondidosCount}/{detail.totalItensChecklist}
                         </Badge>
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#486581]">
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5 text-[#004B8D]" />
-                        Fiscal:{' '}
-                        <strong className="text-[#102A43]">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-[#486581]">
+                      <span className="flex items-center gap-1 truncate max-w-full">
+                        <Users className="w-3.5 h-3.5 text-[#004B8D] shrink-0" />
+                        <span>Fiscal:</span>
+                        <strong className="text-[#102A43] truncate">
                           {fiscal?.name || fiscal?.email || 'Não definido'}
                         </strong>
                       </span>
-                      <span>•</span>
+                      <span className="hidden sm:inline">•</span>
                       <span>
                         Município: <strong>{hosp?.municipio}</strong>
                       </span>
-                      <span>•</span>
-                      <span className="font-mono">CNES: {hosp?.cnes}</span>
+                      <span className="hidden sm:inline">•</span>
+                      <span className="font-mono text-[11px]">CNES: {hosp?.cnes}</span>
                       {detail.atribuicao.prazo && (
                         <>
-                          <span>•</span>
+                          <span className="hidden sm:inline">•</span>
                           <span className="flex items-center gap-1 text-[#004B8D]">
-                            <Calendar className="w-3.5 h-3.5" />
+                            <Calendar className="w-3.5 h-3.5 shrink-0" />
                             Prazo:{' '}
                             {detail.atribuicao.prazo.split('T')[0].split('-').reverse().join('/')}
                           </span>
@@ -963,7 +967,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {detail.atribuicao.observacao && (
-                      <p className="text-[11px] text-[#627D98] bg-[#F4F6F9] px-2.5 py-1 rounded-md max-w-xl">
+                      <p className="text-[11px] text-[#627D98] bg-[#F4F6F9] px-2.5 py-1 rounded-md max-w-xl break-words">
                         <strong>Obs:</strong> {detail.atribuicao.observacao}
                       </p>
                     )}
@@ -990,13 +994,13 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Right: Actions */}
-                  <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                  <div className="flex items-center gap-2 self-stretch sm:self-end md:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-0 border-[#D3DFE9]/50">
                     <Button
                       size="sm"
                       onClick={() => handleIniciarFiscalizacaoClick(detail)}
-                      className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-8 px-3 cursor-pointer shadow-xs gap-1.5"
+                      className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 sm:h-8 px-3 cursor-pointer shadow-xs gap-1.5"
                     >
-                      <ClipboardCheck className="w-3.5 h-3.5" />
+                      <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
                       Iniciar Fiscalização
                     </Button>
 
@@ -1004,10 +1008,10 @@ export default function AdminDashboard() {
                       size="sm"
                       variant="ghost"
                       onClick={() => setAtribuicaoToDelete(detail)}
-                      className="h-8 w-8 p-0 text-[#829AB1] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                      className="h-9 w-9 sm:h-8 sm:w-8 p-0 text-[#829AB1] hover:text-rose-600 hover:bg-rose-50 cursor-pointer shrink-0"
                       title="Desvincular atribuição"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -1047,7 +1051,7 @@ export default function AdminDashboard() {
         open={!!atribuicaoToDelete}
         onOpenChange={(open) => !open && setAtribuicaoToDelete(null)}
       >
-        <AlertDialogContent className="border-[#D3DFE9] bg-white">
+        <AlertDialogContent className="w-[calc(100vw-1.5rem)] sm:w-full max-w-lg border-[#D3DFE9] bg-white rounded-2xl sm:rounded-lg">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-bold text-[#102A43]">
               Desvincular Fiscalização
@@ -1076,7 +1080,7 @@ export default function AdminDashboard() {
 
       {/* Modal / Dialog de Alerta de Vencimento de Prazos */}
       <Dialog open={isVencimentoModalOpen} onOpenChange={setIsVencimentoModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border-[#D3DFE9]">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border-[#D3DFE9] rounded-2xl">
           <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-slate-50/50">
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
@@ -1187,7 +1191,6 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   </div>
-
                   {/* Detalhes do Subitem */}
                   <div className="space-y-1 text-xs">
                     <div className="flex items-baseline gap-2">
@@ -1207,30 +1210,29 @@ export default function AdminDashboard() {
                       </p>
                     )}
                   </div>
-
                   {/* Informações da Data e Prazo */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 text-xs bg-white p-2.5 rounded-lg border border-[#D3DFE9]/80">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs bg-white p-2.5 rounded-lg border border-[#D3DFE9]/80">
                     <div>
                       <span className="text-[10px] text-[#627D98] block">
                         Data do Último Serviço:
                       </span>
-                      <strong className="text-[#102A43] flex items-center gap-1 font-mono">
-                        <Calendar className="w-3 h-3 text-[#004B8D]" />
+                      <strong className="text-[#102A43] flex items-center gap-1 font-mono text-[11px] sm:text-xs">
+                        <Calendar className="w-3 h-3 text-[#004B8D] shrink-0" />
                         {alerta.dataUltimoServicoStr}
                       </strong>
                     </div>
 
                     <div>
                       <span className="text-[10px] text-[#627D98] block">Data da Última ART:</span>
-                      <strong className="text-[#004B8D] flex items-center gap-1 font-mono">
-                        <Calendar className="w-3 h-3 text-[#004B8D]" />
+                      <strong className="text-[#004B8D] flex items-center gap-1 font-mono text-[11px] sm:text-xs">
+                        <Calendar className="w-3 h-3 text-[#004B8D] shrink-0" />
                         {alerta.dataUltimaArtStr || '—'}
                       </strong>
                     </div>
 
                     <div>
                       <span className="text-[10px] text-[#627D98] block">Periodicidade:</span>
-                      <strong className="text-[#102A43]">
+                      <strong className="text-[#102A43] text-[11px] sm:text-xs">
                         {alerta.periodicidadeMeses
                           ? `${alerta.periodicidadeMeses} ${alerta.periodicidadeMeses === 1 ? 'mês' : 'meses'}`
                           : alerta.periodicidadeDias > 0
@@ -1244,7 +1246,7 @@ export default function AdminDashboard() {
                         Data Limite de Validade:
                       </span>
                       <strong
-                        className={`font-mono ${
+                        className={`font-mono text-[11px] sm:text-xs ${
                           alerta.status === 'vencido' ? 'text-rose-700' : 'text-amber-800'
                         }`}
                       >
@@ -1252,12 +1254,11 @@ export default function AdminDashboard() {
                       </strong>
                     </div>
                   </div>
-
                   {/* Botão de Ação: Abrir Checklist da Vistoria */}
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="text-[11px] text-[#627D98] truncate max-w-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                    <div className="text-[11px] text-[#627D98] truncate max-w-full">
                       {alerta.prestadorServico && (
-                        <span>
+                        <span className="truncate">
                           Prestador: <strong>{alerta.prestadorServico}</strong>
                         </span>
                       )}
@@ -1276,12 +1277,12 @@ export default function AdminDashboard() {
                           }`,
                         )
                       }}
-                      className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs h-7 px-3 font-semibold cursor-pointer gap-1 shrink-0 ml-2"
+                      className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs h-8 sm:h-7 px-3 font-semibold cursor-pointer gap-1 shrink-0 self-stretch sm:self-auto"
                     >
-                      <ClipboardCheck className="w-3 h-3" />
+                      <ClipboardCheck className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                       Ver no Checklist
                     </Button>
-                  </div>
+                  </div>{' '}
                 </div>
               ))
             )}

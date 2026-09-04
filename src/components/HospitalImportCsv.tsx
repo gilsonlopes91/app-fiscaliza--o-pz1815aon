@@ -254,7 +254,7 @@ export function HospitalImportCsv({
   const errorCount = processedItems.filter((i) => !i.isValid).length
 
   return (
-    <div className="bg-white rounded-xl border border-[#D3DFE9] p-6 shadow-sm space-y-6 animate-page-enter">
+    <div className="bg-white rounded-xl border border-[#D3DFE9] p-4 sm:p-6 shadow-sm space-y-5 sm:space-y-6 animate-page-enter w-full max-w-full overflow-x-hidden">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
         <div>

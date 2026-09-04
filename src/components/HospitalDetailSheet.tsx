@@ -256,26 +256,26 @@ export function HospitalDetailSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto p-0 flex flex-col bg-white border-l border-[#D3DFE9]">
           {/* Header */}
-          <SheetHeader className="p-6 border-b border-[#D3DFE9] bg-[#F4F6F9] sticky top-0 z-10">
-            <div className="flex items-start justify-between gap-4 pr-6">
+          <SheetHeader className="p-4 sm:p-6 border-b border-[#D3DFE9] bg-[#F4F6F9] sticky top-0 z-10">
+            <div className="flex flex-col gap-3 pr-6">
               <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] shrink-0 mt-0.5 shadow-xs">
-                  <Building2 className="w-6 h-6 stroke-[2]" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] shrink-0 mt-0.5 shadow-xs">
+                  <Building2 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
                 </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <SheetTitle className="text-xl font-bold text-[#102A43] leading-tight text-left">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                    <SheetTitle className="text-base sm:text-xl font-bold text-[#102A43] leading-tight text-left break-words">
                       {hospital.nome}
                     </SheetTitle>
                     {hospital.tipo && (
-                      <Badge className="bg-[#E8F1F8] text-[#004B8D] hover:bg-[#E8F1F8] border-0 text-xs font-semibold">
+                      <Badge className="bg-[#E8F1F8] text-[#004B8D] hover:bg-[#E8F1F8] border-0 text-[11px] sm:text-xs font-semibold shrink-0">
                         {hospital.tipo}
                       </Badge>
                     )}
                   </div>
-                  <SheetDescription className="text-xs text-[#486581] flex items-center gap-3">
+                  <SheetDescription className="text-xs text-[#486581] flex flex-wrap items-center gap-2">
                     <span className="flex items-center gap-1 font-medium text-[#102A43]">
-                      <MapPin className="w-3.5 h-3.5 text-[#004B8D]" />
+                      <MapPin className="w-3.5 h-3.5 text-[#004B8D] shrink-0" />
                       {hospital.municipio}
                     </span>
                     <span>•</span>
@@ -286,17 +286,17 @@ export function HospitalDetailSheet({
                 </div>
               </div>
               {!isEditing && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#D3DFE9]/50 sm:border-0 sm:pt-0">
                   {isAdmin && (
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       onClick={() => setIsAtribuirModalOpen(true)}
-                      className="shrink-0 border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer text-xs"
+                      className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer text-xs"
                       title="Atribuir este empreendimento a um fiscal"
                     >
-                      <UserPlus className="w-4 h-4 mr-1.5" />
+                      <UserPlus className="w-3.5 h-3.5 mr-1" />
                       Atribuir Fiscal
                     </Button>
                   )}
@@ -305,12 +305,12 @@ export function HospitalDetailSheet({
                     size="sm"
                     onClick={handleIniciarVistoria}
                     disabled={isStartingVistoria}
-                    className="shrink-0 bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-9 px-3 cursor-pointer text-xs"
+                    className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-9 px-3 cursor-pointer text-xs"
                   >
                     {isStartingVistoria ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
                     ) : (
-                      <ClipboardCheck className="w-4 h-4 mr-1.5 stroke-[2.2]" />
+                      <ClipboardCheck className="w-3.5 h-3.5 mr-1 stroke-[2.2]" />
                     )}
                     Iniciar Fiscalização
                   </Button>
@@ -320,14 +320,14 @@ export function HospitalDetailSheet({
                       size="sm"
                       variant="outline"
                       onClick={() => setIsEditing(true)}
-                      className="shrink-0 border-[#D3DFE9] text-[#004B8D] hover:text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer text-xs"
+                      className="border-[#D3DFE9] text-[#004B8D] hover:text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-9 px-3 cursor-pointer text-xs"
                     >
-                      <Edit2 className="w-4 h-4 mr-1.5" />
+                      <Edit2 className="w-3.5 h-3.5 mr-1" />
                       Editar
                     </Button>
                   )}
                 </div>
-              )}{' '}
+              )}
             </div>
           </SheetHeader>
 

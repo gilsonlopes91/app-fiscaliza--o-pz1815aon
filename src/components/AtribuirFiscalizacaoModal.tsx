@@ -174,9 +174,9 @@ export function AtribuirFiscalizacaoModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl bg-white border-[#D3DFE9] p-0 overflow-hidden sm:rounded-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl bg-white border-[#D3DFE9] p-0 overflow-hidden rounded-2xl max-h-[92vh] flex flex-col">
         {/* Header */}
-        <DialogHeader className="p-6 pb-4 bg-[#004B8D] text-white">
+        <DialogHeader className="p-4 sm:p-6 pb-4 bg-[#004B8D] text-white">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/10 text-white flex items-center justify-center shrink-0">
               <UserPlus className="w-5 h-5 text-[#E5A812]" />
@@ -379,8 +379,8 @@ export function AtribuirFiscalizacaoModal({
         </form>
 
         {/* Footer */}
-        <DialogFooter className="p-4 sm:px-6 bg-[#F4F6F9] border-t border-[#D3DFE9] flex flex-row items-center justify-between">
-          <div className="text-xs text-[#486581]">
+        <DialogFooter className="p-3.5 sm:px-6 bg-[#F4F6F9] border-t border-[#D3DFE9] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div className="text-xs text-[#486581] text-center sm:text-left">
             {selectedHospitalIds.length > 0 && selectedFiscal ? (
               <span>
                 <strong>{selectedHospitalIds.length}</strong> unidade(s) serão atribuídas a{' '}
@@ -391,13 +391,13 @@ export function AtribuirFiscalizacaoModal({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-end">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="border-[#D3DFE9] text-[#486581] text-xs h-9 cursor-pointer"
+              className="flex-1 sm:flex-none border-[#D3DFE9] text-[#486581] text-xs h-10 sm:h-9 cursor-pointer"
             >
               Cancelar
             </Button>
@@ -405,7 +405,7 @@ export function AtribuirFiscalizacaoModal({
               type="button"
               onClick={handleSubmit}
               disabled={!selectedFiscalId || selectedHospitalIds.length === 0 || isSubmitting}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 px-4 cursor-pointer shadow-xs gap-1.5"
+              className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-10 sm:h-9 px-4 cursor-pointer shadow-xs gap-1.5"
             >
               {isSubmitting ? (
                 <>
@@ -415,7 +415,7 @@ export function AtribuirFiscalizacaoModal({
               ) : (
                 <>
                   <UserPlus className="w-3.5 h-3.5" />
-                  Confirmar Atribuição ({selectedHospitalIds.length})
+                  Confirmar ({selectedHospitalIds.length})
                 </>
               )}
             </Button>

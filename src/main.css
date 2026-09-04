@@ -7,6 +7,30 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
+  /* Utilitário universal para ocultar barras de rolagem mantendo a funcionalidade de scroll */
+  .no-scrollbar,
+  .scrollbar-none {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .no-scrollbar::-webkit-scrollbar,
+  .scrollbar-none::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent;
+  }
+
   :root {
     /* CREA-PI Brand Design Tokens */
     --brand-primary: #004b8d;

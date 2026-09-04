@@ -1091,25 +1091,25 @@ export default function VistoriaPage() {
   }
 
   return (
-    <div className="animate-page-enter space-y-8 pb-20">
+    <div className="animate-page-enter space-y-6 sm:space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
       {/* 1. Header with Nova Vistoria button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#D3DFE9] pb-4 sm:pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
               Vistorias & Checklist por Tipo
             </h1>
           </div>
-          <p className="text-sm text-[#486581] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#486581] mt-0.5">
             Checklist técnico em dois níveis: temas principais como agrupadores e fiscalização
             detalhada por subitem
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
           <Button
             onClick={() => setIsNovaVistoriaOpen(true)}
-            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
+            className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-3.5 sm:px-4 cursor-pointer gap-1.5 text-xs sm:text-sm"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             Iniciar Fiscalização
@@ -1118,7 +1118,7 @@ export default function VistoriaPage() {
             variant="outline"
             onClick={loadInitialData}
             disabled={isLoading}
-            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer"
+            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer shrink-0"
             title="Atualizar lista"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -1304,7 +1304,7 @@ export default function VistoriaPage() {
             </div>
 
             {/* Ações Rápidas: Gerar Relatório PDF + Baixar Todas as Fotos + Finalizar / Reabrir */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
               {/* Botão Finalizar / Reabrir Vistoria */}
               {isVistoriaConcluida ? (
                 <Button
@@ -1312,7 +1312,7 @@ export default function VistoriaPage() {
                   variant="outline"
                   disabled={isReabrindo}
                   onClick={handleReabrirVistoria}
-                  className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
+                  className="w-full sm:w-auto border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
                   title="Reabrir vistoria para permitir novas edições"
                 >
                   {isReabrindo ? (
@@ -1326,7 +1326,7 @@ export default function VistoriaPage() {
                 <Button
                   type="button"
                   onClick={() => setIsFinalizarDialogOpen(true)}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
+                  className="w-full sm:w-auto bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
                   title="Finalizar vistoria e travar checklist"
                 >
                   <Lock className="w-4 h-4" />
@@ -1339,7 +1339,7 @@ export default function VistoriaPage() {
                 disabled={isGeneratingPdf}
                 onClick={handleGeneratePdf}
                 variant="outline"
-                className="border-[#004B8D] text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer shadow-xs"
+                className="w-full sm:w-auto border-[#004B8D] text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer shadow-xs"
                 title="Gerar e baixar relatório técnico oficial em PDF com cabeçalho CREA-PI"
               >
                 {isGeneratingPdf ? (
@@ -1360,7 +1360,7 @@ export default function VistoriaPage() {
                 variant="outline"
                 disabled={isDownloadingZip || totalPhotosInCurrentVistoria === 0}
                 onClick={handleDownloadAllPhotosZip}
-                className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer"
+                className="w-full sm:w-auto border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer"
                 title="Baixar todas as fotos da vistoria em um arquivo ZIP com marcas d'água de GPS e data/hora"
               >
                 {isDownloadingZip ? (
@@ -1398,59 +1398,63 @@ export default function VistoriaPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-              <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold mb-1">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Conforme
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+              <div className="flex items-center gap-1 text-emerald-800 text-[11px] sm:text-xs font-bold mb-0.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">Conforme</span>
               </div>
-              <div className="text-2xl font-bold text-emerald-900">{stats.conforme}</div>
-              <div className="text-[11px] text-emerald-700">Subitens regulares</div>
+              <div className="text-xl sm:text-2xl font-bold text-emerald-900">{stats.conforme}</div>
+              <div className="text-[10px] text-emerald-700 truncate">Subitens regulares</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-300">
-              <div className="flex items-center gap-1.5 text-rose-800 text-xs font-bold mb-1">
-                <AlertTriangle className="w-4 h-4 text-rose-600" />
-                Não conforme
+            <div className="p-2.5 sm:p-3 rounded-xl bg-rose-50 border border-rose-300">
+              <div className="flex items-center gap-1 text-rose-800 text-[11px] sm:text-xs font-bold mb-0.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span className="truncate">Não conforme</span>
               </div>
-              <div className="text-2xl font-bold text-rose-900">{stats.naoConforme}</div>
-              <div className="text-[11px] text-rose-700">Não regularizados</div>
+              <div className="text-xl sm:text-2xl font-bold text-rose-900">{stats.naoConforme}</div>
+              <div className="text-[10px] text-rose-700 truncate">Não regularizados</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-rose-50/70 border border-rose-200">
-              <div className="flex items-center gap-1.5 text-rose-800 text-xs font-bold mb-1">
-                <Clock className="w-4 h-4 text-rose-600" />
-                Vencido
+            <div className="p-2.5 sm:p-3 rounded-xl bg-rose-50/70 border border-rose-200">
+              <div className="flex items-center gap-1 text-rose-800 text-[11px] sm:text-xs font-bold mb-0.5">
+                <Clock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span className="truncate">Vencido</span>
               </div>
-              <div className="text-2xl font-bold text-rose-900">{stats.vencido}</div>
-              <div className="text-[11px] text-rose-700">Prazo expirado</div>
+              <div className="text-xl sm:text-2xl font-bold text-rose-900">{stats.vencido}</div>
+              <div className="text-[10px] text-rose-700 truncate">Prazo expirado</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-300">
-              <div className="flex items-center gap-1.5 text-amber-800 text-xs font-bold mb-1">
-                <Clock className="w-4 h-4 text-amber-600" />
-                Vencendo
+            <div className="p-2.5 sm:p-3 rounded-xl bg-amber-50 border border-amber-300">
+              <div className="flex items-center gap-1 text-amber-800 text-[11px] sm:text-xs font-bold mb-0.5">
+                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span className="truncate">Vencendo</span>
               </div>
-              <div className="text-2xl font-bold text-amber-900">{stats.vencendoEmBreve}</div>
-              <div className="text-[11px] text-amber-700">Vence em até 30 dias</div>
+              <div className="text-xl sm:text-2xl font-bold text-amber-900">
+                {stats.vencendoEmBreve}
+              </div>
+              <div className="text-[10px] text-amber-700 truncate">Vence em até 30 dias</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 border border-[#D3DFE9]">
-              <div className="flex items-center gap-1.5 text-[#486581] text-xs font-bold mb-1">
-                <CheckCircle className="w-4 h-4 text-[#627D98]" />
-                Não se aplica
+            <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-[#D3DFE9]">
+              <div className="flex items-center gap-1 text-[#486581] text-[11px] sm:text-xs font-bold mb-0.5">
+                <CheckCircle className="w-3.5 h-3.5 text-[#627D98] shrink-0" />
+                <span className="truncate">Não se aplica</span>
               </div>
-              <div className="text-2xl font-bold text-[#102A43]">{stats.naoSeAplica}</div>
-              <div className="text-[11px] text-[#627D98]">Não possui atividade</div>
+              <div className="text-xl sm:text-2xl font-bold text-[#102A43]">
+                {stats.naoSeAplica}
+              </div>
+              <div className="text-[10px] text-[#627D98] truncate">Não possui atividade</div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-100/70 border border-slate-300">
-              <div className="flex items-center gap-1.5 text-[#486581] text-xs font-bold mb-1">
-                <Clock className="w-4 h-4 text-[#627D98]" />
-                Pendente
+            <div className="p-2.5 sm:p-3 rounded-xl bg-slate-100/70 border border-slate-300">
+              <div className="flex items-center gap-1 text-[#486581] text-[11px] sm:text-xs font-bold mb-0.5">
+                <Clock className="w-3.5 h-3.5 text-[#627D98] shrink-0" />
+                <span className="truncate">Pendente</span>
               </div>
-              <div className="text-2xl font-bold text-[#102A43]">{stats.pendente}</div>
-              <div className="text-[11px] text-[#627D98]">Não respondido</div>
+              <div className="text-xl sm:text-2xl font-bold text-[#102A43]">{stats.pendente}</div>
+              <div className="text-[10px] text-[#627D98] truncate">Não respondido</div>
             </div>
           </div>
         </div>
@@ -2454,7 +2458,7 @@ export default function VistoriaPage() {
 
       {/* Confirm Finalizar Vistoria Dialog */}
       <AlertDialog open={isFinalizarDialogOpen} onOpenChange={setIsFinalizarDialogOpen}>
-        <AlertDialogContent className="border-[#D3DFE9] bg-white">
+        <AlertDialogContent className="w-[calc(100vw-1.5rem)] sm:w-full max-w-lg border-[#D3DFE9] bg-white rounded-2xl sm:rounded-lg">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-bold text-[#102A43] flex items-center gap-2">
               <Lock className="w-5 h-5 text-emerald-600" />

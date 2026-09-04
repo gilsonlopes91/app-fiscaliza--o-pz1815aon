@@ -147,7 +147,7 @@ export function ItemFiscalizacaoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg bg-white border-[#D3DFE9] text-[#102A43] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg bg-white border-[#D3DFE9] text-[#102A43] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto rounded-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[#E8F1F8] flex items-center justify-center text-[#004B8D]">

@@ -532,7 +532,7 @@ export default function TipoEmpreendimentoDetalhePage() {
   const totalSubitensCount = checklistSubitens.length
 
   return (
-    <div className="animate-page-enter space-y-6 pb-16">
+    <div className="animate-page-enter space-y-6 pb-16 w-full max-w-full overflow-x-hidden">
       {/* Back button & Breadcrumb header */}
       <div className="flex items-center justify-between gap-4">
         <Button

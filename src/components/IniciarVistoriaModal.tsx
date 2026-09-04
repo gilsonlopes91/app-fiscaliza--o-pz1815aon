@@ -203,9 +203,9 @@ export function IniciarVistoriaModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl bg-white border-[#D3DFE9] p-0 overflow-hidden sm:rounded-2xl max-h-[92vh] flex flex-col">
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl bg-white border-[#D3DFE9] p-0 overflow-hidden rounded-2xl max-h-[92vh] flex flex-col">
         {/* Header no padrão visual CREA-PI */}
-        <DialogHeader className="p-5 sm:p-6 pb-4 bg-[#004B8D] text-white">
+        <DialogHeader className="p-4 sm:p-6 pb-4 bg-[#004B8D] text-white">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/10 text-[#E5A812] flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
               <ClipboardCheck className="w-5 h-5 stroke-[2.2]" />
@@ -514,13 +514,13 @@ export function IniciarVistoriaModal({
         </form>
 
         {/* Footer com botões de Cancelar e Salvar & Continuar */}
-        <DialogFooter className="p-4 sm:px-6 bg-[#F4F6F9] border-t border-[#D3DFE9] flex flex-row items-center justify-end gap-2">
+        <DialogFooter className="p-3.5 sm:px-6 bg-[#F4F6F9] border-t border-[#D3DFE9] flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
-            className="border-[#D3DFE9] text-[#486581] hover:text-[#102A43] text-xs h-9 cursor-pointer"
+            className="order-2 sm:order-1 border-[#D3DFE9] text-[#486581] hover:text-[#102A43] text-xs h-10 sm:h-9 cursor-pointer"
           >
             <X className="w-3.5 h-3.5 mr-1" />
             Cancelar
@@ -529,7 +529,7 @@ export function IniciarVistoriaModal({
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs sm:text-sm h-9 px-4 cursor-pointer shadow-sm gap-1.5"
+            className="order-1 sm:order-2 bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs sm:text-sm h-10 sm:h-9 px-4 cursor-pointer shadow-sm gap-1.5"
           >
             {isSubmitting ? (
               <>
@@ -538,8 +538,8 @@ export function IniciarVistoriaModal({
               </>
             ) : (
               <>
-                <ClipboardCheck className="w-4 h-4 mr-1 stroke-[2.2]" />
-                Salvar e Continuar para o Checklist
+                <ClipboardCheck className="w-4 h-4 mr-1 stroke-[2.2] shrink-0" />
+                <span className="truncate">Salvar e Ir para o Checklist</span>
               </>
             )}
           </Button>

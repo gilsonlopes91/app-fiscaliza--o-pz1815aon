@@ -126,28 +126,28 @@ export default function FiscalDashboard() {
   }, [details, selectedStatusFiltro, selectedTipoFiltro, searchQuery])
 
   return (
-    <div className="animate-page-enter space-y-8 pb-16">
+    <div className="animate-page-enter space-y-6 sm:space-y-8 pb-16 w-full max-w-full overflow-x-hidden">
       {/* 1. Header do Fiscal */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#D3DFE9] pb-4 sm:pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight flex items-center gap-2.5">
-              <ClipboardCheck className="w-7 h-7 text-[#004B8D]" />
-              Minhas Fiscalizações Atribuídas
+            <h1 className="text-xl sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight flex items-center gap-2">
+              <ClipboardCheck className="w-6 h-6 sm:w-7 sm:h-7 text-[#004B8D] shrink-0" />
+              <span>Minhas Fiscalizações Atribuídas</span>
             </h1>
           </div>
-          <p className="text-sm text-[#486581] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#486581] mt-0.5">
             Olá, <strong>{user?.name || user?.email}</strong>. Acompanhe os empreendimentos
             delegados a você e preencha o checklist de vistoria.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
           <Button
             variant="outline"
             onClick={loadData}
             disabled={isLoading}
-            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3.5 cursor-pointer text-xs gap-1.5"
+            className="flex-1 sm:flex-none border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3.5 cursor-pointer text-xs gap-1.5"
             title="Atualizar lista"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -157,10 +157,10 @@ export default function FiscalDashboard() {
           <Button
             onClick={() => navigate('/tipos-empreendimento')}
             variant="outline"
-            className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3.5 text-xs gap-1.5 cursor-pointer"
+            className="flex-1 sm:flex-none border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3.5 text-xs gap-1.5 cursor-pointer"
           >
             <Layers className="w-3.5 h-3.5" />
-            Explorar Catálogo
+            <span>Explorar Catálogo</span>
           </Button>
         </div>
       </div>
@@ -407,15 +407,17 @@ export default function FiscalDashboard() {
                         )
                       }
                     }}
-                    className={`w-full font-bold text-xs h-9 cursor-pointer shadow-xs gap-2 ${
+                    className={`w-full font-bold text-xs h-10 sm:h-9 cursor-pointer shadow-xs gap-2 ${
                       detail.isConcluida
                         ? 'bg-slate-700 hover:bg-slate-800 text-white'
                         : 'bg-[#004B8D] hover:bg-[#003666] text-white'
                     }`}
                   >
-                    <ClipboardCheck className="w-4 h-4" />
-                    {detail.isConcluida ? 'Ver Vistoria Concluída' : 'Preencher Checklist'}
-                    <ArrowRight className="w-3.5 h-3.5 ml-auto" />
+                    <ClipboardCheck className="w-4 h-4 shrink-0" />
+                    <span className="truncate">
+                      {detail.isConcluida ? 'Ver Vistoria Concluída' : 'Preencher Checklist'}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 ml-auto shrink-0" />
                   </Button>
                 </div>
               )

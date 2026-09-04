@@ -79,8 +79,8 @@ export function NovaVistoriaDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg bg-white border-[#D3DFE9] p-0 overflow-hidden sm:rounded-2xl">
-          <DialogHeader className="p-6 pb-4 bg-[#F4F6F9] border-b border-[#D3DFE9]">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-lg bg-white border-[#D3DFE9] p-0 overflow-hidden rounded-2xl">
+          <DialogHeader className="p-4 sm:p-6 pb-4 bg-[#F4F6F9] border-b border-[#D3DFE9]">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#004B8D] text-white flex items-center justify-center shrink-0 shadow-sm">
                 <Plus className="w-5 h-5 stroke-[2.5]" />

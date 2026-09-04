@@ -299,7 +299,7 @@ export function PhotoUploadSection({
       {/* Preview Dialog */}
       {previewImage && (
         <Dialog open={Boolean(previewImage)} onOpenChange={() => setPreviewImage(null)}>
-          <DialogContent className="max-w-2xl bg-black/95 p-2 text-white border-0">
+          <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl bg-black/95 p-2 text-white border-0 rounded-2xl">
             <DialogHeader className="p-2 pb-0">
               <DialogTitle className="text-xs text-slate-300">
                 Visualização do Registro Fotográfico

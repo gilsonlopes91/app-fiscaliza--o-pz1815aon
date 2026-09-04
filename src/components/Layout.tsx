@@ -83,49 +83,49 @@ export function Layout() {
       : []),
   ]
   return (
-    <div className="min-h-screen flex flex-col bg-[#F4F6F9] text-[#102A43] font-sans antialiased selection:bg-[#004B8D] selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#F4F6F9] text-[#102A43] font-sans antialiased selection:bg-[#004B8D] selection:text-white w-full max-w-full overflow-x-hidden">
       {/* Offline Alert Bar */}
       {!isOnline && (
         <div className="bg-amber-600 text-white px-4 py-1.5 text-xs font-semibold flex items-center justify-center gap-2 shadow-inner z-50">
-          <WifiOff className="w-3.5 h-3.5 animate-pulse" />
-          <span>Modo Offline ativado. Você pode continuar visualizando os itens em cache.</span>
+          <WifiOff className="w-3.5 h-3.5 animate-pulse shrink-0" />
+          <span className="truncate">Modo Offline ativado. Exibindo dados salvos.</span>
         </div>
       )}
 
       {/* 1. Header Fixo Superior */}
-      <header className="sticky top-0 z-40 bg-[#004B8D] border-b border-[#003666] text-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-[#004B8D] border-b border-[#003666] text-white shadow-md w-full">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
           {/* Logo & Brand Identity CREA-PI */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center py-1">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex items-center justify-center py-1 shrink-0">
               <img
                 src={logoCreaPi}
                 alt="CREA-PI - Conselho Regional de Engenharia e Agronomia do Piauí"
-                className="h-10 sm:h-11 w-auto max-w-[200px] sm:max-w-[240px] object-contain drop-shadow-sm"
+                className="h-8 sm:h-11 w-auto max-w-[150px] sm:max-w-[240px] object-contain drop-shadow-sm"
               />
             </div>
-            <div className="hidden sm:flex flex-col border-l border-white/20 pl-3">
-              <span className="font-bold text-sm sm:text-base tracking-tight leading-none text-white flex items-center gap-1.5">
+            <div className="flex flex-col border-l border-white/20 pl-2 sm:pl-3 min-w-0">
+              <span className="font-bold text-xs sm:text-base tracking-tight leading-none text-white flex items-center gap-1.5">
                 Fiscalização
               </span>
-              <span className="text-[10px] text-blue-100 font-medium tracking-wide">
+              <span className="hidden sm:inline text-[10px] text-blue-100 font-medium tracking-wide truncate">
                 Sistema integrado de fiscalização por empreendimento
               </span>
             </div>
           </div>
 
           {/* Right Area: User profile dropdown & Role badge */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* Install PWA Button if available */}
             {isInstallable && (
               <Button
                 onClick={handleInstallClick}
                 size="sm"
-                className="bg-[#E5A812] hover:bg-[#d4970b] text-[#102A43] font-bold text-xs h-8 px-2.5 sm:px-3 shadow-xs flex items-center gap-1.5 cursor-pointer"
+                className="bg-[#E5A812] hover:bg-[#d4970b] text-[#102A43] font-bold text-xs h-8 px-2 sm:px-3 shadow-xs flex items-center gap-1 cursor-pointer"
                 title="Instalar App Fiscalização no Dispositivo"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Instalar App</span>
+                <span className="hidden md:inline">Instalar</span>
               </Button>
             )}
 
@@ -134,9 +134,9 @@ export function Layout() {
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="h-10 px-2.5 sm:px-3 text-white hover:bg-[#003666] hover:text-white flex items-center gap-2 rounded-lg"
+                    className="h-9 sm:h-10 px-2 sm:px-3 text-white hover:bg-[#003666] hover:text-white flex items-center gap-1.5 sm:gap-2 rounded-lg cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-full bg-[#E5A812] text-[#102A43] font-bold text-xs flex items-center justify-center shadow-xs">
+                    <div className="w-7 h-7 rounded-full bg-[#E5A812] text-[#102A43] font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
                       {user.name ? user.name[0].toUpperCase() : 'U'}
                     </div>
                     <div className="hidden sm:flex flex-col text-left">
@@ -147,17 +147,19 @@ export function Layout() {
                         {user.role === 'admin' ? 'Administrador' : 'Fiscal / Usuário'}
                       </span>
                     </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-blue-200" />
+                    <ChevronDown className="w-3.5 h-3.5 text-blue-200 shrink-0" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-56 bg-white border-[#D3DFE9] text-[#102A43] shadow-lg rounded-xl"
+                  className="w-56 bg-white border-[#D3DFE9] text-[#102A43] shadow-lg rounded-xl z-50"
                 >
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-xs font-bold leading-none text-[#102A43]">{user.name}</p>
-                      <p className="text-[11px] leading-none text-[#627D98] font-mono">
+                      <p className="text-xs font-bold leading-none text-[#102A43] truncate">
+                        {user.name}
+                      </p>
+                      <p className="text-[11px] leading-none text-[#627D98] font-mono truncate">
                         {user.email}
                       </p>
                     </div>
@@ -221,11 +223,11 @@ export function Layout() {
           </div>
         </div>
 
-        {/* 2. Barra de Abas Fixa Logo Abaixo do Cabeçalho */}
-        <div className="bg-[#003666] border-t border-[#00264d]/60 shadow-xs">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* 2. Barra de Abas Fixa Logo Abaixo do Cabeçalho - Sem scrollbar visível */}
+        <div className="bg-[#003666] border-t border-[#00264d]/60 shadow-xs w-full overflow-hidden">
+          <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
             <nav
-              className="flex space-x-1 sm:space-x-3 overflow-x-auto py-1 scrollbar-none"
+              className="flex space-x-1 sm:space-x-3 overflow-x-auto py-1.5 scrollbar-none no-scrollbar touch-pan-x"
               aria-label="Abas"
             >
               {navItems.map((item) => {
@@ -237,14 +239,16 @@ export function Layout() {
                     key={item.to}
                     to={item.to}
                     className={({ isActive: active }) =>
-                      `flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap ${
+                      `flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap shrink-0 active:scale-95 ${
                         active
                           ? 'bg-white text-[#004B8D] shadow-xs'
                           : 'text-blue-100 hover:text-white hover:bg-white/10'
                       }`
                     }
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#004B8D]' : 'text-blue-200'}`} />
+                    <Icon
+                      className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isActive ? 'text-[#004B8D]' : 'text-blue-200'}`}
+                    />
                     <span>{item.label}</span>
                   </NavLink>
                 )
@@ -255,12 +259,12 @@ export function Layout() {
       </header>
 
       {/* 3. Conteúdo Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-x-hidden">
         <Outlet />
       </main>
 
       {/* 4. Rodapé Técnico */}
-      <footer className="bg-white border-t border-[#D3DFE9] text-[#627D98] text-xs py-4 text-center mt-auto">
+      <footer className="bg-white border-t border-[#D3DFE9] text-[#627D98] text-xs py-4 text-center mt-auto w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>CREA-PI • Conselho Regional de Engenharia e Agronomia do Estado do Piauí</span>
           <span className="text-[11px] text-[#829AB1]">

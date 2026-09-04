@@ -343,27 +343,27 @@ export default function TiposEmpreendimentoPage() {
   return (
     <div className="animate-page-enter space-y-8 pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#D3DFE9] pb-4 sm:pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[22px] sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-[28px] font-bold text-[#102A43] tracking-tight leading-tight">
               Tipos de Empreendimento
             </h1>
           </div>
-          <p className="text-sm text-[#486581] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#486581] mt-0.5">
             Catálogo de empreendimentos fiscalizados pelo CREA-PI. Clique em um tipo para acessar
             suas unidades e checklist exclusivo.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
           {isAdmin && (
             <Button
               onClick={handleOpenCreateTipo}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
+              className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-3.5 sm:px-4 cursor-pointer gap-1.5 text-xs sm:text-sm"
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              Novo Tipo de Empreendimento
+              <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
+              <span>Novo Tipo</span>
             </Button>
           )}
 
@@ -371,7 +371,7 @@ export default function TiposEmpreendimentoPage() {
             variant="outline"
             onClick={loadData}
             disabled={isLoading}
-            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer"
+            className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold h-10 px-3 cursor-pointer shrink-0"
             title="Atualizar lista"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -589,8 +589,8 @@ export default function TiposEmpreendimentoPage() {
 
       {/* MODAL: CRIAR / EDITAR TIPO DE EMPREENDIMENTO COM SELEÇÃO VISUAL DE ÍCONES */}
       <Dialog open={isTipoModalOpen} onOpenChange={setIsTipoModalOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto bg-white border-[#D3DFE9] p-0 gap-0 sm:rounded-2xl">
-          <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9]">
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto bg-white border-[#D3DFE9] p-0 gap-0 rounded-2xl">
+          <DialogHeader className="p-4 sm:p-6 pb-4 border-b border-[#D3DFE9] bg-[#F4F6F9]">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#E8F1F8] flex items-center justify-center text-[#004B8D] shrink-0 shadow-xs">
                 {React.createElement(getIconComponent(tipoForm.icone), {
@@ -722,7 +722,7 @@ export default function TiposEmpreendimentoPage() {
 
       {/* CONFIRM DELETE TIPO */}
       <AlertDialog open={!!tipoToDelete} onOpenChange={(open) => !open && setTipoToDelete(null)}>
-        <AlertDialogContent className="border-[#D3DFE9] bg-white">
+        <AlertDialogContent className="w-[calc(100vw-1.5rem)] sm:w-full max-w-lg border-[#D3DFE9] bg-white rounded-2xl sm:rounded-lg">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-bold text-[#102A43]">
               Excluir Tipo de Empreendimento

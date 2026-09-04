@@ -253,9 +253,10 @@ export function TipoEmpreendimentoImportCsv({
   const SelectedIconComp = getIconComponent(selectedIcon)
 
   return (
-    <div className="bg-white rounded-2xl border border-[#D3DFE9] p-6 shadow-sm space-y-6 animate-page-enter">
-      {/* Top Banner */}
+    <div className="bg-white rounded-2xl border border-[#D3DFE9] p-4 sm:p-6 shadow-sm space-y-5 sm:space-y-6 animate-page-enter w-full max-w-full overflow-x-hidden">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D3DFE9] pb-5">
+        {' '}
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-[#102A43] flex items-center gap-2">
@@ -271,7 +272,6 @@ export function TipoEmpreendimentoImportCsv({
             novos empreendimentos a serem cadastrados (ex.: Fazenda, Indústria, Usina Solar, etc.).
           </p>
         </div>
-
         <Button
           type="button"
           variant="outline"
