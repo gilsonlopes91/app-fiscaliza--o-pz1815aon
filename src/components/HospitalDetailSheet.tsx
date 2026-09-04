@@ -38,6 +38,7 @@ import {
 } from 'lucide-react'
 import { Hospital, HospitalFormData } from '@/services/hospitais'
 import { AtribuirFiscalizacaoModal } from '@/components/AtribuirFiscalizacaoModal'
+import { IniciarVistoriaModal } from '@/components/IniciarVistoriaModal'
 import { usersService, UserProfile } from '@/services/auth'
 import { useAuth } from '@/contexts/AuthContext'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
@@ -77,6 +78,7 @@ export function HospitalDetailSheet({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isStartingVistoria, setIsStartingVistoria] = useState(false)
+  const [isPreVistoriaModalOpen, setIsPreVistoriaModalOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isAtribuirModalOpen, setIsAtribuirModalOpen] = useState(false)
   const [fiscaisList, setFiscaisList] = useState<UserProfile[]>([])
@@ -196,17 +198,35 @@ export function HospitalDetailSheet({
     setIsEditing(false)
   }
 
-  const handleIniciarVistoria = async () => {
+  const handleIniciarVistoria = () => {
     if (!hospital) return
+    // Abre o popup central de pré-conferência dos dados antes de navegar para o checklist
+    setIsPreVistoriaModalOpen(true)
+  }
+
+  const handleConfirmPreVistoria = async (updatedHospital: Hospital) => {
     try {
       setIsStartingVistoria(true)
-      const vistoria = await vistoriasService.getOrCreateForHospital(hospital.id)
+      // Sincroniza o registro atualizado com o componente pai
+      await onUpdate(updatedHospital.id, {
+        nome: updatedHospital.nome,
+        municipio: updatedHospital.municipio,
+        cnes: updatedHospital.cnes,
+        cnpj: updatedHospital.cnpj,
+        cnpj_mantenedora: updatedHospital.cnpj_mantenedora,
+        tipo: updatedHospital.tipo,
+        endereco: updatedHospital.endereco,
+        responsavel: updatedHospital.responsavel,
+        cpf_responsavel: updatedHospital.cpf_responsavel,
+      })
+
+      const vistoria = await vistoriasService.getOrCreateForHospital(updatedHospital.id)
       onOpenChange(false)
       toast({
         title: 'Vistoria carregada',
-        description: `Vistoria vinculada a "${hospital.nome}".`,
+        description: `Vistoria vinculada a "${updatedHospital.nome}".`,
       })
-      navigate(`/vistoria?hospitalId=${hospital.id}&vistoriaId=${vistoria.id}`)
+      navigate(`/vistoria?hospitalId=${updatedHospital.id}&vistoriaId=${vistoria.id}`)
     } catch (err) {
       console.error('Erro ao iniciar vistoria:', err)
       toast({
@@ -780,6 +800,16 @@ export function HospitalDetailSheet({
           onSuccess={async () => {
             setIsAtribuirModalOpen(false)
           }}
+        />
+      )}
+
+      {/* MODAL DE CONFERÊNCIA PRÉ-VISTORIA */}
+      {hospital && (
+        <IniciarVistoriaModal
+          open={isPreVistoriaModalOpen}
+          onOpenChange={setIsPreVistoriaModalOpen}
+          hospital={hospital}
+          onConfirmAndContinue={handleConfirmPreVistoria}
         />
       )}
 
