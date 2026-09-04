@@ -146,19 +146,10 @@ export function IniciarVistoriaModal({
       newErrors.municipio = 'Município/UF é obrigatório.'
     }
 
-    // 3. Responsável pelas Informações (obrigatórios antes da vistoria começar)
-    const respTrim = (formData.responsavel || '').trim()
-    if (!respTrim || respTrim.toLowerCase() === 'não informado') {
-      newErrors.responsavel =
-        'Nome do Responsável é obrigatório para iniciar a vistoria. Não pode ficar como "Não informado".'
-    }
-
+    // 3. Responsável pelas Informações (opcional; validação apenas de formato quando preenchido)
     const cpfClean = (formData.cpf_responsavel || '').trim()
     const cpfDigits = cpfClean.replace(/\D/g, '')
-    if (!cpfClean || cpfClean.toLowerCase() === 'não informado' || cpfDigits.length === 0) {
-      newErrors.cpf_responsavel =
-        'CPF do Responsável é obrigatório para iniciar a vistoria. Não pode ficar como "Não informado".'
-    } else if (cpfDigits.length !== 11) {
+    if (cpfDigits.length > 0 && cpfDigits.length !== 11) {
       newErrors.cpf_responsavel = 'CPF do Responsável deve conter 11 dígitos.'
     }
 
@@ -172,8 +163,7 @@ export function IniciarVistoriaModal({
     if (!validate()) {
       toast({
         title: 'Dados pendentes',
-        description:
-          'Preencha o Nome do Responsável e o CPF do Responsável e corrija os campos obrigatórios antes de continuar para a vistoria.',
+        description: 'Corrija os campos obrigatórios antes de continuar para a vistoria.',
         variant: 'destructive',
       })
       return
@@ -230,8 +220,7 @@ export function IniciarVistoriaModal({
                 </span>
               </div>
               <DialogDescription className="text-xs text-blue-100 text-left mt-1 leading-relaxed">
-                Confira e corrija os dados cadastrais antes de abrir o checklist da vistoria. O Nome
-                e CPF do responsável são obrigatórios.
+                Confira e corrija os dados cadastrais antes de abrir o checklist da vistoria.
               </DialogDescription>
             </div>
           </div>
@@ -469,20 +458,16 @@ export function IniciarVistoriaModal({
                 <User className="w-4 h-4 text-[#D97706]" />
                 Responsável pelas Informações
               </h3>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-[#E5A812] text-[#102A43] px-2 py-0.5 rounded">
-                Obrigatório para iniciar
-              </span>
             </div>
             <p className="text-[11px] text-[#7C5010] leading-relaxed">
-              O fiscal deve conferir ou preencher a pessoa responsável no local. Estes campos não
-              podem ficar em branco ou como &ldquo;Não informado&rdquo;.
+              O fiscal deve conferir ou preencher a pessoa responsável no local.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
               {/* Nome do Responsável */}
               <div className="space-y-1.5">
                 <Label htmlFor="pv-responsavel" className="text-xs font-bold text-[#102A43]">
-                  Nome do Responsável <span className="text-rose-600">*</span>
+                  Nome do Responsável
                 </Label>
                 <Input
                   id="pv-responsavel"
@@ -504,7 +489,7 @@ export function IniciarVistoriaModal({
               {/* CPF do Responsável */}
               <div className="space-y-1.5">
                 <Label htmlFor="pv-cpf_responsavel" className="text-xs font-bold text-[#102A43]">
-                  CPF do Responsável <span className="text-rose-600">*</span>
+                  CPF do Responsável
                 </Label>
                 <Input
                   id="pv-cpf_responsavel"
