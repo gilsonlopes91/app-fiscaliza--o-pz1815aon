@@ -19,6 +19,9 @@ import {
   Save,
   HelpCircle,
   Sparkles,
+  FileText,
+  Download,
+  FolderArchive,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,8 +61,13 @@ import { VistoriaCard } from '@/components/VistoriaCard'
 import { getIconComponent } from '@/pages/TiposEmpreendimento'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ } from '@/lib/formatters'
+import { useAuth } from '@/contexts/AuthContext'
+import { generateVistoriaPdf } from '@/lib/pdfReport'
+import { downloadAllVistoriaPhotosZip } from '@/lib/photoDownload'
+import { PhotoCaptureMetadata } from '@/lib/watermark'
 
 export default function VistoriaPage() {
+  const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -88,8 +96,18 @@ export default function VistoriaPage() {
   // Local Form state for each SUBITEM (keyed by subitem.id or categoria.id fallback)
   const [itemForms, setItemForms] = useState<Record<string, VistoriaItemFormData>>({})
   const [pendingPhotos, setPendingPhotos] = useState<Record<string, File[]>>({})
+  const [pendingPhotosMeta, setPendingPhotosMeta] = useState<
+    Record<string, PhotoCaptureMetadata[]>
+  >({})
   const [deletedPhotos, setDeletedPhotos] = useState<Record<string, string[]>>({})
   const [savingSubitemIds, setSavingSubitemIds] = useState<Record<string, boolean>>({})
+
+  // Loading states for PDF report generation and ZIP download
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [pdfProgressText, setPdfProgressText] = useState('')
+  const [generatingCardPdfId, setGeneratingCardPdfId] = useState<string | null>(null)
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false)
+  const [zipProgressText, setZipProgressText] = useState('')
 
   // Modal for new inspection
   const [isNovaVistoriaOpen, setIsNovaVistoriaOpen] = useState(false)
@@ -301,17 +319,47 @@ export default function VistoriaPage() {
     }))
   }
 
-  // Add pending photo files
-  const handleAddPendingPhotos = (subitemId: string, files: File[]) => {
+  // Add pending photo files with watermarked metadata
+  const handleAddPendingPhotos = (
+    subitemId: string,
+    files: File[],
+    metaList?: PhotoCaptureMetadata[],
+  ) => {
     setPendingPhotos((prev) => ({
       ...prev,
       [subitemId]: [...(prev[subitemId] || []), ...files],
     }))
+
+    if (metaList && metaList.length > 0) {
+      setPendingPhotosMeta((prev) => ({
+        ...prev,
+        [subitemId]: [...(prev[subitemId] || []), ...metaList],
+      }))
+
+      // Atualiza também os campos de localização no form do subitem se tiver coordenadas
+      const validMeta = metaList.find((m) => m.latitude !== null && m.longitude !== null)
+      if (validMeta) {
+        setItemForms((prev) => ({
+          ...prev,
+          [subitemId]: {
+            ...prev[subitemId],
+            latitude: validMeta.latitude,
+            longitude: validMeta.longitude,
+            dataCaptura: validMeta.dataCaptura,
+          },
+        }))
+      }
+    }
   }
 
   // Remove pending photo file
   const handleRemovePendingPhoto = (subitemId: string, index: number) => {
     setPendingPhotos((prev) => {
+      const current = [...(prev[subitemId] || [])]
+      current.splice(index, 1)
+      return { ...prev, [subitemId]: current }
+    })
+    setPendingPhotosMeta((prev) => {
       const current = [...(prev[subitemId] || [])]
       current.splice(index, 1)
       return { ...prev, [subitemId]: current }
@@ -358,6 +406,33 @@ export default function VistoriaPage() {
     )
     const newFiles = pendingPhotos[subKey] || []
     const deletedNames = deletedPhotos[subKey] || []
+    const metas = pendingPhotosMeta[subKey] || []
+
+    // Atualiza metadados consolidados se houver novas fotos
+    let updatedFotoMetadata = existingItem?.fotoMetadata ? [...existingItem.fotoMetadata] : []
+    if (newFiles.length > 0) {
+      newFiles.forEach((file, idx) => {
+        const meta = metas[idx]
+        updatedFotoMetadata.push({
+          fileName: file.name,
+          latitude: meta?.latitude ?? null,
+          longitude: meta?.longitude ?? null,
+          dataCaptura: meta?.dataCaptura || new Date().toISOString(),
+        })
+      })
+    }
+    if (deletedNames.length > 0) {
+      updatedFotoMetadata = updatedFotoMetadata.filter((m) => !deletedNames.includes(m.fileName))
+    }
+
+    const payloadWithMeta: VistoriaItemFormData = {
+      ...formData,
+      fotoMetadata: updatedFotoMetadata,
+      latitude: formData.latitude ?? metas[0]?.latitude ?? existingItem?.latitude ?? null,
+      longitude: formData.longitude ?? metas[0]?.longitude ?? existingItem?.longitude ?? null,
+      dataCaptura:
+        formData.dataCaptura || metas[0]?.dataCaptura || existingItem?.dataCaptura || null,
+    }
 
     try {
       setSavingSubitemIds((prev) => ({ ...prev, [subKey]: true }))
@@ -367,7 +442,7 @@ export default function VistoriaPage() {
         currentVistoria.id,
         selectedHospitalId,
         cat.id,
-        formData,
+        payloadWithMeta,
         {
           exigeArt: sub.exigeArt,
           periodicidadeDias: sub.periodicidadeDias,
@@ -393,6 +468,7 @@ export default function VistoriaPage() {
 
       // Clear pending/deleted tracking for this subitem
       setPendingPhotos((prev) => ({ ...prev, [subKey]: [] }))
+      setPendingPhotosMeta((prev) => ({ ...prev, [subKey]: [] }))
       setDeletedPhotos((prev) => ({ ...prev, [subKey]: [] }))
 
       toast({
@@ -474,6 +550,153 @@ export default function VistoriaPage() {
       return t === selectedTipoFiltro.trim().toLowerCase()
     })
   }, [hospitais, selectedTipoFiltro])
+
+  // Total photos count across the current vistoria items
+  const totalPhotosInCurrentVistoria = useMemo(() => {
+    return vistoriaItens.reduce((acc, item) => acc + (item.fotos?.length || 0), 0)
+  }, [vistoriaItens])
+
+  // 1. Geração de Relatório em PDF na tela da vistoria específica
+  const handleGeneratePdf = async () => {
+    if (!currentVistoria) {
+      toast({
+        title: 'Nenhuma vistoria selecionada',
+        description: 'Selecione uma vistoria para gerar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      setIsGeneratingPdf(true)
+      setPdfProgressText('Iniciando geração do documento...')
+
+      const fileName = await generateVistoriaPdf({
+        vistoria: currentVistoria,
+        hospital: selectedHospital,
+        responsavelNome: user?.name || 'Fiscal CREA-PI',
+        vistoriaItens,
+        categorias: relevantCategorias,
+        subitens: allRelevantSubitens,
+        onProgress: (msg) => setPdfProgressText(msg),
+      })
+
+      toast({
+        title: 'Relatório gerado com sucesso!',
+        description: `O arquivo ${fileName} foi baixado no seu dispositivo.`,
+      })
+    } catch (err) {
+      console.error('Erro ao gerar relatório PDF:', err)
+      toast({
+        title: 'Erro ao gerar relatório',
+        description: 'Não foi possível compilar o documento em PDF.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsGeneratingPdf(false)
+      setPdfProgressText('')
+    }
+  }
+
+  // 2. Geração de Relatório em PDF a partir de um Card na listagem geral
+  const handleGeneratePdfForVistoriaCard = async (v: Vistoria) => {
+    try {
+      setGeneratingCardPdfId(v.id)
+      toast({
+        title: 'Preparando relatório da vistoria...',
+        description: 'Carregando dados completos do checklist e anexos fotográficos.',
+      })
+
+      // Carrega itens daquela vistoria específica
+      const items = await vistoriasService.getItensByVistoria(v.id)
+      const hosp = v.expand?.hospital || hospitais.find((h) => h.id === v.hospital) || null
+      const hospTipo = (hosp?.tipo || 'Hospital').trim().toLowerCase()
+
+      const relevantCats = allCategorias
+        .filter((cat) => {
+          const catTipo = (cat.tipo || 'Hospital').trim().toLowerCase()
+          return catTipo === hospTipo
+        })
+        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+
+      const relevantSubs = allSubitens.filter((sub) =>
+        relevantCats.some((cat) => cat.id === sub.categoria),
+      )
+
+      const fileName = await generateVistoriaPdf({
+        vistoria: v,
+        hospital: hosp,
+        responsavelNome: user?.name || 'Fiscal CREA-PI',
+        vistoriaItens: items,
+        categorias: relevantCats,
+        subitens: relevantSubs,
+      })
+
+      toast({
+        title: 'Relatório PDF gerado!',
+        description: `Download concluído: ${fileName}`,
+      })
+    } catch (err) {
+      console.error('Erro ao gerar relatório a partir do card:', err)
+      toast({
+        title: 'Erro ao gerar relatório',
+        description: 'Não foi possível gerar o relatório PDF desta vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setGeneratingCardPdfId(null)
+    }
+  }
+
+  // 3. Download de todas as fotos da vistoria em ZIP
+  const handleDownloadAllPhotosZip = async () => {
+    if (!currentVistoria) return
+    if (totalPhotosInCurrentVistoria === 0) {
+      toast({
+        title: 'Nenhuma foto anexada',
+        description: 'Esta vistoria ainda não possui registros fotográficos para download.',
+      })
+      return
+    }
+
+    try {
+      setIsDownloadingZip(true)
+      setZipProgressText(`Compactando fotos (0/${totalPhotosInCurrentVistoria})...`)
+
+      const result = await downloadAllVistoriaPhotosZip({
+        vistoriaId: currentVistoria.id,
+        hospital: selectedHospital,
+        vistoriaItens,
+        categorias: relevantCategorias,
+        subitens: allRelevantSubitens,
+        onProgress: (current, total) => {
+          setZipProgressText(`Compactando fotos (${current}/${total})...`)
+        },
+      })
+
+      if (result.count === 0) {
+        toast({
+          title: 'Nenhuma foto disponível',
+          description: 'Não foram encontradas fotos salvas para download.',
+        })
+      } else {
+        toast({
+          title: 'Download de fotos concluído!',
+          description: `Arquivo ZIP gerado com ${result.count} fotos com coordenadas e data/hora.`,
+        })
+      }
+    } catch (err) {
+      console.error('Erro ao baixar fotos em ZIP:', err)
+      toast({
+        title: 'Erro ao gerar arquivo ZIP',
+        description: 'Não foi possível compactar as fotos da vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDownloadingZip(false)
+      setZipProgressText('')
+    }
+  }
 
   return (
     <div className="animate-page-enter space-y-8 pb-20">
@@ -676,15 +899,61 @@ export default function VistoriaPage() {
       {/* 3. Resumo Técnico da Vistoria (Card no Topo) calculado a nível de subitem */}
       {selectedHospitalId && (
         <div className="bg-white rounded-2xl border border-[#D3DFE9] p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#D3DFE9] pb-3 gap-2">
-            <h3 className="text-base font-bold text-[#102A43] flex items-center gap-2">
-              <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
-              Resumo da Fiscalização: {selectedHospital?.tipo || 'Hospital'}
-            </h3>
-            <span className="text-xs text-[#627D98] font-medium">
-              {stats.total} {stats.total === 1 ? 'subitem fiscalizado' : 'subitens fiscalizados'} em{' '}
-              {relevantCategorias.length} {relevantCategorias.length === 1 ? 'tema' : 'temas'}
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#D3DFE9] pb-3 gap-3">
+            <div>
+              <h3 className="text-base font-bold text-[#102A43] flex items-center gap-2">
+                <FileCheck2 className="w-5 h-5 text-[#004B8D]" />
+                Resumo da Fiscalização: {selectedHospital?.tipo || 'Hospital'}
+              </h3>
+              <span className="text-xs text-[#627D98] font-medium">
+                {stats.total} {stats.total === 1 ? 'subitem fiscalizado' : 'subitens fiscalizados'}{' '}
+                em {relevantCategorias.length} {relevantCategorias.length === 1 ? 'tema' : 'temas'}
+              </span>
+            </div>
+
+            {/* Ações Rápidas: Gerar Relatório PDF + Baixar Todas as Fotos */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                disabled={isGeneratingPdf}
+                onClick={handleGeneratePdf}
+                className="bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer shadow-xs"
+                title="Gerar e baixar relatório técnico oficial em PDF com cabeçalho CREA-PI"
+              >
+                {isGeneratingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{pdfProgressText || 'Gerando PDF...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 stroke-[2.2]" />
+                    <span>Gerar Relatório (PDF)</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isDownloadingZip || totalPhotosInCurrentVistoria === 0}
+                onClick={handleDownloadAllPhotosZip}
+                className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-9 px-3.5 gap-2 cursor-pointer"
+                title="Baixar todas as fotos da vistoria em um arquivo ZIP com marcas d'água de GPS e data/hora"
+              >
+                {isDownloadingZip ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{zipProgressText || 'Compactando...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <FolderArchive className="w-4 h-4" />
+                    <span>Baixar Todas as Fotos ({totalPhotosInCurrentVistoria})</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
@@ -1138,9 +1407,12 @@ export default function VistoriaPage() {
                                 <div className="pt-3 border-t border-[#D3DFE9]">
                                   <PhotoUploadSection
                                     itemId={item?.id}
+                                    subitemCode={subCode}
                                     existingPhotos={item?.fotos || []}
                                     pendingFiles={pending}
-                                    onAddFiles={(files) => handleAddPendingPhotos(subKey, files)}
+                                    onAddFiles={(files, metaList) =>
+                                      handleAddPendingPhotos(subKey, files, metaList)
+                                    }
                                     onRemovePendingFile={(index) =>
                                       handleRemovePendingPhoto(subKey, index)
                                     }
@@ -1247,6 +1519,8 @@ export default function VistoriaPage() {
                   vencidosCount={0}
                   conformesCount={0}
                   totalItensCount={allRelevantSubitens.length}
+                  isGeneratingReport={generatingCardPdfId === vistoria.id}
+                  onGenerateReport={() => handleGeneratePdfForVistoriaCard(vistoria)}
                   onClick={() => {
                     if (vistoria.hospital) {
                       handleSelectHospital(vistoria.hospital)

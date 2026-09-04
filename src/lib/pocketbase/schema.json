@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T12:25:14.773Z",
+  "generatedAt": "2026-09-04T12:34:40.726Z",
   "collections": [
     {
       "name": "users",
@@ -365,6 +365,30 @@
           "required": false,
           "system": false,
           "collectionRef": "subitens_checklist"
+        },
+        {
+          "name": "latitude",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "longitude",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dataCaptura",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fotoMetadata",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

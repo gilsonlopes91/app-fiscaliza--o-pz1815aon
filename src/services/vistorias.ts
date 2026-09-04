@@ -30,6 +30,15 @@ export interface VistoriaItem {
   fotos?: string[]
   dataUltimaVerificacao?: string | null
   situacaoCalculada?: SituacaoChecklist
+  latitude?: number | null
+  longitude?: number | null
+  dataCaptura?: string | null
+  fotoMetadata?: Array<{
+    fileName: string
+    latitude: number | null
+    longitude: number | null
+    dataCaptura: string
+  }> | null
   created: string
   updated: string
   expand?: {
@@ -47,6 +56,15 @@ export interface VistoriaItemFormData {
   numeroArt?: string
   fotos?: string[]
   dataUltimaVerificacao?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  dataCaptura?: string | null
+  fotoMetadata?: Array<{
+    fileName: string
+    latitude: number | null
+    longitude: number | null
+    dataCaptura: string
+  }> | null
 }
 
 /**
@@ -258,6 +276,19 @@ export const vistoriasService = {
         data.append('situacaoCalculada', situacao)
       }
 
+      if (formData.latitude !== undefined && formData.latitude !== null) {
+        data.append('latitude', String(formData.latitude))
+      }
+      if (formData.longitude !== undefined && formData.longitude !== null) {
+        data.append('longitude', String(formData.longitude))
+      }
+      if (formData.dataCaptura) {
+        data.append('dataCaptura', formData.dataCaptura)
+      }
+      if (formData.fotoMetadata) {
+        data.append('fotoMetadata', JSON.stringify(formData.fotoMetadata))
+      }
+
       // Append new files
       if (newFiles) {
         for (const file of newFiles) {
@@ -318,6 +349,10 @@ export const vistoriasService = {
       numeroArt: formData.numeroArt ? formData.numeroArt.trim() : '',
       dataUltimaVerificacao: formData.dataUltimaVerificacao || null,
       situacaoCalculada: situacao,
+      latitude: formData.latitude !== undefined ? formData.latitude : null,
+      longitude: formData.longitude !== undefined ? formData.longitude : null,
+      dataCaptura: formData.dataCaptura || null,
+      fotoMetadata: formData.fotoMetadata || null,
     }
 
     if (existingItemId) {

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Building2,
   Calendar,
@@ -9,6 +9,8 @@ import {
   ArrowRight,
   MapPin,
   ClipboardList,
+  FileText,
+  Loader2,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +23,8 @@ interface VistoriaCardProps {
   conformesCount: number
   totalItensCount: number
   onClick: () => void
+  onGenerateReport?: (e: React.MouseEvent) => void
+  isGeneratingReport?: boolean
 }
 
 export function VistoriaCard({
@@ -30,6 +34,8 @@ export function VistoriaCard({
   conformesCount,
   totalItensCount,
   onClick,
+  onGenerateReport,
+  isGeneratingReport = false,
 }: VistoriaCardProps) {
   const hospital = vistoria.expand?.hospital
   const createdDate = new Date(vistoria.created).toLocaleDateString('pt-BR', {
@@ -124,14 +130,38 @@ export function VistoriaCard({
             )}
           </div>
 
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-xs font-bold text-[#004B8D] p-0 h-auto hover:bg-transparent group-hover:underline flex items-center gap-1"
-          >
-            Continuar
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            {onGenerateReport && (
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                disabled={isGeneratingReport}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onGenerateReport(e)
+                }}
+                className="h-8 px-2.5 text-[11px] font-bold border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] hover:text-[#003666] gap-1 cursor-pointer transition-colors"
+                title="Gerar Relatório em PDF"
+              >
+                {isGeneratingReport ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <FileText className="w-3 h-3" />
+                )}
+                <span>Relatório PDF</span>
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs font-bold text-[#004B8D] p-0 h-auto hover:bg-transparent group-hover:underline flex items-center gap-1"
+            >
+              Continuar
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
