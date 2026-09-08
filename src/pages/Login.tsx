@@ -13,6 +13,9 @@ import {
   Clock,
   Download,
   Smartphone,
+  Share,
+  PlusSquare,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,8 +30,10 @@ export default function Login() {
   const { login, register, isAuthenticated, isApproved, isAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isInstallable, installApp } = usePwa()
+  const { isInstallable, isInstalled, isIos, installApp } = usePwa()
   const { toast } = useToast()
+  const [isInstalling, setIsInstalling] = useState(false)
+  const [justInstalled, setJustInstalled] = useState(false)
 
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
 
@@ -433,26 +438,105 @@ export default function Login() {
           </Tabs>
         </div>
 
-        {/* PWA Install Banner on Login if installable */}
-        {isInstallable && (
-          <div className="mt-4 p-3 bg-white rounded-xl border border-[#D3DFE9] shadow-xs flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#004B8D] text-white flex items-center justify-center shrink-0">
-                <Smartphone className="w-4 h-4 text-[#E5A812]" />
+        {/* PWA Feedback pós-instalação */}
+        {justInstalled && (
+          <div className="mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 animate-in fade-in duration-300">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="flex-1 text-left min-w-0">
+              <p className="text-xs font-bold text-emerald-950">
+                Aplicativo instalado com sucesso!
+              </p>
+              <p className="text-[11px] text-emerald-700 truncate">
+                O ícone já está disponível na sua tela de início.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* PWA Botão de Instalação Nativo (Chrome/Edge/Android/Desktop) quando não instalado e disparado beforeinstallprompt */}
+        {!isInstalled && !justInstalled && isInstallable && (
+          <div className="mt-4 p-3.5 bg-gradient-to-r from-[#003666] to-[#004B8D] rounded-2xl border border-[#004B8D]/30 shadow-md text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-xs border border-white/20 text-[#E5A812] flex items-center justify-center shrink-0 shadow-inner">
+                <Smartphone className="w-5 h-5" />
               </div>
-              <div className="text-left">
-                <p className="text-xs font-bold text-[#102A43]">Instalar no celular / desktop</p>
-                <p className="text-[10px] text-[#627D98]">Acesso rápido direto da tela inicial</p>
+              <div className="text-left min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-bold text-white tracking-tight">
+                    App CREA-PI Fiscalização
+                  </p>
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#E5A812] text-[#102A43]">
+                    <Sparkles className="w-2.5 h-2.5" /> PWA
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#D3DFE9] leading-snug truncate">
+                  Acesso rápido direto da tela de início, mesmo offline
+                </p>
               </div>
             </div>
+
             <Button
-              size="sm"
-              onClick={installApp}
-              className="h-7 px-2.5 text-xs bg-[#004B8D] hover:bg-[#003666] text-white font-semibold cursor-pointer"
+              type="button"
+              onClick={async () => {
+                try {
+                  setIsInstalling(true)
+                  const accepted = await installApp()
+                  if (accepted) {
+                    setJustInstalled(true)
+                    toast({
+                      title: 'Aplicativo instalado!',
+                      description: 'O app CREA-PI foi adicionado ao seu dispositivo.',
+                    })
+                  }
+                } finally {
+                  setIsInstalling(false)
+                }
+              }}
+              disabled={isInstalling}
+              className="bg-[#E5A812] hover:bg-[#d4970b] text-[#102A43] font-bold text-xs h-9 px-3.5 rounded-xl shadow-sm flex items-center justify-center gap-1.5 shrink-0 transition-transform active:scale-95 cursor-pointer"
             >
-              <Download className="w-3 h-3 mr-1" />
-              Instalar
+              {isInstalling ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Instalando...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Instalar aplicativo</span>
+                </>
+              )}
             </Button>
+          </div>
+        )}
+
+        {/* PWA Orientação para iPhone / iPad no Safari (onde beforeinstallprompt não existe) */}
+        {!isInstalled && !justInstalled && isIos && (
+          <div className="mt-4 p-3.5 bg-white rounded-2xl border border-[#D3DFE9] shadow-xs text-left animate-in fade-in duration-300">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#004B8D]/10 text-[#004B8D] flex items-center justify-center shrink-0 mt-0.5">
+                <Smartphone className="w-4 h-4 text-[#004B8D]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#102A43]">
+                  Instalar aplicativo no iPhone / iPad
+                </p>
+                <p className="text-[11px] text-[#486581] mt-1 leading-relaxed">
+                  Para instalar: toque no ícone{' '}
+                  <span className="inline-flex items-center gap-0.5 font-semibold text-[#004B8D] bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20 align-baseline">
+                    <Share className="w-3 h-3 inline text-[#004B8D]" /> Compartilhar
+                  </span>{' '}
+                  do Safari e depois em{' '}
+                  <span className="inline-flex items-center gap-0.5 font-semibold text-[#102A43] bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-300 align-baseline">
+                    <PlusSquare className="w-3 h-3 inline text-[#102A43]" /> Adicionar à Tela de
+                    Início
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
