@@ -1,6 +1,7 @@
-import { Building2, MapPin, Hash, ChevronRight } from 'lucide-react'
+import { Building2, MapPin, Hash, ChevronRight, Navigation } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Hospital } from '@/services/hospitais'
+import { coordenadasDoRegistro, formatCoordenadas, googleMapsUrl } from '@/lib/geo'
 
 interface HospitalCardProps {
   hospital: Hospital
@@ -8,6 +9,9 @@ interface HospitalCardProps {
 }
 
 export function HospitalCard({ hospital, onClick }: HospitalCardProps) {
+  const coords = coordenadasDoRegistro(hospital.latitude, hospital.longitude)
+  const temCnes = !!(hospital.cnes && hospital.cnes.trim())
+
   return (
     <div
       role="button"
@@ -56,10 +60,24 @@ export function HospitalCard({ hospital, onClick }: HospitalCardProps) {
           <span className="truncate max-w-[150px] sm:max-w-[180px]">{hospital.municipio}</span>
         </div>
 
-        <div className="flex items-center gap-1 font-mono font-semibold text-[#334E68] bg-[#F4F6F9] px-2 py-0.5 rounded border border-[#D3DFE9]">
-          <Hash className="w-3 h-3 text-[#E5A812]" />
-          <span>CNES: {hospital.cnes}</span>
-        </div>
+        {temCnes ? (
+          <div className="flex items-center gap-1 font-mono font-semibold text-[#334E68] bg-[#F4F6F9] px-2 py-0.5 rounded border border-[#D3DFE9]">
+            <Hash className="w-3 h-3 text-[#E5A812]" />
+            <span>CNES: {hospital.cnes}</span>
+          </div>
+        ) : coords ? (
+          <a
+            href={googleMapsUrl(coords.lat, coords.lng)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 font-mono font-semibold text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded border border-[#004B8D]/20 hover:bg-[#D6E7F5] transition-colors"
+            title="Abrir no Google Maps"
+          >
+            <Navigation className="w-3 h-3 text-[#004B8D]" />
+            <span>{formatCoordenadas(coords.lat, coords.lng, 4)}</span>
+          </a>
+        ) : null}
       </div>
     </div>
   )

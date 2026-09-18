@@ -34,6 +34,8 @@ import {
 import { Hospital, HospitalFormData, hospitaisService } from '@/services/hospitais'
 import { TipoEmpreendimento, tiposEmpreendimentoService } from '@/services/tiposEmpreendimento'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
+import { isTipoSaude } from '@/lib/tipoEmpreendimento'
+import { CoordenadasField } from '@/components/CoordenadasField'
 import { useToast } from '@/hooks/use-toast'
 
 interface IniciarVistoriaModalProps {
@@ -65,6 +67,8 @@ export function IniciarVistoriaModal({
     cnpj_mantenedora: '',
     tipo: 'Hospital',
     endereco: '',
+    latitude: '',
+    longitude: '',
     responsavel: '',
     cpf_responsavel: '',
   })
@@ -104,6 +108,8 @@ export function IniciarVistoriaModal({
           hospital.endereco && hospital.endereco.trim().toLowerCase() !== 'não informado'
             ? hospital.endereco
             : '',
+        latitude: hospital.latitude || '',
+        longitude: hospital.longitude || '',
         responsavel: cleanResponsavel,
         cpf_responsavel: cleanCpf,
       })
@@ -113,6 +119,8 @@ export function IniciarVistoriaModal({
 
   if (!hospital) return null
 
+  const exigeCnes = isTipoSaude(formData.tipo || hospital.tipo)
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {}
 
@@ -120,12 +128,14 @@ export function IniciarVistoriaModal({
     if (!formData.nome.trim()) {
       newErrors.nome = 'Nome oficial é obrigatório.'
     }
-    if (!formData.cnes.trim()) {
-      newErrors.cnes = 'Código CNES é obrigatório.'
-    } else {
-      const cnesDigits = formData.cnes.replace(/\D/g, '')
-      if (cnesDigits.length !== 7) {
-        newErrors.cnes = 'CNES deve conter exatamente 7 dígitos.'
+    if (exigeCnes) {
+      if (!formData.cnes.trim()) {
+        newErrors.cnes = 'Código CNES é obrigatório para estabelecimentos de saúde.'
+      } else {
+        const cnesDigits = formData.cnes.replace(/\D/g, '')
+        if (cnesDigits.length !== 7) {
+          newErrors.cnes = 'CNES deve conter exatamente 7 dígitos.'
+        }
       }
     }
     if (formData.cnpj) {
@@ -181,6 +191,8 @@ export function IniciarVistoriaModal({
         cnpj_mantenedora: formData.cnpj_mantenedora ? formData.cnpj_mantenedora.trim() : '',
         tipo: formData.tipo?.trim() || 'Hospital',
         endereco: formData.endereco ? formData.endereco.trim() : '',
+        latitude: formData.latitude ? formData.latitude.trim() : '',
+        longitude: formData.longitude ? formData.longitude.trim() : '',
         responsavel: formData.responsavel ? formData.responsavel.trim() : '',
         cpf_responsavel: formData.cpf_responsavel ? formData.cpf_responsavel.trim() : '',
       })
@@ -314,33 +326,35 @@ export function IniciarVistoriaModal({
                 </Select>
               </div>
 
-              {/* Código CNES */}
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="pv-cnes"
-                  className="text-xs font-bold text-[#102A43] flex items-center gap-1"
-                >
-                  <Hash className="w-3.5 h-3.5 text-[#E5A812]" />
-                  Código CNES (7 dígitos) <span className="text-rose-600">*</span>
-                </Label>
-                <Input
-                  id="pv-cnes"
-                  maxLength={7}
-                  value={formData.cnes}
-                  onChange={(e) => {
-                    const formatted = formatCNES(e.target.value)
-                    setFormData({ ...formData, cnes: formatted })
-                    if (errors.cnes) setErrors({ ...errors, cnes: '' })
-                  }}
-                  className={`bg-white border-[#D3DFE9] font-mono text-xs sm:text-sm focus-visible:ring-[#004B8D] ${
-                    errors.cnes ? 'border-rose-500 focus-visible:ring-rose-500' : ''
-                  }`}
-                  placeholder="0000000"
-                />
-                {errors.cnes && (
-                  <p className="text-[11px] font-medium text-rose-600">{errors.cnes}</p>
-                )}
-              </div>
+              {/* Código CNES — apenas para estabelecimentos de saúde */}
+              {exigeCnes && (
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="pv-cnes"
+                    className="text-xs font-bold text-[#102A43] flex items-center gap-1"
+                  >
+                    <Hash className="w-3.5 h-3.5 text-[#E5A812]" />
+                    Código CNES (7 dígitos) <span className="text-rose-600">*</span>
+                  </Label>
+                  <Input
+                    id="pv-cnes"
+                    maxLength={7}
+                    value={formData.cnes}
+                    onChange={(e) => {
+                      const formatted = formatCNES(e.target.value)
+                      setFormData({ ...formData, cnes: formatted })
+                      if (errors.cnes) setErrors({ ...errors, cnes: '' })
+                    }}
+                    className={`bg-white border-[#D3DFE9] font-mono text-xs sm:text-sm focus-visible:ring-[#004B8D] ${
+                      errors.cnes ? 'border-rose-500 focus-visible:ring-rose-500' : ''
+                    }`}
+                    placeholder="0000000"
+                  />
+                  {errors.cnes && (
+                    <p className="text-[11px] font-medium text-rose-600">{errors.cnes}</p>
+                  )}
+                </div>
+              )}
 
               {/* CNPJ */}
               <div className="space-y-1.5">
@@ -444,6 +458,19 @@ export function IniciarVistoriaModal({
                   onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
                   className="bg-white border-[#D3DFE9] text-xs sm:text-sm focus-visible:ring-[#004B8D] resize-none"
                   placeholder="Rua/Avenida, número, bairro, ponto de referência..."
+                />
+              </div>
+
+              {/* Coordenadas — essenciais em empreendimentos rurais */}
+              <div className="sm:col-span-2">
+                <CoordenadasField
+                  idPrefix="pv"
+                  compact
+                  latitude={formData.latitude}
+                  longitude={formData.longitude}
+                  onChange={({ latitude, longitude }) =>
+                    setFormData((prev) => ({ ...prev, latitude, longitude }))
+                  }
                 />
               </div>
             </div>

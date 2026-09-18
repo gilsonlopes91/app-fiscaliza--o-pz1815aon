@@ -9,6 +9,8 @@ export interface Hospital {
   cnpj_mantenedora?: string
   tipo?: string
   endereco?: string
+  latitude?: string
+  longitude?: string
   responsavel?: string
   cpf_responsavel?: string
   created: string
@@ -23,6 +25,8 @@ export type HospitalFormData = {
   cnpj_mantenedora?: string
   tipo?: string
   endereco?: string
+  latitude?: string
+  longitude?: string
   responsavel?: string
   cpf_responsavel?: string
 }
@@ -58,6 +62,8 @@ export const hospitaisService = {
       cnpj_mantenedora: data.cnpj_mantenedora?.trim() || '',
       tipo: data.tipo?.trim() || 'Hospital',
       endereco: data.endereco?.trim() || '',
+      latitude: data.latitude?.trim() || '',
+      longitude: data.longitude?.trim() || '',
       responsavel: data.responsavel?.trim() || '',
       cpf_responsavel: data.cpf_responsavel?.trim() || '',
     }
@@ -74,6 +80,8 @@ export const hospitaisService = {
     if (data.cnpj_mantenedora !== undefined) payload.cnpj_mantenedora = data.cnpj_mantenedora.trim()
     if (data.tipo !== undefined) payload.tipo = data.tipo?.trim() || 'Hospital'
     if (data.endereco !== undefined) payload.endereco = data.endereco.trim()
+    if (data.latitude !== undefined) payload.latitude = (data.latitude || '').trim()
+    if (data.longitude !== undefined) payload.longitude = (data.longitude || '').trim()
     if (data.responsavel !== undefined) payload.responsavel = data.responsavel.trim()
     if (data.cpf_responsavel !== undefined) payload.cpf_responsavel = data.cpf_responsavel.trim()
 

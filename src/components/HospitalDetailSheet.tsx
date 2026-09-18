@@ -46,6 +46,8 @@ import { vistoriasService } from '@/services/vistorias'
 import { ItensFiscalizacaoSection } from '@/components/ItensFiscalizacaoSection'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
+import { isTipoSaude, tipoLabel } from '@/lib/tipoEmpreendimento'
+import { CoordenadasField, CoordenadasDisplay } from '@/components/CoordenadasField'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,6 +95,8 @@ export function HospitalDetailSheet({
     cnpj_mantenedora: '',
     tipo: 'Hospital',
     endereco: '',
+    latitude: '',
+    longitude: '',
     responsavel: '',
     cpf_responsavel: '',
   })
@@ -118,6 +122,8 @@ export function HospitalDetailSheet({
         cnpj_mantenedora: hospital.cnpj_mantenedora ? formatCNPJ(hospital.cnpj_mantenedora) : '',
         tipo: hospital.tipo || 'Hospital',
         endereco: hospital.endereco || '',
+        latitude: hospital.latitude || '',
+        longitude: hospital.longitude || '',
         responsavel: hospital.responsavel || '',
         cpf_responsavel: hospital.cpf_responsavel ? formatCPF(hospital.cpf_responsavel) : '',
       })
@@ -128,19 +134,25 @@ export function HospitalDetailSheet({
 
   if (!hospital) return null
 
+  const rotulo = tipoLabel(hospital.tipo)
+  const exigeCnes = isTipoSaude(formData.tipo || hospital.tipo)
+  const mostraCnes = isTipoSaude(hospital.tipo) || !!(hospital.cnes && hospital.cnes.trim())
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {}
 
     if (!formData.nome.trim()) {
-      newErrors.nome = 'Nome do hospital é obrigatório.'
+      newErrors.nome = 'O nome do empreendimento é obrigatório.'
     }
     if (!formData.municipio.trim()) {
       newErrors.municipio = 'Município é obrigatório.'
     }
-    if (!formData.cnes.trim()) {
-      newErrors.cnes = 'CNES é obrigatório.'
-    } else if (formData.cnes.replace(/\D/g, '').length !== 7) {
-      newErrors.cnes = 'CNES deve conter 7 dígitos.'
+    if (exigeCnes) {
+      if (!formData.cnes.trim()) {
+        newErrors.cnes = 'CNES é obrigatório para estabelecimentos de saúde.'
+      } else if (formData.cnes.replace(/\D/g, '').length !== 7) {
+        newErrors.cnes = 'CNES deve conter 7 dígitos.'
+      }
     }
 
     if (formData.cnpj) {
@@ -191,6 +203,8 @@ export function HospitalDetailSheet({
       cnpj_mantenedora: hospital.cnpj_mantenedora ? formatCNPJ(hospital.cnpj_mantenedora) : '',
       tipo: hospital.tipo || 'Hospital',
       endereco: hospital.endereco || '',
+      latitude: hospital.latitude || '',
+      longitude: hospital.longitude || '',
       responsavel: hospital.responsavel || '',
       cpf_responsavel: hospital.cpf_responsavel ? formatCPF(hospital.cpf_responsavel) : '',
     })
@@ -216,6 +230,8 @@ export function HospitalDetailSheet({
         cnpj_mantenedora: updatedHospital.cnpj_mantenedora,
         tipo: updatedHospital.tipo,
         endereco: updatedHospital.endereco,
+        latitude: updatedHospital.latitude,
+        longitude: updatedHospital.longitude,
         responsavel: updatedHospital.responsavel,
         cpf_responsavel: updatedHospital.cpf_responsavel,
       })
@@ -278,10 +294,14 @@ export function HospitalDetailSheet({
                       <MapPin className="w-3.5 h-3.5 text-[#004B8D] shrink-0" />
                       {hospital.municipio}
                     </span>
-                    <span>•</span>
-                    <span className="font-mono text-xs text-[#334E68] font-semibold">
-                      CNES: {hospital.cnes}
-                    </span>
+                    {mostraCnes && (
+                      <>
+                        <span>•</span>
+                        <span className="font-mono text-xs text-[#334E68] font-semibold">
+                          CNES: {hospital.cnes}
+                        </span>
+                      </>
+                    )}
                   </SheetDescription>
                 </div>
               </div>
@@ -348,7 +368,7 @@ export function HospitalDetailSheet({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2 space-y-1.5">
                     <Label htmlFor="edit-nome" className="text-sm font-semibold text-[#102A43]">
-                      Nome do Hospital <span className="text-red-500">*</span>
+                      Nome do Empreendimento <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="edit-nome"
@@ -389,27 +409,29 @@ export function HospitalDetailSheet({
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="edit-cnes" className="text-sm font-semibold text-[#102A43]">
-                      CNES (7 dígitos) <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="edit-cnes"
-                      maxLength={7}
-                      value={formData.cnes}
-                      onChange={(e) => {
-                        const val = formatCNES(e.target.value)
-                        setFormData({ ...formData, cnes: val })
-                        if (errors.cnes) setErrors({ ...errors, cnes: '' })
-                      }}
-                      className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
-                        errors.cnes ? 'border-red-500 focus-visible:ring-red-500' : ''
-                      }`}
-                    />
-                    {errors.cnes && (
-                      <p className="text-xs font-medium text-red-500 mt-1">{errors.cnes}</p>
-                    )}
-                  </div>
+                  {exigeCnes && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-cnes" className="text-sm font-semibold text-[#102A43]">
+                        CNES (7 dígitos) <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="edit-cnes"
+                        maxLength={7}
+                        value={formData.cnes}
+                        onChange={(e) => {
+                          const val = formatCNES(e.target.value)
+                          setFormData({ ...formData, cnes: val })
+                          if (errors.cnes) setErrors({ ...errors, cnes: '' })
+                        }}
+                        className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
+                          errors.cnes ? 'border-red-500 focus-visible:ring-red-500' : ''
+                        }`}
+                      />
+                      {errors.cnes && (
+                        <p className="text-xs font-medium text-red-500 mt-1">{errors.cnes}</p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <Label htmlFor="edit-tipo" className="text-sm font-semibold text-[#102A43]">
@@ -509,16 +531,27 @@ export function HospitalDetailSheet({
                   <span className="w-2 h-2 rounded-full bg-[#E5A812]" />
                   Localização
                 </h3>
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-endereco" className="text-sm font-semibold text-[#102A43]">
-                    Endereço Completo
-                  </Label>
-                  <Textarea
-                    id="edit-endereco"
-                    rows={2}
-                    value={formData.endereco}
-                    onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-                    className="border-[#D3DFE9] focus-visible:ring-[#004B8D] resize-none"
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-endereco" className="text-sm font-semibold text-[#102A43]">
+                      Endereço Completo
+                    </Label>
+                    <Textarea
+                      id="edit-endereco"
+                      rows={2}
+                      value={formData.endereco}
+                      onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D] resize-none"
+                    />
+                  </div>
+
+                  <CoordenadasField
+                    idPrefix="edit"
+                    latitude={formData.latitude}
+                    longitude={formData.longitude}
+                    onChange={({ latitude, longitude }) =>
+                      setFormData((prev) => ({ ...prev, latitude, longitude }))
+                    }
                   />
                 </div>
               </div>
@@ -633,15 +666,17 @@ export function HospitalDetailSheet({
                     </span>
                   </div>
 
-                  <div>
-                    <span className="text-xs text-[#486581] block mb-0.5 font-medium flex items-center gap-1">
-                      <Hash className="w-3 h-3 text-[#E5A812]" />
-                      Código CNES
-                    </span>
-                    <span className="font-mono font-bold text-[#004B8D] block bg-white px-2 py-1 rounded border border-[#D3DFE9] w-fit">
-                      {hospital.cnes}
-                    </span>
-                  </div>
+                  {mostraCnes && (
+                    <div>
+                      <span className="text-xs text-[#486581] block mb-0.5 font-medium flex items-center gap-1">
+                        <Hash className="w-3 h-3 text-[#E5A812]" />
+                        Código CNES
+                      </span>
+                      <span className="font-mono font-bold text-[#004B8D] block bg-white px-2 py-1 rounded border border-[#D3DFE9] w-fit">
+                        {hospital.cnes}
+                      </span>
+                    </div>
+                  )}
 
                   <div>
                     <span className="text-xs text-[#486581] block mb-0.5 font-medium flex items-center gap-1">
@@ -698,6 +733,16 @@ export function HospitalDetailSheet({
                       )}
                     </span>
                   </div>
+
+                  <div className="sm:col-span-2">
+                    <span className="text-xs text-[#486581] block mb-1 font-medium">
+                      Coordenadas (lat, long)
+                    </span>
+                    <CoordenadasDisplay
+                      latitude={hospital.latitude}
+                      longitude={hospital.longitude}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -747,7 +792,8 @@ export function HospitalDetailSheet({
                       Checklist Técnico de Vistoria CREA-PI
                     </p>
                     <p className="text-xs text-[#486581]">
-                      Preencha ou visualize a conformidade técnica, ARTs e segurança deste hospital.
+                      Preencha ou visualize a conformidade técnica, ARTs e segurança deste
+                      empreendimento.
                     </p>
                   </div>
                   <Button
@@ -778,7 +824,7 @@ export function HospitalDetailSheet({
                       className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5 mr-1" />
-                      Excluir hospital
+                      Excluir cadastro
                     </Button>
                   </div>
                 )}
@@ -818,7 +864,7 @@ export function HospitalDetailSheet({
         <AlertDialogContent className="border-[#D3DFE9] bg-white">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-bold text-[#102A43]">
-              Excluir Hospital
+              Excluir cadastro — {rotulo}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-[#486581]">
               Tem certeza que deseja excluir &ldquo;{hospital.nome}&rdquo;? Esta ação removerá os

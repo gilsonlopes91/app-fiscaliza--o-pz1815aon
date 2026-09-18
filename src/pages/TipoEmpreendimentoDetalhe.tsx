@@ -216,7 +216,7 @@ export default function TipoEmpreendimentoDetalhePage() {
         searchQuery === '' ||
         h.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
         h.municipio.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        h.cnes.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (h.cnes || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (h.cnpj && h.cnpj.toLowerCase().includes(searchQuery.toLowerCase()))
 
       const matchMunicipio =
@@ -1065,6 +1065,7 @@ export default function TipoEmpreendimentoDetalhePage() {
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
         hospitalToEdit={hospitalToEdit}
+        tipoPadrao={tipo.nome}
         onSave={handleCreateUnidade}
       />
 

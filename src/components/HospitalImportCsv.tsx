@@ -18,6 +18,8 @@ import { Progress } from '@/components/ui/progress'
 import { Hospital, HospitalFormData } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { formatCNPJ, formatCNES } from '@/lib/formatters'
+import { isTipoSaude } from '@/lib/tipoEmpreendimento'
+import { parseCoordenadas } from '@/lib/geo'
 import { useToast } from '@/hooks/use-toast'
 
 interface HospitalImportCsvProps {
@@ -34,6 +36,9 @@ interface CsvRow {
   cnpj_mantenedora?: string
   tipo?: string
   endereco?: string
+  latitude?: string
+  longitude?: string
+  coordenadas?: string
   responsavel?: string
   cpf_responsavel?: string
   [key: string]: any
@@ -72,9 +77,19 @@ export function HospitalImportCsv({
 
   // Create quick lookup map for CNES
   const existingByCnes = new Map<string, Hospital>()
+  // Para empreendimentos sem CNES (fazendas, barragens, obras), a chave de
+  // deduplicação passa a ser nome + município.
+  const existingByNomeMunicipio = new Map<string, Hospital>()
+
+  const chaveNomeMunicipio = (nome: string, municipio: string) =>
+    `${nome.trim().toLowerCase()}|${municipio.trim().toLowerCase()}`
+
   existingHospitais.forEach((h) => {
     if (h.cnes) {
       existingByCnes.set(h.cnes.replace(/\D/g, ''), h)
+    }
+    if (h.nome && h.municipio) {
+      existingByNomeMunicipio.set(chaveNomeMunicipio(h.nome, h.municipio), h)
     }
   })
 
@@ -148,6 +163,19 @@ export function HospitalImportCsv({
       const responsavel = row.responsavel || row.diretor || ''
       const cpf_responsavel = row.cpf_responsavel || row.cpf || ''
 
+      // Coordenadas: coluna única ("coordenadas"/"localizacao") ou colunas
+      // separadas de latitude e longitude.
+      const rawLat = String(row.latitude || row.lat || '').trim()
+      const rawLng = String(row.longitude || row.long || row.lng || '').trim()
+      const rawCoord = String(row.coordenadas || row.coordenada || row.localizacao || '').trim()
+
+      const coords =
+        parseCoordenadas(rawCoord) ||
+        (rawLat && rawLng ? parseCoordenadas(`${rawLat},${rawLng}`) : null)
+
+      const tipoLimpo = tipo.trim() || 'Hospital'
+      const exigeCnes = isTipoSaude(tipoLimpo)
+
       const errors: string[] = []
 
       if (!nome.trim()) {
@@ -156,13 +184,23 @@ export function HospitalImportCsv({
       if (!municipio.trim()) {
         errors.push('Município obrigatório')
       }
-      if (!cnes) {
-        errors.push('CNES obrigatório')
-      } else if (cnes.length !== 7) {
+      if (exigeCnes) {
+        if (!cnes) {
+          errors.push('CNES obrigatório')
+        } else if (cnes.length !== 7) {
+          errors.push('CNES deve ter 7 dígitos')
+        }
+      } else if (cnes && cnes.length !== 7) {
         errors.push('CNES deve ter 7 dígitos')
       }
 
-      const existing = existingByCnes.get(cnes)
+      if ((rawCoord || rawLat || rawLng) && !coords) {
+        errors.push('Coordenadas inválidas')
+      }
+
+      const existing = cnes
+        ? existingByCnes.get(cnes)
+        : existingByNomeMunicipio.get(chaveNomeMunicipio(nome, municipio))
 
       items.push({
         data: {
@@ -171,8 +209,10 @@ export function HospitalImportCsv({
           cnes: cnes,
           cnpj: cnpj.trim(),
           cnpj_mantenedora: cnpj_mantenedora.trim(),
-          tipo: tipo.trim() || 'Hospital',
+          tipo: tipoLimpo,
           endereco: endereco.trim(),
+          latitude: coords ? String(coords.lat) : '',
+          longitude: coords ? String(coords.lng) : '',
           responsavel: responsavel.trim(),
           cpf_responsavel: cpf_responsavel.trim(),
         },
@@ -226,7 +266,7 @@ export function HospitalImportCsv({
     setImportStats({ created, updated })
     toast({
       title: 'Importação concluída com sucesso!',
-      description: `${created} novo(s) hospital(is) criado(s) e ${updated} atualizado(s).`,
+      description: `${created} novo(s) empreendimento(s) criado(s) e ${updated} atualizado(s).`,
     })
 
     onImportCompleted(created, updated)
@@ -234,10 +274,10 @@ export function HospitalImportCsv({
 
   const downloadSampleCsv = () => {
     const csvContent =
-      'nome,municipio,cnes,cnpj,cnpj_mantenedora,tipo,endereco,responsavel,cpf_responsavel\n' +
-      '"Hospital Regional Justino Luz","Picos","2365478","06.554.123/0001-90","06.554.123/0001-90","Hospital","Praça Antenor Neiva, s/n - Centro","Eng. Carlos Eduardo","123.456.789-00"\n' +
-      '"Hospital Estadual Dirceu Arcoverde","Parnaíba","2365494","06.554.123/0002-71","06.554.123/0001-90","Hospital","Av. São Sebastião, 2500 - Fátima","Dra. Maria Helena","987.654.321-99"\n' +
-      '"Clínica de Olhos do Piauí","Teresina","2365516","12.345.678/0001-99","","Clínica Médica","Rua Desembargador Pires de Castro, 450 - Centro","Dr. Marcos Santos","111.222.333-44"'
+      'nome,municipio,cnes,cnpj,cnpj_mantenedora,tipo,endereco,latitude,longitude,responsavel,cpf_responsavel\n' +
+      '"Hospital Regional Justino Luz","Picos","2365478","06.554.123/0001-90","06.554.123/0001-90","Hospital","Praça Antenor Neiva, s/n - Centro","-7.077500","-41.467200","Eng. Carlos Eduardo","123.456.789-00"\n' +
+      '"Clínica de Olhos do Piauí","Teresina","2365516","12.345.678/0001-99","","Clínica Médica","Rua Desembargador Pires de Castro, 450 - Centro","","","Dr. Marcos Santos","111.222.333-44"\n' +
+      '"Fazenda Santa Luzia","Uruçuí","","12.345.678/0001-10","","Fazenda","Zona rural - acesso pela PI-247","-7.229800","-44.556100","Eng. Agr. João Batista","222.333.444-55"'
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -263,8 +303,10 @@ export function HospitalImportCsv({
             Importação de Hospitais e Estabelecimentos via CSV
           </h2>
           <p className="text-xs text-[#486581] mt-1">
-            Envie uma planilha com colunas: <strong>nome, municipio, cnes</strong> (obrigatórios),
-            cnpj, cnpj_mantenedora, tipo, endereco, responsavel, cpf_responsavel.
+            Envie uma planilha com colunas: <strong>nome, municipio</strong> (obrigatórios),{' '}
+            <strong>cnes</strong> (obrigatório apenas para estabelecimentos de saúde), cnpj,
+            cnpj_mantenedora, tipo, endereco, <strong>latitude, longitude</strong> (ou uma coluna
+            única <strong>coordenadas</strong>), responsavel, cpf_responsavel.
           </p>
         </div>
 
@@ -301,8 +343,8 @@ export function HospitalImportCsv({
               Clique para selecionar ou arraste sua planilha CSV aqui
             </p>
             <p className="text-xs text-[#627D98] mt-1">
-              O sistema identifica automaticamente unidades já cadastradas através do código{' '}
-              <strong>CNES</strong>.
+              O sistema identifica unidades já cadastradas pelo código <strong>CNES</strong> e,
+              quando não houver CNES, pela combinação de <strong>nome + município</strong>.
             </p>
           </div>
         </div>
@@ -359,6 +401,7 @@ export function HospitalImportCsv({
                   <th className="p-3">Nome da Unidade</th>
                   <th className="p-3">Município</th>
                   <th className="p-3">Tipo</th>
+                  <th className="p-3">Coordenadas</th>
                   <th className="p-3">CNPJ</th>
                   <th className="p-3">Erros / Observações</th>
                 </tr>
@@ -386,7 +429,7 @@ export function HospitalImportCsv({
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-                          <PlusCircle className="w-3.5 h-3.5" /> Novo hospital
+                          <PlusCircle className="w-3.5 h-3.5" /> Novo cadastro
                         </span>
                       )}
                     </td>
@@ -398,6 +441,11 @@ export function HospitalImportCsv({
                     </td>
                     <td className="p-3 text-[#486581]">{item.data.municipio || '-'}</td>
                     <td className="p-3 text-[#486581]">{item.data.tipo || 'Hospital'}</td>
+                    <td className="p-3 font-mono text-[#627D98] whitespace-nowrap">
+                      {item.data.latitude && item.data.longitude
+                        ? `${item.data.latitude}, ${item.data.longitude}`
+                        : '-'}
+                    </td>
                     <td className="p-3 font-mono text-[#627D98]">
                       {item.data.cnpj ? formatCNPJ(item.data.cnpj) : '-'}
                     </td>

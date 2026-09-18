@@ -22,12 +22,16 @@ import { Building2, Save, X, Loader2 } from 'lucide-react'
 import { Hospital, HospitalFormData } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
+import { isTipoSaude, tipoLabel, exemploNomePorTipo } from '@/lib/tipoEmpreendimento'
+import { CoordenadasField } from '@/components/CoordenadasField'
 
 interface HospitalFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   hospitalToEdit?: Hospital | null
   onSave: (data: HospitalFormData) => Promise<void>
+  /** Tipo já selecionado na tela de origem (ex.: Fazenda), usado como padrão. */
+  tipoPadrao?: string
 }
 
 export function HospitalFormDialog({
@@ -35,8 +39,9 @@ export function HospitalFormDialog({
   onOpenChange,
   hospitalToEdit,
   onSave,
+  tipoPadrao,
 }: HospitalFormDialogProps) {
-  const isEditing = !hospitalToEdit
+  const isEditing = !!hospitalToEdit
 
   const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
 
@@ -46,8 +51,10 @@ export function HospitalFormDialog({
     cnes: '',
     cnpj: '',
     cnpj_mantenedora: '',
-    tipo: 'Hospital',
+    tipo: tipoPadrao || 'Hospital',
     endereco: '',
+    latitude: '',
+    longitude: '',
     responsavel: '',
     cpf_responsavel: '',
   })
@@ -75,8 +82,10 @@ export function HospitalFormDialog({
           cnpj_mantenedora: hospitalToEdit.cnpj_mantenedora
             ? formatCNPJ(hospitalToEdit.cnpj_mantenedora)
             : '',
-          tipo: hospitalToEdit.tipo || 'Hospital',
+          tipo: hospitalToEdit.tipo || tipoPadrao || 'Hospital',
           endereco: hospitalToEdit.endereco || '',
+          latitude: hospitalToEdit.latitude || '',
+          longitude: hospitalToEdit.longitude || '',
           responsavel: hospitalToEdit.responsavel || '',
           cpf_responsavel: hospitalToEdit.cpf_responsavel
             ? formatCPF(hospitalToEdit.cpf_responsavel)
@@ -89,8 +98,10 @@ export function HospitalFormDialog({
           cnes: '',
           cnpj: '',
           cnpj_mantenedora: '',
-          tipo: 'Hospital',
+          tipo: tipoPadrao || 'Hospital',
           endereco: '',
+          latitude: '',
+          longitude: '',
           responsavel: '',
           cpf_responsavel: '',
         })
@@ -98,21 +109,26 @@ export function HospitalFormDialog({
       setErrors({})
       setIsSubmitting(false)
     }
-  }, [open, hospitalToEdit])
+  }, [open, hospitalToEdit, tipoPadrao])
+
+  const rotulo = tipoLabel(formData.tipo || tipoPadrao)
+  const exigeCnes = isTipoSaude(formData.tipo || tipoPadrao)
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {}
 
     if (!formData.nome.trim()) {
-      newErrors.nome = 'Nome do hospital é obrigatório.'
+      newErrors.nome = 'O nome do empreendimento é obrigatório.'
     }
     if (!formData.municipio.trim()) {
       newErrors.municipio = 'Município é obrigatório.'
     }
-    if (!formData.cnes.trim()) {
-      newErrors.cnes = 'CNES é obrigatório.'
-    } else if (formData.cnes.replace(/\D/g, '').length !== 7) {
-      newErrors.cnes = 'CNES deve conter exatamente 7 dígitos.'
+    if (exigeCnes) {
+      if (!formData.cnes.trim()) {
+        newErrors.cnes = 'CNES é obrigatório para estabelecimentos de saúde.'
+      } else if (formData.cnes.replace(/\D/g, '').length !== 7) {
+        newErrors.cnes = 'CNES deve conter exatamente 7 dígitos.'
+      }
     }
 
     if (formData.cnpj) {
@@ -166,12 +182,12 @@ export function HospitalFormDialog({
             </div>
             <div>
               <DialogTitle className="text-xl font-bold text-[#102A43]">
-                {isEditing ? 'Editar Hospital' : 'Novo Hospital'}
+                {isEditing ? `Editar cadastro — ${rotulo}` : `Novo cadastro — ${rotulo}`}
               </DialogTitle>
               <DialogDescription className="text-sm text-[#486581] mt-0.5">
                 {isEditing
-                  ? 'Atualize os dados cadastrais da unidade hospitalar no CREA-PI.'
-                  : 'Preencha os campos para cadastrar uma unidade para fiscalização técnica.'}
+                  ? `Atualize os dados cadastrais deste empreendimento (${rotulo}) no CREA-PI.`
+                  : `Preencha os campos para cadastrar um empreendimento do tipo ${rotulo} para fiscalização técnica.`}
               </DialogDescription>
             </div>
           </div>
@@ -187,11 +203,11 @@ export function HospitalFormDialog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2 space-y-1.5">
                 <Label htmlFor="nome" className="text-sm font-semibold text-[#102A43]">
-                  Nome do Hospital <span className="text-red-500">*</span>
+                  Nome do Empreendimento <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="nome"
-                  placeholder="Ex: Hospital Regional Dr. Francisco Ayres"
+                  placeholder={exemploNomePorTipo(formData.tipo || tipoPadrao)}
                   value={formData.nome}
                   onChange={(e) => {
                     setFormData({ ...formData, nome: e.target.value })
@@ -227,28 +243,30 @@ export function HospitalFormDialog({
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="cnes" className="text-sm font-semibold text-[#102A43]">
-                  CNES (7 dígitos) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="cnes"
-                  placeholder="Ex: 1234567"
-                  maxLength={7}
-                  value={formData.cnes}
-                  onChange={(e) => {
-                    const val = formatCNES(e.target.value)
-                    setFormData({ ...formData, cnes: val })
-                    if (errors.cnes) setErrors({ ...errors, cnes: '' })
-                  }}
-                  className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
-                    errors.cnes ? 'border-red-500 focus-visible:ring-red-500' : ''
-                  }`}
-                />
-                {errors.cnes && (
-                  <p className="text-xs font-medium text-red-500 mt-1">{errors.cnes}</p>
-                )}
-              </div>
+              {exigeCnes && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cnes" className="text-sm font-semibold text-[#102A43]">
+                    CNES (7 dígitos) <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="cnes"
+                    placeholder="Ex: 1234567"
+                    maxLength={7}
+                    value={formData.cnes}
+                    onChange={(e) => {
+                      const val = formatCNES(e.target.value)
+                      setFormData({ ...formData, cnes: val })
+                      if (errors.cnes) setErrors({ ...errors, cnes: '' })
+                    }}
+                    className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
+                      errors.cnes ? 'border-red-500 focus-visible:ring-red-500' : ''
+                    }`}
+                  />
+                  {errors.cnes && (
+                    <p className="text-xs font-medium text-red-500 mt-1">{errors.cnes}</p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="tipo" className="text-sm font-semibold text-[#102A43]">
@@ -343,17 +361,28 @@ export function HospitalFormDialog({
               <span className="w-2 h-2 rounded-full bg-[#E5A812]" />
               Localização
             </h3>
-            <div className="space-y-1.5">
-              <Label htmlFor="endereco" className="text-sm font-semibold text-[#102A43]">
-                Endereço Completo
-              </Label>
-              <Textarea
-                id="endereco"
-                rows={2}
-                placeholder="Avenida / Rua, número, bairro, CEP, complementos..."
-                value={formData.endereco}
-                onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-                className="border-[#D3DFE9] focus-visible:ring-[#004B8D] resize-none"
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="endereco" className="text-sm font-semibold text-[#102A43]">
+                  Endereço Completo
+                </Label>
+                <Textarea
+                  id="endereco"
+                  rows={2}
+                  placeholder="Avenida / Rua, número, bairro, CEP, complementos... (opcional se houver coordenadas)"
+                  value={formData.endereco}
+                  onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                  className="border-[#D3DFE9] focus-visible:ring-[#004B8D] resize-none"
+                />
+              </div>
+
+              <CoordenadasField
+                idPrefix="novo"
+                latitude={formData.latitude}
+                longitude={formData.longitude}
+                onChange={({ latitude, longitude }) =>
+                  setFormData((prev) => ({ ...prev, latitude, longitude }))
+                }
               />
             </div>
           </div>
@@ -427,7 +456,7 @@ export function HospitalFormDialog({
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-1.5" />
-                  {isEditing ? 'Salvar Alterações' : 'Salvar Hospital'}
+                  {isEditing ? 'Salvar Alterações' : 'Salvar Cadastro'}
                 </>
               )}
             </Button>
