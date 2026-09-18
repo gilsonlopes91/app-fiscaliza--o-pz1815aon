@@ -35,7 +35,9 @@ import { Hospital, HospitalFormData, hospitaisService } from '@/services/hospita
 import { TipoEmpreendimento, tiposEmpreendimentoService } from '@/services/tiposEmpreendimento'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
 import { isTipoSaude } from '@/lib/tipoEmpreendimento'
+import { resolverMunicipio } from '@/lib/municipiosPiaui'
 import { CoordenadasField } from '@/components/CoordenadasField'
+import { MunicipioCombobox } from '@/components/MunicipioCombobox'
 import { useToast } from '@/hooks/use-toast'
 
 interface IniciarVistoriaModalProps {
@@ -153,7 +155,9 @@ export function IniciarVistoriaModal({
 
     // 2. Localização e Município
     if (!formData.municipio.trim()) {
-      newErrors.municipio = 'Município/UF é obrigatório.'
+      newErrors.municipio = 'Município é obrigatório.'
+    } else if (!resolverMunicipio(formData.municipio)) {
+      newErrors.municipio = 'Selecione um dos 224 municípios do Piauí na lista.'
     }
 
     // 3. Responsável pelas Informações (opcional; validação apenas de formato quando preenchido)
@@ -185,7 +189,7 @@ export function IniciarVistoriaModal({
       // 1. Salvar alterações no registro do empreendimento no PocketBase
       const updated = await hospitaisService.update(hospital.id, {
         nome: formData.nome.trim(),
-        municipio: formData.municipio.trim(),
+        municipio: resolverMunicipio(formData.municipio) || formData.municipio.trim(),
         cnes: formData.cnes.trim(),
         cnpj: formData.cnpj ? formData.cnpj.trim() : '',
         cnpj_mantenedora: formData.cnpj_mantenedora ? formData.cnpj_mantenedora.trim() : '',
@@ -424,26 +428,18 @@ export function IniciarVistoriaModal({
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {/* Município/UF */}
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="pv-municipio" className="text-xs font-bold text-[#102A43]">
-                  Município / UF <span className="text-rose-600">*</span>
-                </Label>
-                <Input
+              {/* Município */}
+              <div className="sm:col-span-2">
+                <MunicipioCombobox
                   id="pv-municipio"
+                  compact
                   value={formData.municipio}
-                  onChange={(e) => {
-                    setFormData({ ...formData, municipio: e.target.value })
-                    if (errors.municipio) setErrors({ ...errors, municipio: '' })
+                  error={errors.municipio}
+                  onChange={(municipio) => {
+                    setFormData((prev) => ({ ...prev, municipio }))
+                    if (errors.municipio) setErrors((prev) => ({ ...prev, municipio: '' }))
                   }}
-                  className={`bg-white border-[#D3DFE9] text-xs sm:text-sm focus-visible:ring-[#004B8D] ${
-                    errors.municipio ? 'border-rose-500 focus-visible:ring-rose-500' : ''
-                  }`}
-                  placeholder="Ex: Teresina / PI"
                 />
-                {errors.municipio && (
-                  <p className="text-[11px] font-medium text-rose-600">{errors.municipio}</p>
-                )}
               </div>
 
               {/* Endereço Completo */}

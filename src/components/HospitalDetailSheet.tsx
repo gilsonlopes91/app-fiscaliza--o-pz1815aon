@@ -47,7 +47,9 @@ import { ItensFiscalizacaoSection } from '@/components/ItensFiscalizacaoSection'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
 import { isTipoSaude, tipoLabel } from '@/lib/tipoEmpreendimento'
+import { resolverMunicipio } from '@/lib/municipiosPiaui'
 import { CoordenadasField, CoordenadasDisplay } from '@/components/CoordenadasField'
+import { MunicipioCombobox } from '@/components/MunicipioCombobox'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -146,6 +148,8 @@ export function HospitalDetailSheet({
     }
     if (!formData.municipio.trim()) {
       newErrors.municipio = 'Município é obrigatório.'
+    } else if (!resolverMunicipio(formData.municipio)) {
+      newErrors.municipio = 'Selecione um dos 224 municípios do Piauí na lista.'
     }
     if (exigeCnes) {
       if (!formData.cnes.trim()) {
@@ -186,7 +190,10 @@ export function HospitalDetailSheet({
 
     try {
       setIsSubmitting(true)
-      await onUpdate(hospital.id, formData)
+      await onUpdate(hospital.id, {
+        ...formData,
+        municipio: resolverMunicipio(formData.municipio) || formData.municipio.trim(),
+      })
       setIsEditing(false)
     } finally {
       setIsSubmitting(false)
@@ -386,28 +393,15 @@ export function HospitalDetailSheet({
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="edit-municipio"
-                      className="text-sm font-semibold text-[#102A43]"
-                    >
-                      Município <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="edit-municipio"
-                      value={formData.municipio}
-                      onChange={(e) => {
-                        setFormData({ ...formData, municipio: e.target.value })
-                        if (errors.municipio) setErrors({ ...errors, municipio: '' })
-                      }}
-                      className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
-                        errors.municipio ? 'border-red-500 focus-visible:ring-red-500' : ''
-                      }`}
-                    />
-                    {errors.municipio && (
-                      <p className="text-xs font-medium text-red-500 mt-1">{errors.municipio}</p>
-                    )}
-                  </div>
+                  <MunicipioCombobox
+                    id="edit-municipio"
+                    value={formData.municipio}
+                    error={errors.municipio}
+                    onChange={(municipio) => {
+                      setFormData((prev) => ({ ...prev, municipio }))
+                      if (errors.municipio) setErrors((prev) => ({ ...prev, municipio: '' }))
+                    }}
+                  />
 
                   {exigeCnes && (
                     <div className="space-y-1.5">

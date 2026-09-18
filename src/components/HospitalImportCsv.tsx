@@ -19,6 +19,7 @@ import { Hospital, HospitalFormData } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { formatCNPJ, formatCNES } from '@/lib/formatters'
 import { isTipoSaude } from '@/lib/tipoEmpreendimento'
+import { resolverMunicipio } from '@/lib/municipiosPiaui'
 import { parseCoordenadas } from '@/lib/geo'
 import { useToast } from '@/hooks/use-toast'
 
@@ -175,6 +176,7 @@ export function HospitalImportCsv({
 
       const tipoLimpo = tipo.trim() || 'Hospital'
       const exigeCnes = isTipoSaude(tipoLimpo)
+      const municipioOficial = resolverMunicipio(municipio)
 
       const errors: string[] = []
 
@@ -183,6 +185,8 @@ export function HospitalImportCsv({
       }
       if (!municipio.trim()) {
         errors.push('Município obrigatório')
+      } else if (!municipioOficial) {
+        errors.push('Município não consta entre os 224 do Piauí')
       }
       if (exigeCnes) {
         if (!cnes) {
@@ -200,12 +204,12 @@ export function HospitalImportCsv({
 
       const existing = cnes
         ? existingByCnes.get(cnes)
-        : existingByNomeMunicipio.get(chaveNomeMunicipio(nome, municipio))
+        : existingByNomeMunicipio.get(chaveNomeMunicipio(nome, municipioOficial || municipio))
 
       items.push({
         data: {
           nome: nome.trim(),
-          municipio: municipio.trim(),
+          municipio: municipioOficial || municipio.trim(),
           cnes: cnes,
           cnpj: cnpj.trim(),
           cnpj_mantenedora: cnpj_mantenedora.trim(),
@@ -303,6 +307,7 @@ export function HospitalImportCsv({
             Importação de Hospitais e Estabelecimentos via CSV
           </h2>
           <p className="text-xs text-[#486581] mt-1">
+            O município precisa ser um dos 224 do Piauí (a grafia é corrigida automaticamente).
             Envie uma planilha com colunas: <strong>nome, municipio</strong> (obrigatórios),{' '}
             <strong>cnes</strong> (obrigatório apenas para estabelecimentos de saúde), cnpj,
             cnpj_mantenedora, tipo, endereco, <strong>latitude, longitude</strong> (ou uma coluna
