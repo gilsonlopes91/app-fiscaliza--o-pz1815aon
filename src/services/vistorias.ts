@@ -384,9 +384,26 @@ export const vistoriasService = {
    * Get vistoria by its ID
    */
   async getById(id: string): Promise<Vistoria> {
-    return await pb.collection('vistorias').getOne<Vistoria>(id, {
-      expand: 'hospital',
-    })
+    const buscarLocal = async (): Promise<Vistoria | undefined> => {
+      const local = await vistoriasOffline()
+      return local.find((v) => v.id === id)
+    }
+
+    if (!estaOnline() || id.startsWith('local_')) {
+      const achada = await buscarLocal()
+      if (achada) return achada
+      throw new Error('Vistoria não disponível offline.')
+    }
+
+    try {
+      return await pb.collection('vistorias').getOne<Vistoria>(id, {
+        expand: 'hospital',
+      })
+    } catch (err) {
+      const achada = await buscarLocal()
+      if (achada) return achada
+      throw err
+    }
   },
 
   /**

@@ -1,5 +1,12 @@
 import pb from '@/lib/pocketbase/client'
-import { estaOnline, hospitaisOffline } from '@/services/offlineSync'
+import pbClient from '@/lib/pocketbase/client'
+import {
+  estaOnline,
+  hospitaisOffline,
+  criarHospitalOffline,
+  atualizarHospitalOffline,
+  guardarLocal,
+} from '@/services/offlineSync'
 
 export interface Hospital {
   id: string
@@ -100,6 +107,11 @@ export const hospitaisService = {
   },
 
   async create(data: HospitalFormData): Promise<Hospital> {
+    // Sem rede: cadastra no celular e agenda o envio
+    if (!estaOnline()) {
+      return await criarHospitalOffline(data, pbClient.authStore.record?.id)
+    }
+
     const payload: Record<string, unknown> = {
       nome: data.nome.trim(),
       municipio: data.municipio.trim(),
@@ -121,10 +133,16 @@ export const hospitaisService = {
       cpf_responsavel: data.cpf_responsavel?.trim() || '',
     }
     const record = await pb.collection('hospitais').create<Hospital>(payload)
+    // Mantém o cache de campo em dia sem precisar sincronizar de novo
+    await guardarLocal('hospitais', record)
     return record
   },
 
   async update(id: string, data: Partial<HospitalFormData>): Promise<Hospital> {
+    if (!estaOnline()) {
+      return await atualizarHospitalOffline(id, data)
+    }
+
     const payload: Record<string, unknown> = {}
     if (data.nome !== undefined) payload.nome = data.nome.trim()
     if (data.municipio !== undefined) payload.municipio = data.municipio.trim()
@@ -148,6 +166,7 @@ export const hospitaisService = {
     if (data.cpf_responsavel !== undefined) payload.cpf_responsavel = data.cpf_responsavel.trim()
 
     const record = await pb.collection('hospitais').update<Hospital>(id, payload)
+    await guardarLocal('hospitais', record)
     return record
   },
 

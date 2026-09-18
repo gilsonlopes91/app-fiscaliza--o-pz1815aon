@@ -1,6 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import * as db from '@/lib/offlineDb'
-import type { Hospital } from '@/services/hospitais'
+import type { Hospital, HospitalFormData } from '@/services/hospitais'
 import type { CategoriaVistoria, SubitemChecklist } from '@/services/categoriasVistoria'
 import type { Vistoria, VistoriaItem, VistoriaItemFormData } from '@/services/vistorias'
 import type { Atribuicao } from '@/services/atribuicoes'
@@ -15,10 +15,16 @@ import type { Atribuicao } from '@/services/atribuicoes'
 
 export interface EntradaOutbox {
   id?: number
-  tipo: 'criar_vistoria' | 'salvar_item' | 'caracterizacao'
+  tipo:
+    | 'criar_hospital'
+    | 'atualizar_hospital'
+    | 'criar_vistoria'
+    | 'salvar_item'
+    | 'caracterizacao'
   criadoEm: string
   vistoriaId: string
   hospitalId: string
+  dadosHospital?: HospitalFormData
   categoriaId?: string
   subitemId?: string
   itemId?: string
@@ -237,6 +243,61 @@ export async function contarPendencias(): Promise<number> {
   return db.dbCount('outbox')
 }
 
+/**
+ * Cadastra uma unidade nova direto no celular, sem rede. Ela já aparece na
+ * lista e aceita fiscalização; ao sincronizar, vira um registro de verdade.
+ */
+export async function criarHospitalOffline(
+  dados: HospitalFormData,
+  fiscalId?: string,
+): Promise<Hospital> {
+  const agora = new Date().toISOString()
+  const hospital: Hospital = {
+    ...(dados as unknown as Hospital),
+    id: novoIdLocal('hosp'),
+    created: agora,
+    updated: agora,
+  }
+
+  await db.dbPut('hospitais', hospital)
+  await db.dbPut('outbox', {
+    tipo: 'criar_hospital',
+    criadoEm: agora,
+    vistoriaId: '',
+    hospitalId: hospital.id,
+    dadosHospital: dados,
+    fiscalId,
+  } as EntradaOutbox)
+
+  return hospital
+}
+
+/** Atualiza uma unidade no celular e agenda o envio. */
+export async function atualizarHospitalOffline(
+  id: string,
+  dados: Partial<HospitalFormData>,
+): Promise<Hospital> {
+  const locais = await db.dbGetAll<Hospital>('hospitais')
+  const atual = locais.find((h) => h.id === id)
+  const atualizado: Hospital = {
+    ...(atual as Hospital),
+    ...(dados as unknown as Hospital),
+    id,
+    updated: new Date().toISOString(),
+  }
+
+  await db.dbPut('hospitais', atualizado)
+  await db.dbPut('outbox', {
+    tipo: 'atualizar_hospital',
+    criadoEm: new Date().toISOString(),
+    vistoriaId: '',
+    hospitalId: id,
+    dadosHospital: dados as HospitalFormData,
+  } as EntradaOutbox)
+
+  return atualizado
+}
+
 /** Cria uma vistoria provisória no celular quando não há rede. */
 export async function criarVistoriaOffline(hospitalId: string): Promise<Vistoria> {
   const agora = new Date().toISOString()
@@ -379,8 +440,12 @@ export async function enviarPendencias(
 
   // Import dinâmico evita dependência circular entre os dois módulos
   const { vistoriasService } = await import('@/services/vistorias')
+  const { hospitaisService } = await import('@/services/hospitais')
 
   const mapaVistorias = new Map<string, string>()
+  const mapaHospitais = new Map<string, string>()
+
+  const resolverHospital = (id: string) => (ehIdLocal(id) ? mapaHospitais.get(id) || null : id)
   let enviados = 0
   let falhas = 0
   let mensagemErro: string | undefined
@@ -390,16 +455,47 @@ export async function enviarPendencias(
     onProgress?.(i + 1, fila.length)
 
     try {
-      if (entrada.tipo === 'criar_vistoria') {
-        const criada = await vistoriasService.getOrCreateForHospital(entrada.hospitalId)
+      if (entrada.tipo === 'criar_hospital') {
+        const criado = await hospitaisService.create(entrada.dadosHospital!)
+        mapaHospitais.set(entrada.hospitalId, criado.id)
+
+        // Substitui o registro provisório pelo definitivo no cache local
+        await db.dbDelete('hospitais', entrada.hospitalId)
+        await db.dbPut('hospitais', criado)
+
+        // Vincula ao fiscal que cadastrou, para a unidade aparecer na lista dele
+        if (entrada.fiscalId) {
+          try {
+            await pb.collection('atribuicoes').create({
+              fiscal: entrada.fiscalId,
+              hospital: criado.id,
+              created_by: entrada.fiscalId,
+              observacao: 'Unidade cadastrada em campo pelo fiscal (modo offline)',
+            })
+          } catch (e) {
+            console.warn('Não foi possível vincular a unidade ao fiscal:', e)
+          }
+        }
+      } else if (entrada.tipo === 'atualizar_hospital') {
+        const alvo = resolverHospital(entrada.hospitalId)
+        if (!alvo) throw new Error('Unidade correspondente ainda não foi criada no servidor.')
+        await hospitaisService.update(alvo, entrada.dadosHospital || {})
+      } else if (entrada.tipo === 'criar_vistoria') {
+        const hospitalReal = resolverHospital(entrada.hospitalId)
+        if (!hospitalReal) {
+          throw new Error('Unidade correspondente ainda não foi criada no servidor.')
+        }
+        const criada = await vistoriasService.getOrCreateForHospital(hospitalReal)
         mapaVistorias.set(entrada.vistoriaId, criada.id)
       } else if (entrada.tipo === 'salvar_item') {
         const vistoriaReal = ehIdLocal(entrada.vistoriaId)
           ? mapaVistorias.get(entrada.vistoriaId)
           : entrada.vistoriaId
 
-        if (!vistoriaReal) {
-          throw new Error('Vistoria correspondente ainda não foi criada no servidor.')
+        const hospitalReal = resolverHospital(entrada.hospitalId)
+
+        if (!vistoriaReal || !hospitalReal) {
+          throw new Error('Vistoria ou unidade correspondente ainda não existe no servidor.')
         }
 
         const arquivos: File[] = []
@@ -410,7 +506,7 @@ export async function enviarPendencias(
 
         await vistoriasService.saveItem(
           vistoriaReal,
-          entrada.hospitalId,
+          hospitalReal,
           entrada.categoriaId || '',
           entrada.form || {},
           entrada.subitemInfo || {},
