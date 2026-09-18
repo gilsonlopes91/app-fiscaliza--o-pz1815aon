@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-18T15:04:15.790Z",
+  "generatedAt": "2026-09-18T18:34:55.243Z",
   "collections": [
     {
       "name": "users",
@@ -29,21 +29,29 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "role",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["admin", "usuario"]
+          "selectValues": [
+            "admin",
+            "usuario"
+          ]
         },
         {
           "name": "approved",
@@ -56,7 +64,11 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["pendente", "aprovado", "rejeitado"]
+          "selectValues": [
+            "pendente",
+            "aprovado",
+            "rejeitado"
+          ]
         }
       ],
       "indexes": [
@@ -128,14 +140,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "tipo",
@@ -238,14 +255,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "tipo",
@@ -260,7 +282,9 @@
           "system": false
         }
       ],
-      "indexes": ["CREATE INDEX `idx_categorias_vistoria_tipo` ON `categorias_vistoria` (tipo)"]
+      "indexes": [
+        "CREATE INDEX `idx_categorias_vistoria_tipo` ON `categorias_vistoria` (tipo)"
+      ]
     },
     {
       "name": "vistorias",
@@ -285,7 +309,11 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["em_andamento", "concluida", "cancelada"]
+          "selectValues": [
+            "em_andamento",
+            "concluida",
+            "cancelada"
+          ]
         },
         {
           "name": "observacoes",
@@ -298,17 +326,31 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
+        },
+        {
+          "name": "caracterizacao",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
-      "indexes": ["CREATE INDEX idx_vistorias_hospital ON vistorias (hospital)"]
+      "indexes": [
+        "CREATE INDEX idx_vistorias_hospital ON vistorias (hospital)",
+        "CREATE INDEX `idx_vistorias_status` ON `vistorias` (status)"
+      ]
     },
     {
       "name": "vistoria_itens",
@@ -347,7 +389,11 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Sim", "Não", "Não se aplica"]
+          "selectValues": [
+            "Sim",
+            "Não",
+            "Não se aplica"
+          ]
         },
         {
           "name": "prestadorServico",
@@ -366,7 +412,10 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Sim", "Não"]
+          "selectValues": [
+            "Sim",
+            "Não"
+          ]
         },
         {
           "name": "dataUltimaVerificacao",
@@ -385,21 +434,29 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "servicoPeriodico",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Sim", "Não"]
+          "selectValues": [
+            "Sim",
+            "Não"
+          ]
         },
         {
           "name": "fotos",
@@ -461,14 +518,19 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Sim", "Não"]
+          "selectValues": [
+            "Sim",
+            "Não"
+          ]
         }
       ],
       "indexes": [
         "CREATE INDEX idx_vistoria_itens_vistoria ON vistoria_itens (vistoria)",
         "CREATE INDEX idx_vistoria_itens_hospital ON vistoria_itens (hospital)",
         "CREATE INDEX idx_vistoria_itens_categoria ON vistoria_itens (categoria)",
-        "CREATE INDEX `idx_vistoria_itens_subitem` ON `vistoria_itens` (subitem)"
+        "CREATE INDEX `idx_vistoria_itens_subitem` ON `vistoria_itens` (subitem)",
+        "CREATE INDEX `idx_vistoria_itens_vistoria_subitem` ON `vistoria_itens` (vistoria, subitem)",
+        "CREATE INDEX `idx_vistoria_itens_vistoria_categoria` ON `vistoria_itens` (vistoria, categoria)"
       ]
     },
     {
@@ -505,14 +567,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -560,7 +627,10 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["Conforme", "Não Conforme"]
+          "selectValues": [
+            "Conforme",
+            "Não Conforme"
+          ]
         },
         {
           "name": "observacao",
@@ -573,14 +643,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -637,19 +712,25 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
         "CREATE INDEX idx_atribuicoes_fiscal ON atribuicoes (fiscal)",
-        "CREATE INDEX idx_atribuicoes_hospital ON atribuicoes (hospital)"
+        "CREATE INDEX idx_atribuicoes_hospital ON atribuicoes (hospital)",
+        "CREATE INDEX `idx_atribuicoes_fiscal_hospital` ON `atribuicoes` (fiscal, hospital)"
       ]
     },
     {
@@ -711,14 +792,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [

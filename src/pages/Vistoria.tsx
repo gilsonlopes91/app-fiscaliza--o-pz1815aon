@@ -58,6 +58,15 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { isTipoRural } from '@/lib/tipoEmpreendimento'
+import {
+  CaracterizacaoAgro,
+  CARACTERIZACAO_VAZIA,
+  parseCaracterizacao,
+  caracterizacaoPreenchida,
+  avaliarTema,
+} from '@/lib/caracterizacaoAgro'
+import { CaracterizacaoAgroSection } from '@/components/CaracterizacaoAgroSection'
 import { hospitaisService, Hospital } from '@/services/hospitais'
 import {
   categoriasVistoriaService,
@@ -112,6 +121,12 @@ export default function VistoriaPage() {
   const [currentVistoria, setCurrentVistoria] = useState<Vistoria | null>(null)
   const [vistoriaItens, setVistoriaItens] = useState<VistoriaItem[]>([])
   const [isLoadingChecklist, setIsLoadingChecklist] = useState(false)
+
+  // Caracterização do empreendimento rural (culturas, criação animal, estruturas)
+  const [caracterizacao, setCaracterizacao] = useState<CaracterizacaoAgro>({
+    ...CARACTERIZACAO_VAZIA,
+  })
+  const [isSavingCaracterizacao, setIsSavingCaracterizacao] = useState(false)
 
   // Local Form state for each SUBITEM (keyed by subitem.id or categoria.id fallback)
   const [itemForms, setItemForms] = useState<Record<string, VistoriaItemFormData>>({})
@@ -274,6 +289,25 @@ export default function VistoriaPage() {
     })
     return list
   }, [relevantCategorias, subitensByCategoria])
+
+  // A caracterização só faz sentido em empreendimentos rurais
+  const mostrarCaracterizacao = useMemo(() => {
+    return isTipoRural(currentHospitalTipo)
+  }, [currentHospitalTipo])
+
+  // Temas do checklist sem correspondência no que foi marcado
+  const temasDispensadosCats = useMemo(() => {
+    if (!mostrarCaracterizacao || !caracterizacaoPreenchida(caracterizacao)) return []
+    return relevantCategorias.filter((cat) => {
+      const avaliacao = avaliarTema(cat.nome, caracterizacao)
+      return !avaliacao.blindado && !avaliacao.aplica
+    })
+  }, [mostrarCaracterizacao, caracterizacao, relevantCategorias])
+
+  // Carrega a caracterização gravada quando a vistoria ativa muda
+  useEffect(() => {
+    setCaracterizacao(parseCaracterizacao(currentVistoria?.caracterizacao))
+  }, [currentVistoria?.id, currentVistoria?.caracterizacao])
 
   // 2. When hospital is selected, load or create its vistoria & items
   const loadVistoriaForHospital = useCallback(
@@ -722,6 +756,52 @@ export default function VistoriaPage() {
   }
 
   // Batch mark all subitems of a categoria (item principal) as "Não se aplica"
+  /**
+   * Grava a caracterização na vistoria e marca como "Não se aplica" apenas os
+   * subitens ainda não respondidos dos temas sem correspondência.
+   */
+  const handleSalvarCaracterizacao = async () => {
+    if (!currentVistoria || isReadOnly) return
+
+    try {
+      setIsSavingCaracterizacao(true)
+
+      const payload: CaracterizacaoAgro = {
+        ...caracterizacao,
+        atualizadaEm: new Date().toISOString(),
+      }
+      const atualizada = await vistoriasService.updateCaracterizacao(currentVistoria.id, payload)
+      setCurrentVistoria(atualizada)
+
+      let marcados = 0
+      for (const cat of temasDispensadosCats) {
+        const subs = (subitensByCategoria.get(cat.id) || []).filter(
+          (sub) => !itemForms[sub.id]?.possuiSistema,
+        )
+        if (subs.length === 0) continue
+        await handleBatchMarkCategoryNaoSeAplica(cat, subs)
+        marcados += subs.length
+      }
+
+      toast({
+        title: 'Caracterização salva',
+        description:
+          marcados > 0
+            ? `${marcados} subitem(ns) de ${temasDispensadosCats.length} tema(s) marcados como "Não se aplica". Você pode reverter no checklist.`
+            : 'Nenhum subitem precisou ser marcado automaticamente.',
+      })
+    } catch (err) {
+      console.error('Erro ao salvar caracterização:', err)
+      toast({
+        title: 'Erro ao salvar caracterização',
+        description: 'Não foi possível gravar a caracterização desta vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingCaracterizacao(false)
+    }
+  }
+
   const handleBatchMarkCategoryNaoSeAplica = async (
     cat: CategoriaVistoria,
     subs: SubitemChecklist[],
@@ -1578,6 +1658,19 @@ export default function VistoriaPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 3.5 Caracterização do empreendimento rural (antes do checklist) */}
+      {selectedHospitalId && mostrarCaracterizacao && currentVistoria && (
+        <CaracterizacaoAgroSection
+          valor={caracterizacao}
+          onChange={setCaracterizacao}
+          onSalvar={handleSalvarCaracterizacao}
+          isReadOnly={isReadOnly}
+          isSaving={isSavingCaracterizacao}
+          temasDispensados={temasDispensadosCats.map((c) => c.nome)}
+          totalTemas={relevantCategorias.length}
+        />
       )}
 
       {/* 4. Checklist Agrupado em 2 Níveis: Itens Principais (Accordion) + Subitens (Cards com perguntas) */}

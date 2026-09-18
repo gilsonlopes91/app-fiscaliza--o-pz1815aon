@@ -5,6 +5,7 @@ import { Vistoria, VistoriaItem, getVistoriaItemPhotoUrl } from '@/services/vist
 import { Hospital } from '@/services/hospitais'
 import { CategoriaVistoria, SubitemChecklist } from '@/services/categoriasVistoria'
 import { formatCNPJ } from '@/lib/formatters'
+import { parseCaracterizacao, resumoCaracterizacao } from '@/lib/caracterizacaoAgro'
 import { sanitizeFileName } from './photoDownload'
 
 export interface GeneratePdfParams {
@@ -233,6 +234,31 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
   doc.text(fiscalNome, col2X + 27, cursorY + 22)
 
   cursorY += 41
+
+  // 2.1 Caracterização do empreendimento (culturas, criação e estruturas)
+  const caracterizacao = parseCaracterizacao(vistoria.caracterizacao)
+  const resumoCarac = resumoCaracterizacao(caracterizacao)
+
+  if (resumoCarac) {
+    const linhasCarac = doc.splitTextToSize(resumoCarac, contentWidth - 12)
+    const alturaCarac = 8 + linhasCarac.length * 4
+
+    doc.setFillColor(232, 241, 248)
+    doc.setDrawColor(211, 223, 233)
+    doc.roundedRect(margin, cursorY, contentWidth, alturaCarac, 2, 2, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8.5)
+    doc.setTextColor(0, 75, 141)
+    doc.text('CARACTERIZAÇÃO DO EMPREENDIMENTO', margin + 4, cursorY + 5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(36, 59, 83)
+    doc.text(linhasCarac, margin + 4, cursorY + 10)
+
+    cursorY += alturaCarac + 5
+  }
 
   // 3. Montar Tabela do Checklist Completo Preenchido
   if (onProgress) onProgress('Compilando dados do checklist preenchido...')
