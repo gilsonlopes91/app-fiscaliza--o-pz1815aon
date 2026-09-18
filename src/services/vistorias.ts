@@ -25,6 +25,7 @@ export interface Vistoria {
   hospital: string
   status?: 'em_andamento' | 'concluida' | 'cancelada'
   observacoes?: string
+  caracterizacao?: unknown
   created: string
   updated: string
   expand?: {
@@ -51,6 +52,7 @@ export interface VistoriaItem {
   dataUltimaVerificacao?: string | null
   dataUltimoServico?: string | null
   situacaoCalculada?: SituacaoChecklist
+  observacoes?: string
   latitude?: number | null
   longitude?: number | null
   dataCaptura?: string | null
@@ -80,6 +82,7 @@ export interface VistoriaItemFormData {
   fotos?: string[]
   dataUltimaVerificacao?: string | null
   dataUltimoServico?: string | null
+  observacoes?: string
   latitude?: number | null
   longitude?: number | null
   dataCaptura?: string | null
@@ -560,6 +563,12 @@ export const vistoriasService = {
         data.append('dataUltimoServico', '')
         data.append('dataUltimaVerificacao', '')
       }
+      data.append(
+        'observacoes',
+        formData.observacoes !== undefined && formData.observacoes !== null
+          ? formData.observacoes.trim()
+          : '',
+      )
       if (situacao) {
         data.append('situacaoCalculada', situacao)
       }
@@ -640,6 +649,10 @@ export const vistoriasService = {
       dataUltimaVerificacao: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       dataUltimoServico: formData.dataUltimoServico || formData.dataUltimaVerificacao || null,
       situacaoCalculada: situacao,
+      observacoes:
+        formData.observacoes !== undefined && formData.observacoes !== null
+          ? formData.observacoes.trim()
+          : '',
       latitude: formData.latitude !== undefined ? formData.latitude : null,
       longitude: formData.longitude !== undefined ? formData.longitude : null,
       dataCaptura: formData.dataCaptura || null,
@@ -674,6 +687,19 @@ export const vistoriasService = {
     return await pb.collection('vistoria_itens').create<VistoriaItem>(payload, {
       expand: 'categoria,subitem,hospital',
     })
+  },
+
+  /**
+   * Update caracterizacao agro
+   */
+  async updateCaracterizacao(id: string, caracterizacao: unknown): Promise<Vistoria> {
+    return await pb.collection('vistorias').update<Vistoria>(
+      id,
+      { caracterizacao },
+      {
+        expand: 'hospital',
+      },
+    )
   },
 
   /**

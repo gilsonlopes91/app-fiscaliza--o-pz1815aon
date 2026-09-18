@@ -43,6 +43,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -368,6 +369,7 @@ export default function VistoriaPage() {
               : item.dataUltimaVerificacao
                 ? item.dataUltimaVerificacao.split('T')[0]
                 : '',
+            observacoes: item.observacoes || '',
           }
         })
         isInitialLoadRef.current = true
@@ -666,8 +668,8 @@ export default function VistoriaPage() {
       dataUltimaArt: '',
       dataUltimaVerificacao: '',
       dataUltimoServico: '',
+      observacoes: '',
     }
-
     const existingItem = vistoriaItens.find(
       (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
     )
@@ -834,6 +836,7 @@ export default function VistoriaPage() {
           dataUltimoServico: '',
           servicoPeriodico: '',
           periodicidadeMeses: null,
+          observacoes: '',
         }
         next[sub.id] = updated
         updatedFormMap[sub.id] = updated
@@ -855,6 +858,7 @@ export default function VistoriaPage() {
           dataUltimoServico: '',
           servicoPeriodico: '',
           periodicidadeMeses: null,
+          observacoes: '',
         }
         const existingItem = vistoriaItens.find(
           (i) => i.subitem === sub.id || (!i.subitem && i.categoria === cat.id),
@@ -1859,10 +1863,10 @@ export default function VistoriaPage() {
                           dataUltimaArt: '',
                           dataUltimaVerificacao: '',
                           dataUltimoServico: '',
+                          observacoes: '',
                         }
 
                         const situacao = calculateItemSituacao(form, sub)
-                        const isSaving = savingSubitemIds[subKey] || false
                         const pending = pendingPhotos[subKey] || []
                         const subCode = sub.codigo || `${itemNumber}.${sIdx + 1}`
 
@@ -2307,6 +2311,33 @@ export default function VistoriaPage() {
                                   )}
                                 </div>
 
+                                {/* Campo de Observações do Subitem */}
+                                <div className="space-y-1.5 pt-1">
+                                  <Label
+                                    htmlFor={`obs-${subKey}`}
+                                    className="text-xs font-bold text-[#102A43] flex items-center gap-1.5"
+                                  >
+                                    Observações
+                                  </Label>
+                                  <Textarea
+                                    id={`obs-${subKey}`}
+                                    rows={3}
+                                    disabled={isReadOnly}
+                                    placeholder="Digite observações, anotações de campo ou apontamentos adicionais sobre este item..."
+                                    value={form.observacoes || ''}
+                                    onChange={(e) =>
+                                      handleFieldChange(
+                                        subKey,
+                                        'observacoes',
+                                        e.target.value,
+                                        sub,
+                                        cat,
+                                      )
+                                    }
+                                    className="border-[#D3DFE9] bg-white text-xs w-full resize-y min-h-[70px] focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
+                                  />
+                                </div>
+
                                 {/* Seção de Fotos (Até 3 fotos com preview e remoção) */}
                                 <div className="pt-3 border-t border-[#D3DFE9]">
                                   <PhotoUploadSection
@@ -2329,7 +2360,7 @@ export default function VistoriaPage() {
                               </div>
                             )}
 
-                            {/* Subitem Save Action (ou indicador de salvamento automático) */}
+                            {/* Subitem Rodapé com indicação de status / salvamento automático */}
                             <div className="flex items-center justify-between pt-1">
                               <span className="text-[11px] text-[#627D98] italic">
                                 {isReadOnly
@@ -2340,26 +2371,6 @@ export default function VistoriaPage() {
                                     }).`
                                   : 'As alterações são salvas automaticamente.'}
                               </span>
-
-                              <Button
-                                type="button"
-                                onClick={() => handleSaveSubitem(sub, cat)}
-                                disabled={isSaving || isReadOnly}
-                                variant="outline"
-                                className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-7 px-3 gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-                              >
-                                {isSaving ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Salvando...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Save className="w-3 h-3" />
-                                    Salvar agora
-                                  </>
-                                )}
-                              </Button>
                             </div>
                           </div>
                         )

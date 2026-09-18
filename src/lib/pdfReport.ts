@@ -397,6 +397,9 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
       if (item?.servicoPeriodico === 'Sim' && item.periodicidadeMeses) {
         detalhesList.push(`Período: a cada ${item.periodicidadeMeses} mês(es)`)
       }
+      if (item?.observacoes && item.observacoes.trim()) {
+        detalhesList.push(`Observações: ${item.observacoes.trim()}`)
+      }
       if (item?.fotos && item.fotos.length > 0) {
         detalhesList.push(`📸 ${item.fotos.length} foto(s) anexada(s)`)
       }
