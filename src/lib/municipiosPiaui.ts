@@ -254,13 +254,22 @@ MUNICIPIOS_PIAUI.forEach((m) => INDICE.set(normalizarTexto(m), m))
 export function resolverMunicipio(valor?: string | null): string | null {
   if (!valor) return null
 
-  let texto = normalizarTexto(String(valor))
+  const texto = normalizarTexto(String(valor))
   if (!texto) return null
 
-  // Remove sufixo de UF: "- pi", "/pi", ", piaui", " pi"
-  texto = texto.replace(/[\s,/-]+(pi|piaui)$/, '').trim()
+  // 1. Tentativa direta. Precisa vir ANTES da remoção do sufixo de UF, senão
+  //    os municípios que terminam em "do Piauí" perderiam parte do nome
+  //    ("Barreiras do Piauí" viraria "barreiras do").
+  const direto = INDICE.get(texto)
+  if (direto) return direto
 
-  return INDICE.get(texto) || null
+  // 2. Só então tenta sem o sufixo de UF: "- pi", "/pi", ", piaui", " pi".
+  const semUf = texto.replace(/[\s,/-]+(pi|piaui)$/, '').trim()
+  if (semUf && semUf !== texto) {
+    return INDICE.get(semUf) || null
+  }
+
+  return null
 }
 
 /** True quando o texto corresponde a um município do Piauí. */
