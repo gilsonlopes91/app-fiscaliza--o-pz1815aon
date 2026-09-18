@@ -1,5 +1,5 @@
 /* Service Worker - App Fiscalização CREA-PI */
-const CACHE_NAME = 'fiscalizacao-creapi-v2'
+const CACHE_NAME = 'fiscalizacao-creapi-v3'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -41,8 +41,9 @@ self.addEventListener('activate', (event) => {
 })
 
 // Fetch strategy:
-// 1. Navigation requests (HTML pages): Stale-While-Revalidate with fallback to /index.html/offline.html
-//    Permite que o PWA abra instantaneamente do cache em frações de segundo mesmo com conexão lenta.
+// 1. Navigation requests (HTML pages): Network-First com tempo limite curto.
+//    Com rede, o fiscal sempre recebe a versão mais nova do app (evita ficar
+//    preso numa interface antiga em cache). Sem rede, cai para o cache na hora.
 // 2. Static assets (scripts, styles, images, fonts): Cache-First / Stale-While-Revalidate
 // 3. API/Pocketbase requests (/api/*): Network-only com bypass de cache para garantir dados frescos
 self.addEventListener('fetch', (event) => {
@@ -58,27 +59,25 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         try {
-          // Tenta carregar do cache para renderização ultrarrápida do App Shell PWA
           const cachedResponse = await caches.match(req)
-          const fetchPromise = fetch(req)
-            .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200) {
-                const resClone = networkResponse.clone()
-                caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone))
-              }
-              return networkResponse
-            })
-            .catch(() => null)
 
-          if (cachedResponse) {
-            // Em background atualiza o cache para a próxima navegação
-            fetchPromise
-            return cachedResponse
-          }
+          // Tenta a rede primeiro, com 3,5s de paciência: em campo com sinal
+          // fraco o app abre na mesma do cache em vez de ficar rodando.
+          const networkResponse = await Promise.race([
+            fetch(req)
+              .then((res) => {
+                if (res && res.status === 200) {
+                  const resClone = res.clone()
+                  caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone))
+                }
+                return res
+              })
+              .catch(() => null),
+            new Promise((resolve) => setTimeout(() => resolve(null), 3500)),
+          ])
 
-          // Se não está no cache, aguarda a rede
-          const networkResponse = await fetchPromise
           if (networkResponse) return networkResponse
+          if (cachedResponse) return cachedResponse
 
           // Fallbacks offline
           const cachedIndex = await caches.match('/index.html')
