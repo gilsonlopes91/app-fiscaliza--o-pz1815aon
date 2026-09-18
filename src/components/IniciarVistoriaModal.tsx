@@ -33,8 +33,8 @@ import {
 } from 'lucide-react'
 import { Hospital, HospitalFormData, hospitaisService } from '@/services/hospitais'
 import { TipoEmpreendimento, tiposEmpreendimentoService } from '@/services/tiposEmpreendimento'
-import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
-import { isTipoSaude } from '@/lib/tipoEmpreendimento'
+import { formatCNPJ, formatCPF, formatCNES, formatTelefone, formatAnoSafra } from '@/lib/formatters'
+import { isTipoSaude, isTipoRural } from '@/lib/tipoEmpreendimento'
 import { resolverMunicipio } from '@/lib/municipiosPiaui'
 import { CoordenadasField } from '@/components/CoordenadasField'
 import { MunicipioCombobox } from '@/components/MunicipioCombobox'
@@ -67,11 +67,14 @@ export function IniciarVistoriaModal({
     cnes: '',
     cnpj: '',
     cnpj_mantenedora: '',
+    ano_safra: '',
     tipo: 'Hospital',
     endereco: '',
     latitude: '',
     longitude: '',
+    telefone: '',
     responsavel: '',
+    cargo_responsavel: '',
     cpf_responsavel: '',
   })
 
@@ -112,6 +115,9 @@ export function IniciarVistoriaModal({
             : '',
         latitude: hospital.latitude || '',
         longitude: hospital.longitude || '',
+        ano_safra: hospital.ano_safra || '',
+        telefone: hospital.telefone ? formatTelefone(hospital.telefone) : '',
+        cargo_responsavel: hospital.cargo_responsavel || '',
         responsavel: cleanResponsavel,
         cpf_responsavel: cleanCpf,
       })
@@ -122,6 +128,7 @@ export function IniciarVistoriaModal({
   if (!hospital) return null
 
   const exigeCnes = isTipoSaude(formData.tipo || hospital.tipo)
+  const isRural = isTipoRural(formData.tipo || hospital.tipo)
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -197,6 +204,9 @@ export function IniciarVistoriaModal({
         endereco: formData.endereco ? formData.endereco.trim() : '',
         latitude: formData.latitude ? formData.latitude.trim() : '',
         longitude: formData.longitude ? formData.longitude.trim() : '',
+        ano_safra: formData.ano_safra ? formData.ano_safra.trim() : '',
+        telefone: formData.telefone ? formData.telefone.trim() : '',
+        cargo_responsavel: formData.cargo_responsavel ? formData.cargo_responsavel.trim() : '',
         responsavel: formData.responsavel ? formData.responsavel.trim() : '',
         cpf_responsavel: formData.cpf_responsavel ? formData.cpf_responsavel.trim() : '',
       })
@@ -415,6 +425,25 @@ export function IniciarVistoriaModal({
                   <p className="text-[11px] font-medium text-rose-600">{errors.cnpj_mantenedora}</p>
                 )}
               </div>
+
+              {/* Ano / Safra — relatório de visita ao produtor rural */}
+              {isRural && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="pv-ano-safra" className="text-xs font-bold text-[#102A43]">
+                    Ano / Safra
+                  </Label>
+                  <Input
+                    id="pv-ano-safra"
+                    maxLength={9}
+                    placeholder="2025/2026"
+                    value={formData.ano_safra}
+                    onChange={(e) =>
+                      setFormData({ ...formData, ano_safra: formatAnoSafra(e.target.value) })
+                    }
+                    className="bg-white border-[#D3DFE9] font-mono text-xs sm:text-sm focus-visible:ring-[#004B8D]"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -509,6 +538,20 @@ export function IniciarVistoriaModal({
                 )}
               </div>
 
+              {/* Cargo / Função */}
+              <div className="space-y-1.5">
+                <Label htmlFor="pv-cargo" className="text-xs font-bold text-[#102A43]">
+                  Cargo / Função
+                </Label>
+                <Input
+                  id="pv-cargo"
+                  value={formData.cargo_responsavel}
+                  onChange={(e) => setFormData({ ...formData, cargo_responsavel: e.target.value })}
+                  className="bg-white border-[#D3DFE9] text-xs sm:text-sm focus-visible:ring-[#004B8D]"
+                  placeholder="Ex: Gerente agrícola, Diretor técnico"
+                />
+              </div>
+
               {/* CPF do Responsável */}
               <div className="space-y-1.5">
                 <Label htmlFor="pv-cpf_responsavel" className="text-xs font-bold text-[#102A43]">
@@ -531,6 +574,23 @@ export function IniciarVistoriaModal({
                 {errors.cpf_responsavel && (
                   <p className="text-[11px] font-medium text-rose-600">{errors.cpf_responsavel}</p>
                 )}
+              </div>
+
+              {/* Telefone de contato */}
+              <div className="space-y-1.5">
+                <Label htmlFor="pv-telefone" className="text-xs font-bold text-[#102A43]">
+                  Telefone de contato
+                </Label>
+                <Input
+                  id="pv-telefone"
+                  maxLength={16}
+                  placeholder="(86) 99999-9999"
+                  value={formData.telefone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, telefone: formatTelefone(e.target.value) })
+                  }
+                  className="bg-white border-[#D3DFE9] font-mono text-xs sm:text-sm focus-visible:ring-[#004B8D]"
+                />
               </div>
             </div>
           </div>

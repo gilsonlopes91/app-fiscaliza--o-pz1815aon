@@ -42,6 +42,13 @@ interface CsvRow {
   coordenadas?: string
   responsavel?: string
   cpf_responsavel?: string
+  inscricao_estadual?: string
+  cpf?: string
+  ano_safra?: string
+  cep?: string
+  email?: string
+  telefone?: string
+  cargo_responsavel?: string
   [key: string]: any
 }
 
@@ -162,7 +169,14 @@ export function HospitalImportCsv({
       const tipo = row.tipo || row.tipo_unidade || row.tipo_empreendimento || 'Hospital'
       const endereco = row.endereco || row.logradouro || ''
       const responsavel = row.responsavel || row.diretor || ''
-      const cpf_responsavel = row.cpf_responsavel || row.cpf || ''
+      const cpf_responsavel = row.cpf_responsavel || ''
+      const inscricao_estadual = row.inscricao_estadual || row.ie || row.inscricao || ''
+      const cpfProdutor = row.cpf || row.cpf_produtor || row.cpf_proprietario || ''
+      const ano_safra = row.ano_safra || row.safra || row.ano || ''
+      const cep = row.cep || ''
+      const email = row.email || row.e_mail || ''
+      const telefone = row.telefone || row.fone || row.celular || ''
+      const cargo_responsavel = row.cargo_responsavel || row.cargo || row.funcao || ''
 
       // Coordenadas: coluna única ("coordenadas"/"localizacao") ou colunas
       // separadas de latitude e longitude.
@@ -217,7 +231,14 @@ export function HospitalImportCsv({
           endereco: endereco.trim(),
           latitude: coords ? String(coords.lat) : '',
           longitude: coords ? String(coords.lng) : '',
+          inscricao_estadual: String(inscricao_estadual).trim(),
+          cpf: String(cpfProdutor).trim(),
+          ano_safra: String(ano_safra).trim(),
+          cep: String(cep).trim(),
+          email: String(email).trim(),
+          telefone: String(telefone).trim(),
           responsavel: responsavel.trim(),
+          cargo_responsavel: String(cargo_responsavel).trim(),
           cpf_responsavel: cpf_responsavel.trim(),
         },
         isExisting: !!existing,
@@ -278,10 +299,10 @@ export function HospitalImportCsv({
 
   const downloadSampleCsv = () => {
     const csvContent =
-      'nome,municipio,cnes,cnpj,cnpj_mantenedora,tipo,endereco,latitude,longitude,responsavel,cpf_responsavel\n' +
-      '"Hospital Regional Justino Luz","Picos","2365478","06.554.123/0001-90","06.554.123/0001-90","Hospital","Praça Antenor Neiva, s/n - Centro","-7.077500","-41.467200","Eng. Carlos Eduardo","123.456.789-00"\n' +
-      '"Clínica de Olhos do Piauí","Teresina","2365516","12.345.678/0001-99","","Clínica Médica","Rua Desembargador Pires de Castro, 450 - Centro","","","Dr. Marcos Santos","111.222.333-44"\n' +
-      '"Fazenda Santa Luzia","Uruçuí","","12.345.678/0001-10","","Fazenda","Zona rural - acesso pela PI-247","-7.229800","-44.556100","Eng. Agr. João Batista","222.333.444-55"'
+      'nome,municipio,cnes,cnpj,cnpj_mantenedora,tipo,endereco,cep,latitude,longitude,email,telefone,responsavel,cargo_responsavel,cpf_responsavel,inscricao_estadual,cpf,ano_safra\n' +
+      '"Hospital Regional Justino Luz","Picos","2365478","06.554.123/0001-90","06.554.123/0001-90","Hospital","Praça Antenor Neiva, s/n - Centro","64600-000","-7.077500","-41.467200","contato@hrjl.pi.gov.br","(89) 3422-1000","Eng. Carlos Eduardo","Diretor técnico","123.456.789-00","","",""\n' +
+      '"Clínica de Olhos do Piauí","Teresina","2365516","12.345.678/0001-99","","Clínica Médica","Rua Desembargador Pires de Castro, 450 - Centro","64000-000","","","contato@clinicaolhos.com.br","(86) 99999-1234","Dr. Marcos Santos","Responsável técnico","111.222.333-44","","",""\n' +
+      '"Fazenda Santa Luzia","Uruçuí","","12.345.678/0001-10","","Fazenda / Agronegócio","Zona rural - acesso pela PI-247","64860-000","-7.229800","-44.556100","fazenda@santaluzia.agr.br","(89) 98888-4321","Eng. Agr. João Batista","Gerente agrícola","222.333.444-55","19.123.456-7","333.444.555-66","2025/2026"'
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -310,8 +331,10 @@ export function HospitalImportCsv({
             O município precisa ser um dos 224 do Piauí (a grafia é corrigida automaticamente).
             Envie uma planilha com colunas: <strong>nome, municipio</strong> (obrigatórios),{' '}
             <strong>cnes</strong> (obrigatório apenas para estabelecimentos de saúde), cnpj,
-            cnpj_mantenedora, tipo, endereco, <strong>latitude, longitude</strong> (ou uma coluna
-            única <strong>coordenadas</strong>), responsavel, cpf_responsavel.
+            cnpj_mantenedora, tipo, endereco, cep, <strong>latitude, longitude</strong> (ou uma
+            coluna única <strong>coordenadas</strong>), email, telefone, responsavel,
+            cargo_responsavel, cpf_responsavel e, para empreendimentos rurais, inscricao_estadual,
+            cpf (do produtor) e ano_safra.
           </p>
         </div>
 

@@ -21,8 +21,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { Building2, Save, X, Loader2 } from 'lucide-react'
 import { Hospital, HospitalFormData } from '@/services/hospitais'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
-import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
-import { isTipoSaude, tipoLabel, exemploNomePorTipo } from '@/lib/tipoEmpreendimento'
+import {
+  formatCNPJ,
+  formatCPF,
+  formatCNES,
+  formatCEP,
+  formatTelefone,
+  formatAnoSafra,
+} from '@/lib/formatters'
+import { isTipoSaude, isTipoRural, tipoLabel, exemploNomePorTipo } from '@/lib/tipoEmpreendimento'
 import { resolverMunicipio } from '@/lib/municipiosPiaui'
 import { CoordenadasField } from '@/components/CoordenadasField'
 import { MunicipioCombobox } from '@/components/MunicipioCombobox'
@@ -53,11 +60,18 @@ export function HospitalFormDialog({
     cnes: '',
     cnpj: '',
     cnpj_mantenedora: '',
+    inscricao_estadual: '',
+    cpf: '',
+    ano_safra: '',
     tipo: tipoPadrao || 'Hospital',
     endereco: '',
+    cep: '',
     latitude: '',
     longitude: '',
+    email: '',
+    telefone: '',
     responsavel: '',
+    cargo_responsavel: '',
     cpf_responsavel: '',
   })
 
@@ -84,11 +98,18 @@ export function HospitalFormDialog({
           cnpj_mantenedora: hospitalToEdit.cnpj_mantenedora
             ? formatCNPJ(hospitalToEdit.cnpj_mantenedora)
             : '',
+          inscricao_estadual: hospitalToEdit.inscricao_estadual || '',
+          cpf: hospitalToEdit.cpf ? formatCPF(hospitalToEdit.cpf) : '',
+          ano_safra: hospitalToEdit.ano_safra || '',
           tipo: hospitalToEdit.tipo || tipoPadrao || 'Hospital',
           endereco: hospitalToEdit.endereco || '',
+          cep: hospitalToEdit.cep ? formatCEP(hospitalToEdit.cep) : '',
           latitude: hospitalToEdit.latitude || '',
           longitude: hospitalToEdit.longitude || '',
+          email: hospitalToEdit.email || '',
+          telefone: hospitalToEdit.telefone ? formatTelefone(hospitalToEdit.telefone) : '',
           responsavel: hospitalToEdit.responsavel || '',
+          cargo_responsavel: hospitalToEdit.cargo_responsavel || '',
           cpf_responsavel: hospitalToEdit.cpf_responsavel
             ? formatCPF(hospitalToEdit.cpf_responsavel)
             : '',
@@ -100,11 +121,18 @@ export function HospitalFormDialog({
           cnes: '',
           cnpj: '',
           cnpj_mantenedora: '',
+          inscricao_estadual: '',
+          cpf: '',
+          ano_safra: '',
           tipo: tipoPadrao || 'Hospital',
           endereco: '',
+          cep: '',
           latitude: '',
           longitude: '',
+          email: '',
+          telefone: '',
           responsavel: '',
+          cargo_responsavel: '',
           cpf_responsavel: '',
         })
       }
@@ -115,6 +143,7 @@ export function HospitalFormDialog({
 
   const rotulo = tipoLabel(formData.tipo || tipoPadrao)
   const exigeCnes = isTipoSaude(formData.tipo || tipoPadrao)
+  const isRural = isTipoRural(formData.tipo || tipoPadrao)
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -154,6 +183,24 @@ export function HospitalFormDialog({
       if (cpfDigits.length > 0 && cpfDigits.length !== 11) {
         newErrors.cpf_responsavel = 'CPF inválido (deve conter 11 dígitos).'
       }
+    }
+
+    if (formData.cpf) {
+      const produtorDigits = formData.cpf.replace(/\D/g, '')
+      if (produtorDigits.length > 0 && produtorDigits.length !== 11) {
+        newErrors.cpf = 'CPF inválido (deve conter 11 dígitos).'
+      }
+    }
+
+    if (formData.cep) {
+      const cepDigits = formData.cep.replace(/\D/g, '')
+      if (cepDigits.length > 0 && cepDigits.length !== 8) {
+        newErrors.cep = 'CEP inválido (deve conter 8 dígitos).'
+      }
+    }
+
+    if (formData.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(formData.email.trim())) {
+      newErrors.email = 'E-mail inválido.'
     }
 
     setErrors(newErrors)
@@ -349,6 +396,67 @@ export function HospitalFormDialog({
                   <p className="text-xs font-medium text-red-500 mt-1">{errors.cnpj_mantenedora}</p>
                 )}
               </div>
+
+              {/* Campos exclusivos do relatório de visita ao produtor rural */}
+              {isRural && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="inscricao_estadual"
+                      className="text-sm font-semibold text-[#102A43]"
+                    >
+                      Inscrição Estadual
+                    </Label>
+                    <Input
+                      id="inscricao_estadual"
+                      placeholder="Ex: 19.123.456-7"
+                      value={formData.inscricao_estadual}
+                      onChange={(e) =>
+                        setFormData({ ...formData, inscricao_estadual: e.target.value })
+                      }
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cpf" className="text-sm font-semibold text-[#102A43]">
+                      CPF do Produtor / Proprietário
+                    </Label>
+                    <Input
+                      id="cpf"
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                      value={formData.cpf}
+                      onChange={(e) => {
+                        setFormData({ ...formData, cpf: formatCPF(e.target.value) })
+                        if (errors.cpf) setErrors({ ...errors, cpf: '' })
+                      }}
+                      className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
+                        errors.cpf ? 'border-red-500 focus-visible:ring-red-500' : ''
+                      }`}
+                    />
+                    {errors.cpf && (
+                      <p className="text-xs font-medium text-red-500 mt-1">{errors.cpf}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ano_safra" className="text-sm font-semibold text-[#102A43]">
+                      Ano / Safra
+                    </Label>
+                    <Input
+                      id="ano_safra"
+                      placeholder="Ex: 2025/2026"
+                      maxLength={9}
+                      value={formData.ano_safra}
+                      onChange={(e) =>
+                        setFormData({ ...formData, ano_safra: formatAnoSafra(e.target.value) })
+                      }
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -359,6 +467,28 @@ export function HospitalFormDialog({
               Localização
             </h3>
             <div className="space-y-4">
+              <div className="space-y-1.5 sm:max-w-[200px]">
+                <Label htmlFor="cep" className="text-sm font-semibold text-[#102A43]">
+                  CEP
+                </Label>
+                <Input
+                  id="cep"
+                  placeholder="00000-000"
+                  maxLength={9}
+                  value={formData.cep}
+                  onChange={(e) => {
+                    setFormData({ ...formData, cep: formatCEP(e.target.value) })
+                    if (errors.cep) setErrors({ ...errors, cep: '' })
+                  }}
+                  className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
+                    errors.cep ? 'border-red-500 focus-visible:ring-red-500' : ''
+                  }`}
+                />
+                {errors.cep && (
+                  <p className="text-xs font-medium text-red-500 mt-1">{errors.cep}</p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="endereco" className="text-sm font-semibold text-[#102A43]">
                   Endereço Completo
@@ -388,7 +518,7 @@ export function HospitalFormDialog({
           <div className="pt-2 border-t border-[#D3DFE9]">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#004B8D] mb-3 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#E5A812]" />
-              Responsável pelas Informações
+              Responsável pelas Informações e Contato
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
@@ -400,6 +530,19 @@ export function HospitalFormDialog({
                   placeholder="Ex: Engenheiro(a) ou Diretor(a)"
                   value={formData.responsavel}
                   onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
+                  className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cargo_responsavel" className="text-sm font-semibold text-[#102A43]">
+                  Cargo / Função
+                </Label>
+                <Input
+                  id="cargo_responsavel"
+                  placeholder="Ex: Gerente agrícola, Diretor técnico"
+                  value={formData.cargo_responsavel}
+                  onChange={(e) => setFormData({ ...formData, cargo_responsavel: e.target.value })}
                   className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
                 />
               </div>
@@ -424,6 +567,44 @@ export function HospitalFormDialog({
                 />
                 {errors.cpf_responsavel && (
                   <p className="text-xs font-medium text-red-500 mt-1">{errors.cpf_responsavel}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="telefone" className="text-sm font-semibold text-[#102A43]">
+                  Telefone
+                </Label>
+                <Input
+                  id="telefone"
+                  placeholder="(86) 99999-9999"
+                  maxLength={16}
+                  value={formData.telefone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, telefone: formatTelefone(e.target.value) })
+                  }
+                  className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="email" className="text-sm font-semibold text-[#102A43]">
+                  E-mail
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="contato@empreendimento.com.br"
+                  value={formData.email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value })
+                    if (errors.email) setErrors({ ...errors, email: '' })
+                  }}
+                  className={`border-[#D3DFE9] focus-visible:ring-[#004B8D] ${
+                    errors.email ? 'border-red-500 focus-visible:ring-red-500' : ''
+                  }`}
+                />
+                {errors.email && (
+                  <p className="text-xs font-medium text-red-500 mt-1">{errors.email}</p>
                 )}
               </div>
             </div>

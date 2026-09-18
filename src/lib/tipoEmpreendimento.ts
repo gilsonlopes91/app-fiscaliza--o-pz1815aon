@@ -10,10 +10,23 @@
 const TIPOS_SAUDE =
   /(hospital|cl[íi]nic|laborat[óo]ri|sa[úu]de|upa\b|policl[íi]nic|pronto[- ]?atendimento|pronto[- ]?socorro|ambulat[óo]ri|hemo(centro|n[úu]cleo)|diagn[óo]stic|imagem|odontol[óo]g|posto de sa)/i
 
+const TIPOS_RURAIS =
+  /(fazenda|agroneg|agropecu|agr[íi]col|agro\b|rural|pecu[áa]ri|s[íi]tio|ch[áa]cara|granja|lavoura|florest|silvicult|irriga)/i
+
 /** True quando o tipo é um estabelecimento de saúde (aí sim o CNES faz sentido). */
 export function isTipoSaude(tipo?: string | null): boolean {
   if (!tipo) return false
   return TIPOS_SAUDE.test(tipo.trim())
+}
+
+/**
+ * True para empreendimentos rurais/agro. Libera os campos que só existem no
+ * relatório de visita ao produtor rural (Inscrição Estadual, CPF do produtor
+ * e Ano/Safra), mantendo a ficha do hospital enxuta.
+ */
+export function isTipoRural(tipo?: string | null): boolean {
+  if (!tipo) return false
+  return TIPOS_RURAIS.test(tipo.trim())
 }
 
 /** Nome do tipo para uso em títulos e textos, com fallback neutro. */

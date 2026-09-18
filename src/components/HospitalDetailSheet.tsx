@@ -45,8 +45,15 @@ import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tipos
 import { vistoriasService } from '@/services/vistorias'
 import { ItensFiscalizacaoSection } from '@/components/ItensFiscalizacaoSection'
 import { useToast } from '@/hooks/use-toast'
-import { formatCNPJ, formatCPF, formatCNES } from '@/lib/formatters'
-import { isTipoSaude, tipoLabel } from '@/lib/tipoEmpreendimento'
+import {
+  formatCNPJ,
+  formatCPF,
+  formatCNES,
+  formatCEP,
+  formatTelefone,
+  formatAnoSafra,
+} from '@/lib/formatters'
+import { isTipoSaude, isTipoRural, tipoLabel } from '@/lib/tipoEmpreendimento'
 import { resolverMunicipio } from '@/lib/municipiosPiaui'
 import { CoordenadasField, CoordenadasDisplay } from '@/components/CoordenadasField'
 import { MunicipioCombobox } from '@/components/MunicipioCombobox'
@@ -95,11 +102,18 @@ export function HospitalDetailSheet({
     cnes: '',
     cnpj: '',
     cnpj_mantenedora: '',
+    inscricao_estadual: '',
+    cpf: '',
+    ano_safra: '',
     tipo: 'Hospital',
     endereco: '',
+    cep: '',
     latitude: '',
     longitude: '',
+    email: '',
+    telefone: '',
     responsavel: '',
+    cargo_responsavel: '',
     cpf_responsavel: '',
   })
 
@@ -122,11 +136,18 @@ export function HospitalDetailSheet({
         cnes: hospital.cnes || '',
         cnpj: hospital.cnpj ? formatCNPJ(hospital.cnpj) : '',
         cnpj_mantenedora: hospital.cnpj_mantenedora ? formatCNPJ(hospital.cnpj_mantenedora) : '',
+        inscricao_estadual: hospital.inscricao_estadual || '',
+        cpf: hospital.cpf ? formatCPF(hospital.cpf) : '',
+        ano_safra: hospital.ano_safra || '',
         tipo: hospital.tipo || 'Hospital',
         endereco: hospital.endereco || '',
+        cep: hospital.cep ? formatCEP(hospital.cep) : '',
         latitude: hospital.latitude || '',
         longitude: hospital.longitude || '',
+        email: hospital.email || '',
+        telefone: hospital.telefone ? formatTelefone(hospital.telefone) : '',
         responsavel: hospital.responsavel || '',
+        cargo_responsavel: hospital.cargo_responsavel || '',
         cpf_responsavel: hospital.cpf_responsavel ? formatCPF(hospital.cpf_responsavel) : '',
       })
       setIsEditing(false)
@@ -138,6 +159,7 @@ export function HospitalDetailSheet({
 
   const rotulo = tipoLabel(hospital.tipo)
   const exigeCnes = isTipoSaude(formData.tipo || hospital.tipo)
+  const isRural = isTipoRural(formData.tipo || hospital.tipo)
   const mostraCnes = isTipoSaude(hospital.tipo) || !!(hospital.cnes && hospital.cnes.trim())
 
   const validate = (): boolean => {
@@ -208,11 +230,18 @@ export function HospitalDetailSheet({
       cnes: hospital.cnes || '',
       cnpj: hospital.cnpj ? formatCNPJ(hospital.cnpj) : '',
       cnpj_mantenedora: hospital.cnpj_mantenedora ? formatCNPJ(hospital.cnpj_mantenedora) : '',
+      inscricao_estadual: hospital.inscricao_estadual || '',
+      cpf: hospital.cpf ? formatCPF(hospital.cpf) : '',
+      ano_safra: hospital.ano_safra || '',
       tipo: hospital.tipo || 'Hospital',
       endereco: hospital.endereco || '',
+      cep: hospital.cep ? formatCEP(hospital.cep) : '',
       latitude: hospital.latitude || '',
       longitude: hospital.longitude || '',
+      email: hospital.email || '',
+      telefone: hospital.telefone ? formatTelefone(hospital.telefone) : '',
       responsavel: hospital.responsavel || '',
+      cargo_responsavel: hospital.cargo_responsavel || '',
       cpf_responsavel: hospital.cpf_responsavel ? formatCPF(hospital.cpf_responsavel) : '',
     })
     setErrors({})
@@ -237,9 +266,16 @@ export function HospitalDetailSheet({
         cnpj_mantenedora: updatedHospital.cnpj_mantenedora,
         tipo: updatedHospital.tipo,
         endereco: updatedHospital.endereco,
+        cep: updatedHospital.cep,
         latitude: updatedHospital.latitude,
         longitude: updatedHospital.longitude,
+        email: updatedHospital.email,
+        telefone: updatedHospital.telefone,
+        inscricao_estadual: updatedHospital.inscricao_estadual,
+        cpf: updatedHospital.cpf,
+        ano_safra: updatedHospital.ano_safra,
         responsavel: updatedHospital.responsavel,
+        cargo_responsavel: updatedHospital.cargo_responsavel,
         cpf_responsavel: updatedHospital.cpf_responsavel,
       })
 
@@ -516,6 +552,62 @@ export function HospitalDetailSheet({
                       </p>
                     )}
                   </div>
+
+                  {isRural && (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="edit-inscricao_estadual"
+                          className="text-sm font-semibold text-[#102A43]"
+                        >
+                          Inscrição Estadual
+                        </Label>
+                        <Input
+                          id="edit-inscricao_estadual"
+                          value={formData.inscricao_estadual}
+                          onChange={(e) =>
+                            setFormData({ ...formData, inscricao_estadual: e.target.value })
+                          }
+                          className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="edit-cpf" className="text-sm font-semibold text-[#102A43]">
+                          CPF do Produtor / Proprietário
+                        </Label>
+                        <Input
+                          id="edit-cpf"
+                          maxLength={14}
+                          placeholder="000.000.000-00"
+                          value={formData.cpf}
+                          onChange={(e) =>
+                            setFormData({ ...formData, cpf: formatCPF(e.target.value) })
+                          }
+                          className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="edit-ano_safra"
+                          className="text-sm font-semibold text-[#102A43]"
+                        >
+                          Ano / Safra
+                        </Label>
+                        <Input
+                          id="edit-ano_safra"
+                          maxLength={9}
+                          placeholder="2025/2026"
+                          value={formData.ano_safra}
+                          onChange={(e) =>
+                            setFormData({ ...formData, ano_safra: formatAnoSafra(e.target.value) })
+                          }
+                          className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -526,6 +618,20 @@ export function HospitalDetailSheet({
                   Localização
                 </h3>
                 <div className="space-y-4">
+                  <div className="space-y-1.5 sm:max-w-[200px]">
+                    <Label htmlFor="edit-cep" className="text-sm font-semibold text-[#102A43]">
+                      CEP
+                    </Label>
+                    <Input
+                      id="edit-cep"
+                      maxLength={9}
+                      placeholder="00000-000"
+                      value={formData.cep}
+                      onChange={(e) => setFormData({ ...formData, cep: formatCEP(e.target.value) })}
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                    />
+                  </div>
+
                   <div className="space-y-1.5">
                     <Label htmlFor="edit-endereco" className="text-sm font-semibold text-[#102A43]">
                       Endereço Completo
@@ -554,7 +660,7 @@ export function HospitalDetailSheet({
               <div className="pt-2 border-t border-[#D3DFE9]">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#004B8D] mb-3 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#E5A812]" />
-                  Responsável pelas Informações
+                  Responsável pelas Informações e Contato
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -568,6 +674,24 @@ export function HospitalDetailSheet({
                       id="edit-responsavel"
                       value={formData.responsavel}
                       onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="edit-cargo_responsavel"
+                      className="text-sm font-semibold text-[#102A43]"
+                    >
+                      Cargo / Função
+                    </Label>
+                    <Input
+                      id="edit-cargo_responsavel"
+                      placeholder="Ex: Gerente agrícola"
+                      value={formData.cargo_responsavel}
+                      onChange={(e) =>
+                        setFormData({ ...formData, cargo_responsavel: e.target.value })
+                      }
                       className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
                     />
                   </div>
@@ -598,6 +722,36 @@ export function HospitalDetailSheet({
                         {errors.cpf_responsavel}
                       </p>
                     )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-telefone" className="text-sm font-semibold text-[#102A43]">
+                      Telefone
+                    </Label>
+                    <Input
+                      id="edit-telefone"
+                      maxLength={16}
+                      placeholder="(86) 99999-9999"
+                      value={formData.telefone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, telefone: formatTelefone(e.target.value) })
+                      }
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="edit-email" className="text-sm font-semibold text-[#102A43]">
+                      E-mail
+                    </Label>
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      placeholder="contato@empreendimento.com.br"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="border-[#D3DFE9] focus-visible:ring-[#004B8D]"
+                    />
                   </div>
                 </div>
               </div>
@@ -699,6 +853,45 @@ export function HospitalDetailSheet({
                       )}
                     </span>
                   </div>
+
+                  {isTipoRural(hospital.tipo) && (
+                    <>
+                      <div>
+                        <span className="text-xs text-[#486581] block mb-0.5 font-medium">
+                          Inscrição Estadual
+                        </span>
+                        <span className="font-mono font-semibold text-[#102A43] block">
+                          {hospital.inscricao_estadual || (
+                            <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-xs text-[#486581] block mb-0.5 font-medium">
+                          CPF do Produtor
+                        </span>
+                        <span className="font-mono font-semibold text-[#102A43] block">
+                          {hospital.cpf ? (
+                            formatCPF(hospital.cpf)
+                          ) : (
+                            <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-xs text-[#486581] block mb-0.5 font-medium">
+                          Ano / Safra
+                        </span>
+                        <span className="font-semibold text-[#102A43] block">
+                          {hospital.ano_safra || (
+                            <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                          )}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -715,6 +908,17 @@ export function HospitalDetailSheet({
                       Município / UF
                     </span>
                     <span className="font-semibold text-[#102A43] block">{hospital.municipio}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-[#486581] block mb-0.5 font-medium">CEP</span>
+                    <span className="font-mono font-semibold text-[#102A43] block">
+                      {hospital.cep ? (
+                        formatCEP(hospital.cep)
+                      ) : (
+                        <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                      )}
+                    </span>
                   </div>
 
                   <div className="sm:col-span-2">
@@ -744,7 +948,7 @@ export function HospitalDetailSheet({
               <div className="bg-[#F4F6F9] rounded-xl p-5 border border-[#D3DFE9]">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[#004B8D] mb-4 flex items-center gap-1.5">
                   <User className="w-4 h-4 text-[#004B8D]" />
-                  Responsável pelas Informações
+                  Responsável pelas Informações e Contato
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -761,11 +965,56 @@ export function HospitalDetailSheet({
 
                   <div>
                     <span className="text-xs text-[#486581] block mb-0.5 font-medium">
+                      Cargo / Função
+                    </span>
+                    <span className="font-semibold text-[#102A43] block">
+                      {hospital.cargo_responsavel || (
+                        <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-[#486581] block mb-0.5 font-medium">
                       CPF do Responsável
                     </span>
                     <span className="font-mono font-semibold text-[#102A43] block">
                       {hospital.cpf_responsavel ? (
                         formatCPF(hospital.cpf_responsavel)
+                      ) : (
+                        <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-[#486581] block mb-0.5 font-medium">
+                      Telefone
+                    </span>
+                    <span className="font-mono font-semibold text-[#102A43] block">
+                      {hospital.telefone ? (
+                        <a
+                          href={`tel:${hospital.telefone.replace(/\D/g, '')}`}
+                          className="text-[#004B8D] hover:underline"
+                        >
+                          {formatTelefone(hospital.telefone)}
+                        </a>
+                      ) : (
+                        <span className="text-[#829AB1] italic font-normal">Não informado</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-[#486581] block mb-0.5 font-medium">E-mail</span>
+                    <span className="font-semibold text-[#102A43] block break-all">
+                      {hospital.email ? (
+                        <a
+                          href={`mailto:${hospital.email}`}
+                          className="text-[#004B8D] hover:underline"
+                        >
+                          {hospital.email}
+                        </a>
                       ) : (
                         <span className="text-[#829AB1] italic font-normal">Não informado</span>
                       )}
