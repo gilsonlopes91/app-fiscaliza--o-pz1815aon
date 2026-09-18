@@ -150,12 +150,52 @@ export function coordenadasDoRegistro(
   return buildPair(String(latitude), String(longitude))
 }
 
-/** Link universal do Google Maps (abre no app no celular e no site no desktop). */
+/**
+ * Link do Google Maps.
+ *
+ * Usamos o host "maps.google.com" (e não "www.google.com/maps") porque redes
+ * corporativas — inclusive a do CREA-PI — costumam bloquear www.google.com por
+ * política, derrubando o link com ERR_BLOCKED_BY_RESPONSE. A forma "?q=lat,lng"
+ * é a mais compatível: funciona no navegador, no app do Android/iOS e em
+ * webviews antigas.
+ */
 export function googleMapsUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+  return `https://maps.google.com/?q=${lat},${lng}`
 }
 
 /** Link de rota até o ponto — útil para o fiscal sair do CREA direto para o local. */
 export function googleMapsRotaUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+  return `https://maps.google.com/?daddr=${lat},${lng}`
+}
+
+/** Alternativa quando o Google está bloqueado na rede: OpenStreetMap. */
+export function openStreetMapUrl(lat: number, lng: number): string {
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+}
+
+/** Copia texto para a área de transferência, com fallback para navegadores antigos. */
+export async function copiarTexto(texto: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(texto)
+      return true
+    }
+  } catch {
+    // segue para o fallback
+  }
+
+  try {
+    const area = document.createElement('textarea')
+    area.value = texto
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(area)
+    return ok
+  } catch {
+    return false
+  }
 }
