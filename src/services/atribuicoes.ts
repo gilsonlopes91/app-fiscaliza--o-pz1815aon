@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { estaOnline, atribuicoesOffline, hospitaisOffline } from '@/services/offlineSync'
 import { Hospital } from './hospitais'
 import { UserProfile } from './auth'
 import { Vistoria, VistoriaItem, vistoriasService } from './vistorias'
@@ -94,11 +95,34 @@ export const atribuicoesService = {
    * List atribuicoes assigned to a specific fiscal
    */
   async getByFiscal(fiscalId: string): Promise<Atribuicao[]> {
-    return await pb.collection('atribuicoes').getFullList<Atribuicao>({
-      filter: `fiscal = "${fiscalId}"`,
-      sort: '-created',
-      expand: 'fiscal,hospital,created_by',
-    })
+    // Offline: usa a lista baixada na preparação para campo, reanexando as
+    // unidades do cache local para a tela continuar completa.
+    const lerLocal = async (): Promise<Atribuicao[]> => {
+      const [locais, unidades] = await Promise.all([atribuicoesOffline(), hospitaisOffline()])
+      return locais
+        .filter((a) => a.fiscal === fiscalId)
+        .map((a) => ({
+          ...a,
+          expand: {
+            ...(a.expand || {}),
+            hospital: unidades.find((h) => h.id === a.hospital) || a.expand?.hospital,
+          },
+        }))
+    }
+
+    if (!estaOnline()) return lerLocal()
+
+    try {
+      return await pb.collection('atribuicoes').getFullList<Atribuicao>({
+        filter: `fiscal = "${fiscalId}"`,
+        sort: '-created',
+        expand: 'fiscal,hospital,created_by',
+      })
+    } catch (err) {
+      const local = await lerLocal()
+      if (local.length > 0) return local
+      throw err
+    }
   },
 
   /**
@@ -123,6 +147,7 @@ export const atribuicoesService = {
   ): Promise<Atribuicao | null> {
     const targetFiscalId = fiscalId || pb.authStore.record?.id
     if (!targetFiscalId || !hospitalId) return null
+    if (!estaOnline()) return null
 
     try {
       // 1. Check if ANY assignment already exists for this hospital

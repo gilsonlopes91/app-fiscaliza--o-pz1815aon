@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { estaOnline, categoriasOffline, subitensOffline } from '@/services/offlineSync'
 
 /**
  * Item Principal (Nível 1) - Agrupador de tema técnico (Ex: 1. Ar-condicionado, 2. Caldeiras...)
@@ -59,9 +60,17 @@ export const categoriasVistoriaService = {
    * Retorna todos os itens principais (agrupadores) ordenados
    */
   async getAll(): Promise<CategoriaVistoria[]> {
-    const records = await pb.collection('categorias_vistoria').getFullList<CategoriaVistoria>({
-      sort: 'ordem,created',
-    })
+    const records = !estaOnline()
+      ? await categoriasOffline()
+      : await pb
+          .collection('categorias_vistoria')
+          .getFullList<CategoriaVistoria>({ sort: 'ordem,created' })
+          .catch(async (err) => {
+            const local = await categoriasOffline()
+            if (local.length > 0) return local
+            throw err
+          })
+
     return records.map((record, idx) => ({
       ...record,
       tipo: record.tipo || 'Hospital',
@@ -76,10 +85,27 @@ export const categoriasVistoriaService = {
    */
   async getByTipo(tipo: string): Promise<CategoriaVistoria[]> {
     const safeTipo = tipo.trim()
-    const records = await pb.collection('categorias_vistoria').getFullList<CategoriaVistoria>({
-      filter: `tipo = "${safeTipo}"`,
-      sort: 'ordem,created',
-    })
+    const filtrarLocal = async () => {
+      const local = await categoriasOffline()
+      return local
+        .filter((c) => (c.tipo || 'Hospital').trim() === safeTipo)
+        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+    }
+
+    const records = !estaOnline()
+      ? await filtrarLocal()
+      : await pb
+          .collection('categorias_vistoria')
+          .getFullList<CategoriaVistoria>({
+            filter: `tipo = "${safeTipo}"`,
+            sort: 'ordem,created',
+          })
+          .catch(async (err) => {
+            const local = await filtrarLocal()
+            if (local.length > 0) return local
+            throw err
+          })
+
     return records.map((record, idx) => ({
       ...record,
       tipo: record.tipo || safeTipo,
@@ -155,10 +181,17 @@ export const categoriasVistoriaService = {
    * Retorna todos os subitens de checklist
    */
   async getAllSubitens(): Promise<SubitemChecklist[]> {
-    const records = await pb.collection('subitens_checklist').getFullList<SubitemChecklist>({
-      sort: 'ordem,created',
-      expand: 'categoria',
-    })
+    const records = !estaOnline()
+      ? await subitensOffline()
+      : await pb
+          .collection('subitens_checklist')
+          .getFullList<SubitemChecklist>({ sort: 'ordem,created', expand: 'categoria' })
+          .catch(async (err) => {
+            const local = await subitensOffline()
+            if (local.length > 0) return local
+            throw err
+          })
+
     return records.map((record) => ({
       ...record,
       periodicidadeDias:
@@ -171,11 +204,28 @@ export const categoriasVistoriaService = {
    */
   async getSubitensByTipo(tipo: string): Promise<SubitemChecklist[]> {
     const safeTipo = tipo.trim()
-    const records = await pb.collection('subitens_checklist').getFullList<SubitemChecklist>({
-      filter: `tipo = "${safeTipo}"`,
-      sort: 'ordem,created',
-      expand: 'categoria',
-    })
+    const filtrarLocal = async () => {
+      const local = await subitensOffline()
+      return local
+        .filter((s) => (s.tipo || 'Hospital').trim() === safeTipo)
+        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+    }
+
+    const records = !estaOnline()
+      ? await filtrarLocal()
+      : await pb
+          .collection('subitens_checklist')
+          .getFullList<SubitemChecklist>({
+            filter: `tipo = "${safeTipo}"`,
+            sort: 'ordem,created',
+            expand: 'categoria',
+          })
+          .catch(async (err) => {
+            const local = await filtrarLocal()
+            if (local.length > 0) return local
+            throw err
+          })
+
     return records.map((record) => ({
       ...record,
       periodicidadeDias:

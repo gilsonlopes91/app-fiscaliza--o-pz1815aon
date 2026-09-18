@@ -34,6 +34,7 @@ import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categor
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { atribuicoesService, Atribuicao, AtribuicaoDetail } from '@/services/atribuicoes'
 import { vistoriasService } from '@/services/vistorias'
+import { SyncCampoCard } from '@/components/SyncCampoCard'
 import { useToast } from '@/hooks/use-toast'
 
 export default function FiscalDashboard() {
@@ -173,6 +174,9 @@ export default function FiscalDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* 1.5 Preparação para trabalho em campo (offline) */}
+      <SyncCampoCard />
 
       {/* 2. Cards de Resumo de Progresso do Fiscal */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

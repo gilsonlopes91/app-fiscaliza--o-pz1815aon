@@ -1,6 +1,14 @@
 import pb from '@/lib/pocketbase/client'
 import { Hospital } from './hospitais'
 import { CategoriaVistoria, SubitemChecklist } from './categoriasVistoria'
+import {
+  estaOnline,
+  vistoriasOffline,
+  itensOffline,
+  criarVistoriaOffline,
+  enfileirarItem,
+  enfileirarCaracterizacao,
+} from '@/services/offlineSync'
 
 export type SituacaoChecklist =
   | 'não se aplica'
@@ -339,16 +347,27 @@ export const vistoriasService = {
    * List all vistorias with expanded hospital data
    */
   async getAll(): Promise<Vistoria[]> {
-    return await pb.collection('vistorias').getFullList<Vistoria>({
-      sort: '-created',
-      expand: 'hospital',
-    })
+    if (!estaOnline()) return vistoriasOffline()
+    try {
+      return await pb.collection('vistorias').getFullList<Vistoria>({
+        sort: '-created',
+        expand: 'hospital',
+      })
+    } catch (err) {
+      const local = await vistoriasOffline()
+      if (local.length > 0) return local
+      throw err
+    }
   },
 
   /**
    * Find existing vistoria for a specific hospital
    */
   async getByHospitalId(hospitalId: string): Promise<Vistoria | null> {
+    if (!estaOnline()) {
+      const local = await vistoriasOffline()
+      return local.find((v) => v.hospital === hospitalId) || null
+    }
     try {
       const records = await pb.collection('vistorias').getList<Vistoria>(1, 1, {
         filter: `hospital = "${hospitalId}"`,
@@ -416,20 +435,34 @@ export const vistoriasService = {
    * Get all checklist items across all vistorias (with expanded relations)
    */
   async getAllItens(): Promise<VistoriaItem[]> {
-    return await pb.collection('vistoria_itens').getFullList<VistoriaItem>({
-      sort: '-created',
-      expand: 'vistoria,vistoria.hospital,categoria,subitem,hospital',
-    })
+    if (!estaOnline()) return itensOffline()
+    try {
+      return await pb.collection('vistoria_itens').getFullList<VistoriaItem>({
+        sort: '-created',
+        expand: 'vistoria,vistoria.hospital,categoria,subitem,hospital',
+      })
+    } catch (err) {
+      const local = await itensOffline()
+      if (local.length > 0) return local
+      throw err
+    }
   },
 
   /**
    * Get all checklist items for a specific vistoria (with expanded subitem and categoria)
    */
   async getItensByVistoria(vistoriaId: string): Promise<VistoriaItem[]> {
-    return await pb.collection('vistoria_itens').getFullList<VistoriaItem>({
-      filter: `vistoria = "${vistoriaId}"`,
-      expand: 'categoria,subitem,hospital',
-    })
+    if (!estaOnline()) return itensOffline(vistoriaId)
+    try {
+      return await pb.collection('vistoria_itens').getFullList<VistoriaItem>({
+        filter: `vistoria = "${vistoriaId}"`,
+        expand: 'categoria,subitem,hospital',
+      })
+    } catch (err) {
+      const local = await itensOffline(vistoriaId)
+      if (local.length > 0) return local
+      throw err
+    }
   },
 
   /**
@@ -499,6 +532,24 @@ export const vistoriasService = {
     subitemId?: string,
     fiscalId?: string,
   ): Promise<VistoriaItem> {
+    // Sem rede: guarda a resposta (e as fotos) na fila local e devolve o item
+    // para a tela continuar funcionando normalmente.
+    if (!estaOnline()) {
+      return await enfileirarItem({
+        vistoriaId,
+        hospitalId,
+        categoriaId,
+        subitemId,
+        itemId: existingItemId,
+        form: formData,
+        subitemInfo,
+        situacao: calculateItemSituacao(formData, subitemInfo),
+        novasFotos: newFiles,
+        fotosRemovidas: deletedFileNames,
+        fiscalId: fiscalId || pb.authStore.record?.id,
+      })
+    }
+
     // Garante que, se a unidade não possui atribuição formal de fiscal,
     // o fiscal atual seja registrado automaticamente como responsável
     const targetFiscalId = fiscalId || pb.authStore.record?.id
@@ -693,6 +744,13 @@ export const vistoriasService = {
    * Update caracterizacao agro
    */
   async updateCaracterizacao(id: string, caracterizacao: unknown): Promise<Vistoria> {
+    if (!estaOnline()) {
+      const local = await vistoriasOffline()
+      const atual = local.find((v) => v.id === id)
+      await enfileirarCaracterizacao(id, atual?.hospital || '', caracterizacao)
+      return { ...(atual as Vistoria), caracterizacao }
+    }
+
     return await pb.collection('vistorias').update<Vistoria>(
       id,
       { caracterizacao },

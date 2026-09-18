@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import pb from '@/lib/pocketbase/client'
 import { authService, UserProfile } from '@/services/auth'
+import { estaOnline } from '@/services/offlineSync'
 
 interface AuthContextType {
   user: UserProfile | null
@@ -28,13 +29,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshUser = useCallback(async () => {
     try {
       if (pb.authStore.isValid) {
+        // Sem rede não dá para revalidar no servidor: mantém a sessão já
+        // gravada no aparelho, senão o fiscal seria deslogado em campo.
+        if (!estaOnline()) {
+          setUser(authService.getCurrentUser())
+          return
+        }
         const refreshed = await authService.refreshAuth()
         setUser(refreshed)
       } else {
         setUser(null)
       }
     } catch {
-      setUser(null)
+      // Falha de rede não pode derrubar a sessão local
+      const local = authService.getCurrentUser()
+      setUser(pb.authStore.isValid ? local : null)
     } finally {
       setIsLoading(false)
     }

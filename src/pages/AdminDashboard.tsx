@@ -82,6 +82,7 @@ import {
   FiscalProgressSummary,
 } from '@/services/atribuicoes'
 import { AtribuirFiscalizacaoModal } from '@/components/AtribuirFiscalizacaoModal'
+import { SyncCampoCard } from '@/components/SyncCampoCard'
 import { IniciarVistoriaModal } from '@/components/IniciarVistoriaModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
@@ -478,6 +479,9 @@ export default function AdminDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* 1.5 Preparação para trabalho em campo (offline) */}
+      <SyncCampoCard />
 
       {/* 2. Cards de Métricas Gerais do Administrador (Vistorias Em Andamento / Concluídas, Alerta de Vencimentos e Atribuições) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">

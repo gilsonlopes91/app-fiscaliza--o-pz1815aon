@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { estaOnline, hospitaisOffline } from '@/services/offlineSync'
 
 export interface Hospital {
   id: string
@@ -47,24 +48,55 @@ export type HospitalFormData = {
 
 export const hospitaisService = {
   async getAll(): Promise<Hospital[]> {
-    const records = await pb.collection('hospitais').getFullList<Hospital>({
-      sort: '-created',
-    })
-    return records
+    if (!estaOnline()) return hospitaisOffline()
+    try {
+      return await pb.collection('hospitais').getFullList<Hospital>({
+        sort: '-created',
+      })
+    } catch (err) {
+      const local = await hospitaisOffline()
+      if (local.length > 0) return local
+      throw err
+    }
   },
 
   async getByTipo(tipo: string): Promise<Hospital[]> {
     const safeTipo = tipo.trim()
-    const records = await pb.collection('hospitais').getFullList<Hospital>({
-      filter: `tipo = "${safeTipo}"`,
-      sort: '-created',
-    })
-    return records
+
+    if (!estaOnline()) {
+      const local = await hospitaisOffline()
+      return local.filter((h) => (h.tipo || '').trim() === safeTipo)
+    }
+
+    try {
+      return await pb.collection('hospitais').getFullList<Hospital>({
+        filter: `tipo = "${safeTipo}"`,
+        sort: '-created',
+      })
+    } catch (err) {
+      const local = await hospitaisOffline()
+      const filtrados = local.filter((h) => (h.tipo || '').trim() === safeTipo)
+      if (filtrados.length > 0) return filtrados
+      throw err
+    }
   },
 
   async getById(id: string): Promise<Hospital> {
-    const record = await pb.collection('hospitais').getOne<Hospital>(id)
-    return record
+    if (!estaOnline()) {
+      const local = await hospitaisOffline()
+      const achado = local.find((h) => h.id === id)
+      if (achado) return achado
+      throw new Error('Unidade não disponível offline. Sincronize antes de sair de área.')
+    }
+
+    try {
+      return await pb.collection('hospitais').getOne<Hospital>(id)
+    } catch (err) {
+      const local = await hospitaisOffline()
+      const achado = local.find((h) => h.id === id)
+      if (achado) return achado
+      throw err
+    }
   },
 
   async create(data: HospitalFormData): Promise<Hospital> {

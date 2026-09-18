@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { estaOnline, tiposOffline } from '@/services/offlineSync'
 
 export interface TipoEmpreendimento {
   id: string
@@ -17,10 +18,16 @@ export interface TipoEmpreendimentoFormData {
 
 export const tiposEmpreendimentoService = {
   async getAll(): Promise<TipoEmpreendimento[]> {
-    const records = await pb.collection('tipos_empreendimento').getFullList<TipoEmpreendimento>({
-      sort: 'nome',
-    })
-    return records
+    if (!estaOnline()) return tiposOffline<TipoEmpreendimento>()
+    try {
+      return await pb.collection('tipos_empreendimento').getFullList<TipoEmpreendimento>({
+        sort: 'nome',
+      })
+    } catch (err) {
+      const local = await tiposOffline<TipoEmpreendimento>()
+      if (local.length > 0) return local
+      throw err
+    }
   },
 
   async getById(id: string): Promise<TipoEmpreendimento> {
