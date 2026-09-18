@@ -5,6 +5,7 @@ import { CategoriaVistoria, SubitemChecklist } from './categoriasVistoria'
 export type SituacaoChecklist =
   | 'não se aplica'
   | 'pendente'
+  | 'sem_comprovacao'
   | 'vencido'
   | 'vencendo_em_breve'
   | 'conforme'
@@ -242,7 +243,8 @@ export function calcularVencimentoSubitem(
  * 2. Se não respondeu possuiSistema ("Sim" ou "Não"), retorna null (não avaliado / pendente)
  * 3. Se possui ("Sim"):
  *    a. Se subitem tem periodicidade fixa definida:
- *       - Sem data de serviço: 'vencido' (pendente de documento ou fora de conformidade)
+ *       - Sem data de serviço: 'sem_comprovacao' (o empreendimento não apresentou o
+ *         documento; é diferente de estar com o prazo vencido)
  *       - Prazo expirado (diasAteVencimento < 0): 'vencido'
  *       - Vencendo em breve (<= 30 dias): 'vencendo_em_breve'
  *       - Regular (> 30 dias): 'conforme'
@@ -293,7 +295,7 @@ export function calculateItemSituacao(
       )
       if (calcArt.status === 'vencido') return 'vencido'
       if (calcArt.status === 'vencendo_em_breve') return 'vencendo_em_breve'
-      if (calcArt.status === 'sem_data') return 'vencido'
+      if (calcArt.status === 'sem_data') return 'sem_comprovacao'
       return 'conforme'
     }
   }
@@ -304,7 +306,9 @@ export function calculateItemSituacao(
   if (periodicidadeExigida) {
     const dataServico = data.dataUltimoServico || data.dataUltimaVerificacao
     if (!dataServico) {
-      return 'vencido'
+      // A atividade existe, mas ainda não há data/documento que comprove o
+      // último serviço. Não é o mesmo que estar vencido.
+      return 'sem_comprovacao'
     }
 
     const calc = calcularVencimentoSubitem(dataServico, itemInfo.periodicidadeDias, {
@@ -318,7 +322,7 @@ export function calculateItemSituacao(
       return 'vencendo_em_breve'
     }
     if (calc.status === 'sem_data') {
-      return 'vencido'
+      return 'sem_comprovacao'
     }
     return 'conforme'
   }

@@ -263,6 +263,7 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
   let totalConforme = 0
   let totalNaoConforme = 0
   let totalVencido = 0
+  let totalSemComprovacao = 0
   let totalNaoSeAplica = 0
   let totalPendente = 0
 
@@ -317,6 +318,7 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
       if (situacao === 'conforme') totalConforme++
       else if (situacao === 'nao_conforme') totalNaoConforme++
       else if (situacao === 'vencido') totalVencido++
+      else if (situacao === 'sem_comprovacao') totalSemComprovacao++
       else if (situacao === 'não se aplica') totalNaoSeAplica++
       else totalPendente++
 
@@ -330,8 +332,14 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
         situacaoLabel = 'NÃO CONFORME'
         situacaoColor = [220, 38, 38] // vermelho
       } else if (situacao === 'vencido') {
-        situacaoLabel = 'VENCIDO'
+        situacaoLabel = 'PRAZO VENCIDO'
         situacaoColor = [220, 38, 38] // vermelho
+      } else if (situacao === 'vencendo_em_breve') {
+        situacaoLabel = 'VENCE EM BREVE'
+        situacaoColor = [180, 83, 9] // âmbar escuro
+      } else if (situacao === 'sem_comprovacao') {
+        situacaoLabel = 'SEM COMPROVAÇÃO'
+        situacaoColor = [194, 90, 10] // laranja
       } else if (situacao === 'não se aplica') {
         situacaoLabel = 'NÃO SE APLICA'
         situacaoColor = [72, 101, 129] // cinza azulado

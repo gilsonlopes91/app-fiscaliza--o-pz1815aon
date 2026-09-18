@@ -29,6 +29,7 @@ import {
   XCircle,
   Ban,
   RotateCcw,
+  FileWarning,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -846,6 +847,7 @@ export default function VistoriaPage() {
   const stats = useMemo(() => {
     let conformeCount = 0
     let naoConformeCount = 0
+    let semComprovacaoCount = 0
     let naoSeAplicaCount = 0
     let pendenteCount = 0
 
@@ -864,6 +866,7 @@ export default function VistoriaPage() {
       }
 
       if (situacao === 'conforme') conformeCount++
+      else if (situacao === 'sem_comprovacao') semComprovacaoCount++
       else if (
         situacao === 'nao_conforme' ||
         situacao === 'vencido' ||
@@ -878,6 +881,7 @@ export default function VistoriaPage() {
       total: allRelevantSubitens.length,
       conforme: conformeCount,
       naoConforme: naoConformeCount,
+      semComprovacao: semComprovacaoCount,
       naoSeAplica: naoSeAplicaCount,
       pendente: pendenteCount,
     }
@@ -1516,7 +1520,7 @@ export default function VistoriaPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
             <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-50 border border-emerald-200">
               <div className="flex items-center gap-1 text-emerald-800 text-[11px] sm:text-xs font-bold mb-0.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -1533,6 +1537,17 @@ export default function VistoriaPage() {
               </div>
               <div className="text-xl sm:text-2xl font-bold text-rose-900">{stats.naoConforme}</div>
               <div className="text-[10px] text-rose-700 truncate">Não regularizados</div>
+            </div>
+
+            <div className="p-2.5 sm:p-3 rounded-xl bg-orange-50 border border-orange-300">
+              <div className="flex items-center gap-1 text-orange-800 text-[11px] sm:text-xs font-bold mb-0.5">
+                <FileWarning className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                <span className="truncate">Sem comprovação</span>
+              </div>
+              <div className="text-xl sm:text-2xl font-bold text-orange-900">
+                {stats.semComprovacao}
+              </div>
+              <div className="text-[10px] text-orange-700 truncate">Falta documento/data</div>
             </div>
 
             <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-[#D3DFE9]">
@@ -1616,6 +1631,7 @@ export default function VistoriaPage() {
                 // Contar pendências / status do tema principal
                 let temaConforme = 0
                 let temaNaoConforme = 0
+                let temaSemComprovacao = 0
                 let temaNaoSeAplica = 0
                 let temaPendente = 0
 
@@ -1629,6 +1645,7 @@ export default function VistoriaPage() {
                   else if (item) s = item.situacaoCalculada || null
 
                   if (s === 'conforme') temaConforme++
+                  else if (s === 'sem_comprovacao') temaSemComprovacao++
                   else if (s === 'nao_conforme' || s === 'vencido' || s === 'vencendo_em_breve')
                     temaNaoConforme++
                   else if (s === 'não se aplica') temaNaoSeAplica++
@@ -1692,19 +1709,29 @@ export default function VistoriaPage() {
                               {temaNaoConforme} não conforme(s)
                             </Badge>
                           )}
+                          {temaSemComprovacao > 0 && (
+                            <Badge className="bg-orange-50 text-orange-800 border border-orange-300 text-[11px] font-bold gap-1">
+                              <FileWarning className="w-3 h-3 text-orange-600" />
+                              {temaSemComprovacao} sem comprovação
+                            </Badge>
+                          )}
                           {temaPendente > 0 && (
                             <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-medium gap-1">
                               <Clock className="w-3 h-3 text-amber-600" />
                               {temaPendente} pendente(s)
                             </Badge>
                           )}
-                          {temaNaoConforme === 0 && temaPendente === 0 && temaConforme > 0 && (
-                            <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Conforme
-                            </Badge>
-                          )}
                           {temaNaoConforme === 0 &&
+                            temaSemComprovacao === 0 &&
+                            temaPendente === 0 &&
+                            temaConforme > 0 && (
+                              <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Conforme
+                              </Badge>
+                            )}
+                          {temaNaoConforme === 0 &&
+                            temaSemComprovacao === 0 &&
                             temaPendente === 0 &&
                             temaConforme === 0 &&
                             temaNaoSeAplica > 0 && (
@@ -1792,6 +1819,24 @@ export default function VistoriaPage() {
                                   <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-bold gap-1">
                                     <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                                     Não conforme
+                                  </Badge>
+                                )}
+                                {situacao === 'vencido' && (
+                                  <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-bold gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                                    Prazo vencido
+                                  </Badge>
+                                )}
+                                {situacao === 'vencendo_em_breve' && (
+                                  <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                    Vence em breve
+                                  </Badge>
+                                )}
+                                {situacao === 'sem_comprovacao' && (
+                                  <Badge className="bg-orange-50 text-orange-800 border border-orange-300 text-xs font-bold gap-1">
+                                    <FileWarning className="w-3.5 h-3.5 text-orange-600" />
+                                    Sem comprovação
                                   </Badge>
                                 )}
                                 {situacao === 'não se aplica' && (
