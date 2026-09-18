@@ -1,5 +1,5 @@
 /* Service Worker - App Fiscalização CREA-PI */
-const CACHE_NAME = 'fiscalizacao-creapi-v1'
+const CACHE_NAME = 'fiscalizacao-creapi-v2'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -41,9 +41,10 @@ self.addEventListener('activate', (event) => {
 })
 
 // Fetch strategy:
-// 1. Navigation requests (HTML pages): Network-first with cache fallback, then offline.html
-// 2. Static assets (scripts, styles, images, fonts): Stale-While-Revalidate
-// 3. API/Pocketbase requests (/api/*): Network-only with grace on failure
+// 1. Navigation requests (HTML pages): Stale-While-Revalidate with fallback to /index.html/offline.html
+//    Permite que o PWA abra instantaneamente do cache em frações de segundo mesmo com conexão lenta.
+// 2. Static assets (scripts, styles, images, fonts): Cache-First / Stale-While-Revalidate
+// 3. API/Pocketbase requests (/api/*): Network-only com bypass de cache para garantir dados frescos
 self.addEventListener('fetch', (event) => {
   const req = event.request
   const url = new URL(req.url)
@@ -55,19 +56,31 @@ self.addEventListener('fetch', (event) => {
   // Navigation (HTML Document) requests
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((response) => {
-          // If valid response, clone and cache for offline reload
-          if (response && response.status === 200) {
-            const resClone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone))
-          }
-          return response
-        })
-        .catch(async () => {
+      (async () => {
+        try {
+          // Tenta carregar do cache para renderização ultrarrápida do App Shell PWA
           const cachedResponse = await caches.match(req)
-          if (cachedResponse) return cachedResponse
+          const fetchPromise = fetch(req)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                const resClone = networkResponse.clone()
+                caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone))
+              }
+              return networkResponse
+            })
+            .catch(() => null)
 
+          if (cachedResponse) {
+            // Em background atualiza o cache para a próxima navegação
+            fetchPromise
+            return cachedResponse
+          }
+
+          // Se não está no cache, aguarda a rede
+          const networkResponse = await fetchPromise
+          if (networkResponse) return networkResponse
+
+          // Fallbacks offline
           const cachedIndex = await caches.match('/index.html')
           if (cachedIndex) return cachedIndex
 
@@ -79,7 +92,19 @@ self.addEventListener('fetch', (event) => {
             statusText: 'Service Unavailable',
             headers: { 'Content-Type': 'text/plain; charset=utf-8' },
           })
-        }),
+        } catch (_) {
+          const fallback =
+            (await caches.match('/index.html')) || (await caches.match('/offline.html'))
+          return (
+            fallback ||
+            new Response('Sem conexão', {
+              status: 503,
+              statusText: 'Service Unavailable',
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            })
+          )
+        }
+      })(),
     )
     return
   }
@@ -89,7 +114,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Static assets & Fonts: Stale-While-Revalidate
+  // Static assets & Fonts: Stale-While-Revalidate com cache imediato
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       const fetchPromise = fetch(req)

@@ -1,15 +1,26 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Layout } from './components/Layout'
-import Vistoria from './pages/Vistoria'
-import TiposEmpreendimento from './pages/TiposEmpreendimento'
-import TipoEmpreendimentoDetalhe from './pages/TipoEmpreendimentoDetalhe'
-import Login from './pages/Login'
-import AguardandoAprovacao from './pages/AguardandoAprovacao'
-import GestaoUsuarios from './pages/GestaoUsuarios'
-import AdminDashboard from './pages/AdminDashboard'
-import FiscalDashboard from './pages/FiscalDashboard'
-import NotFound from './pages/NotFound'
+import { Suspense, lazy } from 'react'
+
+const Vistoria = lazy(() => import('./pages/Vistoria'))
+const TiposEmpreendimento = lazy(() => import('./pages/TiposEmpreendimento'))
+const TipoEmpreendimentoDetalhe = lazy(() => import('./pages/TipoEmpreendimentoDetalhe'))
+const Login = lazy(() => import('./pages/Login'))
+const AguardandoAprovacao = lazy(() => import('./pages/AguardandoAprovacao'))
+const GestaoUsuarios = lazy(() => import('./pages/GestaoUsuarios'))
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const FiscalDashboard = lazy(() => import('./pages/FiscalDashboard'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+function PageFallback() {
+  return (
+    <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3">
+      <Loader2 className="w-8 h-8 animate-spin text-[#004B8D]" />
+      <span className="text-xs font-semibold text-[#486581]">Carregando página...</span>
+    </div>
+  )
+}
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Loader2 } from 'lucide-react'
 
@@ -81,63 +92,65 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          {/* Public Auth Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            {/* Public Auth Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
 
-          {/* Root Redirect */}
-          <Route path="/" element={<IndexRedirect />} />
+            {/* Root Redirect */}
+            <Route path="/" element={<IndexRedirect />} />
 
-          {/* Protected Main Layout */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            {/* Dashboard Principal conforme o Papel */}
+            {/* Protected Main Layout */}
             <Route
-              path="/dashboard"
               element={
-                <ProtectedRoute requireAdmin>
-                  <AdminDashboard />
+                <ProtectedRoute>
+                  <Layout />
                 </ProtectedRoute>
               }
-            />
+            >
+              {/* Dashboard Principal conforme o Papel */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route path="/minhas-fiscalizacoes" element={<FiscalDashboard />} />
+              <Route path="/minhas-fiscalizacoes" element={<FiscalDashboard />} />
 
-            {/* Redirecionamento da antiga rota /hospitais para o tipo Hospital */}
-            <Route
-              path="/hospitais"
-              element={<Navigate to="/tipos-empreendimento/Hospital" replace />}
-            />
+              {/* Redirecionamento da antiga rota /hospitais para o tipo Hospital */}
+              <Route
+                path="/hospitais"
+                element={<Navigate to="/tipos-empreendimento/Hospital" replace />}
+              />
 
-            {/* Tipos de Empreendimento - Catálogo */}
-            <Route path="/tipos-empreendimento" element={<TiposEmpreendimento />} />
+              {/* Tipos de Empreendimento - Catálogo */}
+              <Route path="/tipos-empreendimento" element={<TiposEmpreendimento />} />
 
-            {/* Página do Tipo de Empreendimento (Unidades + Checklist exclusivo) */}
-            <Route path="/tipos-empreendimento/:id" element={<TipoEmpreendimentoDetalhe />} />
+              {/* Página do Tipo de Empreendimento (Unidades + Checklist exclusivo) */}
+              <Route path="/tipos-empreendimento/:id" element={<TipoEmpreendimentoDetalhe />} />
 
-            {/* Vistoria */}
-            <Route path="/vistoria" element={<Vistoria />} />
+              {/* Vistoria */}
+              <Route path="/vistoria" element={<Vistoria />} />
 
-            {/* Admin-only: Gestao de Usuarios */}
-            <Route
-              path="/usuarios"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <GestaoUsuarios />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
+              {/* Admin-only: Gestao de Usuarios */}
+              <Route
+                path="/usuarios"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <GestaoUsuarios />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
 
-          {/* 404 Catch-All */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* 404 Catch-All */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   )

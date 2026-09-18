@@ -168,10 +168,16 @@ export default function AdminDashboard() {
       setAllVistorias(validVistoriasList)
       setAllVistoriaItens(itensList)
 
-      // Compute details somente para atribuições válidas
+      // Compute details somente para atribuições válidas (passando listas pré-carregadas)
       const computedDetails = await atribuicoesService.computeAtribuicoesProgress(
         validAtribList,
         catList,
+        {
+          vistorias: validVistoriasList,
+          vistoriaItens: itensList,
+          subitens: subList,
+          categorias: catList,
+        },
       )
       setDetails(computedDetails)
     } catch (err) {
@@ -228,11 +234,27 @@ export default function AdminDashboard() {
     }
   }, [details, fiscais, hospitais, allVistorias])
 
-  // Group by fiscal summary
+  // Group by fiscal summary - otimizado para O(N) com Map em vez de filters aninhados
   const fiscaisSummary = useMemo<FiscalProgressSummary[]>(() => {
+    const detailsByFiscal = new Map<string, AtribuicaoDetail[]>()
+    for (const d of details) {
+      const fId = d.atribuicao.fiscal
+      if (fId) {
+        let list = detailsByFiscal.get(fId)
+        if (!list) {
+          list = []
+          detailsByFiscal.set(fId, list)
+        }
+        list.push(d)
+      }
+    }
+
     return fiscais.map((f) => {
-      const fiscalDetails = details.filter((d) => d.atribuicao.fiscal === f.id)
-      const concluidos = fiscalDetails.filter((d) => d.isConcluida).length
+      const fiscalDetails = detailsByFiscal.get(f.id) || []
+      let concluidos = 0
+      for (const d of fiscalDetails) {
+        if (d.isConcluida) concluidos++
+      }
       const pendentes = fiscalDetails.length - concluidos
 
       return {

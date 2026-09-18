@@ -97,8 +97,9 @@ export interface VistoriaItemFormData {
 export function getVistoriaItemPhotoUrl(
   record: { id: string; collectionId?: string; collectionName?: string },
   filename: string,
+  thumb?: string,
 ): string {
-  return pb.files.getURL(record, filename)
+  return pb.files.getURL(record, filename, thumb ? { thumb } : undefined)
 }
 
 /**

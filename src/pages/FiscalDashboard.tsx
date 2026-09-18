@@ -33,6 +33,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { atribuicoesService, Atribuicao, AtribuicaoDetail } from '@/services/atribuicoes'
+import { vistoriasService } from '@/services/vistorias'
 import { useToast } from '@/hooks/use-toast'
 
 export default function FiscalDashboard() {
@@ -55,10 +56,12 @@ export default function FiscalDashboard() {
     if (!user) return
     try {
       setIsLoading(true)
-      const [userAtribs, tiposList, catList] = await Promise.all([
+      const [userAtribs, tiposList, catList, subList, allVistorias] = await Promise.all([
         atribuicoesService.getByFiscal(user.id),
         tiposEmpreendimentoService.getAll(),
         categoriasVistoriaService.getAll(),
+        categoriasVistoriaService.getAllSubitens(),
+        vistoriasService.getAll(),
       ])
 
       setAtribuicoes(userAtribs)
@@ -68,6 +71,11 @@ export default function FiscalDashboard() {
       const computedDetails = await atribuicoesService.computeAtribuicoesProgress(
         userAtribs,
         catList,
+        {
+          vistorias: allVistorias,
+          subitens: subList,
+          categorias: catList,
+        },
       )
       setDetails(computedDetails)
     } catch (err) {

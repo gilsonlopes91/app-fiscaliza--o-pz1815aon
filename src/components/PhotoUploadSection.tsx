@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { getVistoriaItemPhotoUrl } from '@/services/vistorias'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { applyWatermarkToImage, PhotoCaptureMetadata } from '@/lib/watermark'
-import { downloadSinglePhoto } from '@/lib/photoDownload'
+// downloadSinglePhoto carregado dinamicamente para manter o módulo leve
 import { toast } from '@/hooks/use-toast'
 
 interface PhotoUploadSectionProps {
@@ -93,6 +93,7 @@ export function PhotoUploadSection({
   const handleDownloadSingle = async (url: string, photoIndex: number) => {
     try {
       setDownloadingPhoto(url)
+      const { downloadSinglePhoto } = await import('@/lib/photoDownload')
       const cleanSub = subitemCode.replace(/[^a-zA-Z0-9_-]/g, '_')
       const fileName = `${cleanSub}-foto-${photoIndex}.jpg`
       await downloadSinglePhoto(url, fileName)
@@ -142,6 +143,8 @@ export function PhotoUploadSection({
               <img
                 src={photoUrl}
                 alt="Registro da vistoria"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
               />
               <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
@@ -198,6 +201,8 @@ export function PhotoUploadSection({
               <img
                 src={localUrl}
                 alt="Nova foto"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
               />
               <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">

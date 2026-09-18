@@ -235,48 +235,107 @@ export const atribuicoesService = {
   /**
    * Computes the full detailed progress of an atribuicao list,
    * calculating whether each unit's vistoria has ALL checklist subitens completed.
+   * Otimizado: reutiliza listas já carregadas para evitar N+1 queries.
    */
   async computeAtribuicoesProgress(
     atribuicoes: Atribuicao[],
     allCategoriasOrSubitens?: CategoriaVistoria[] | SubitemChecklist[],
+    preloadedData?: {
+      vistorias?: Vistoria[]
+      vistoriaItens?: VistoriaItem[]
+      subitens?: SubitemChecklist[]
+      categorias?: CategoriaVistoria[]
+    },
   ): Promise<AtribuicaoDetail[]> {
-    // Carrega tanto categorias quanto subitens para contagem precisa de 2 níveis
-    const [allSubitens, allCategories] = await Promise.all([
-      categoriasVistoriaService.getAllSubitens(),
-      categoriasVistoriaService.getAll(),
-    ])
+    // Se categorias ou subitens não foram fornecidos, carrega em paralelo UMA vez
+    let allSubitens = preloadedData?.subitens
+    let allCategories = preloadedData?.categorias
 
-    const details = await Promise.all(
-      atribuicoes.map(async (atrib) => {
-        const hospital = atrib.expand?.hospital || null
-        if (!hospital) {
-          return {
-            atribuicao: atrib,
-            hospital: null,
-            vistoria: null,
-            totalItensChecklist: 0,
-            itensRespondidosCount: 0,
-            isConcluida: false,
-            percentual: 0,
-          }
+    if (!allSubitens || !allCategories) {
+      const [fetchedSubitens, fetchedCategories] = await Promise.all([
+        allSubitens ? Promise.resolve(allSubitens) : categoriasVistoriaService.getAllSubitens(),
+        allCategories ? Promise.resolve(allCategories) : categoriasVistoriaService.getAll(),
+      ])
+      allSubitens = allSubitens || fetchedSubitens
+      allCategories = allCategories || fetchedCategories
+    }
+
+    // Carrega vistorias e itens em lote UMA vez caso não tenham sido passados
+    let allVistorias = preloadedData?.vistorias
+    let allItens = preloadedData?.vistoriaItens
+
+    if (!allVistorias) {
+      try {
+        allVistorias = await vistoriasService.getAll()
+      } catch (err) {
+        console.warn('Erro ao carregar vistorias em lote para progresso:', err)
+        allVistorias = []
+      }
+    }
+
+    if (!allItens) {
+      try {
+        allItens = await vistoriasService.getAllItens()
+      } catch (err) {
+        console.warn('Erro ao carregar itens de vistoria em lote para progresso:', err)
+        allItens = []
+      }
+    }
+
+    // Mapeamentos em memória O(1) para evitar qualquer loop assíncrono ou N+1
+    const vistoriasByHospital = new Map<string, Vistoria>()
+    for (const v of allVistorias) {
+      // Se houver mais de uma, a mais recente (-created) prevalece
+      if (v.hospital && !vistoriasByHospital.has(v.hospital)) {
+        vistoriasByHospital.set(v.hospital, v)
+      }
+    }
+
+    const itensByVistoria = new Map<string, VistoriaItem[]>()
+    for (const item of allItens) {
+      if (item.vistoria) {
+        let list = itensByVistoria.get(item.vistoria)
+        if (!list) {
+          list = []
+          itensByVistoria.set(item.vistoria, list)
         }
+        list.push(item)
+      }
+    }
 
-        const hospTipo = (hospital.tipo || 'Hospital').trim().toLowerCase()
-        const isHospitalType = hospTipo === 'hospital'
+    // Cache de subitens relevantes por tipo de empreendimento
+    const subitensByTipoCache = new Map<string, SubitemChecklist[]>()
 
-        // Encontrar os subitens do tipo
-        let relevantSubitens = allSubitens.filter((sub) => {
+    const details: AtribuicaoDetail[] = atribuicoes.map((atrib) => {
+      const hospital = atrib.expand?.hospital || null
+      if (!hospital) {
+        return {
+          atribuicao: atrib,
+          hospital: null,
+          vistoria: null,
+          totalItensChecklist: 0,
+          itensRespondidosCount: 0,
+          isConcluida: false,
+          percentual: 0,
+        }
+      }
+
+      const hospTipo = (hospital.tipo || 'Hospital').trim().toLowerCase()
+      const isHospitalType = hospTipo === 'hospital'
+
+      let relevantSubitens = subitensByTipoCache.get(hospTipo)
+      if (!relevantSubitens) {
+        relevantSubitens = allSubitens!.filter((sub) => {
           const subTipo = (sub.tipo || (isHospitalType ? 'Hospital' : '')).trim().toLowerCase()
           return subTipo === hospTipo
         })
 
         // Se o tipo não tem subitens cadastrados mas tem categorias, usar as categorias
         if (relevantSubitens.length === 0) {
-          const relevantCats = allCategories.filter((cat) => {
+          const relevantCats = allCategories!.filter((cat) => {
             const catTipo = (cat.tipo || (isHospitalType ? 'Hospital' : '')).trim().toLowerCase()
             return catTipo === hospTipo
           })
-          // Fallback se não há subitens
           relevantSubitens = relevantCats.map((c, i) => ({
             id: c.id,
             categoria: c.id,
@@ -291,52 +350,45 @@ export const atribuicoesService = {
           }))
         }
 
-        // Fetch vistoria & items for this hospital
-        let vistoria: Vistoria | null = null
-        let itens: VistoriaItem[] = []
+        subitensByTipoCache.set(hospTipo, relevantSubitens)
+      }
 
-        try {
-          vistoria = await vistoriasService.getByHospitalId(hospital.id)
-          if (vistoria) {
-            itens = await vistoriasService.getItensByVistoria(vistoria.id)
-          }
-        } catch (e) {
-          console.warn('Erro ao carregar vistoria para progresso:', e)
+      // Vistoria e itens resolvidos instantaneamente do mapa em memória
+      const vistoria = vistoriasByHospital.get(hospital.id) || null
+      const itens = vistoria ? itensByVistoria.get(vistoria.id) || [] : []
+
+      const totalItens = relevantSubitens.length
+      let respondidos = 0
+
+      for (const sub of relevantSubitens) {
+        const item = itens.find(
+          (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
+        )
+        if (
+          item &&
+          (item.possuiSistema === 'Sim' ||
+            item.possuiSistema === 'Não' ||
+            item.possuiSistema === 'Não se aplica')
+        ) {
+          respondidos++
         }
+      }
 
-        const totalItens = relevantSubitens.length
-        let respondidos = 0
+      const isConcluida =
+        vistoria?.status === 'concluida' ||
+        (totalItens > 0 ? respondidos >= totalItens : itens.length > 0)
+      const percentual = totalItens > 0 ? Math.round((respondidos / totalItens) * 100) : 0
 
-        relevantSubitens.forEach((sub) => {
-          const item = itens.find(
-            (i) => i.subitem === sub.id || (!i.subitem && i.categoria === sub.categoria),
-          )
-          if (
-            item &&
-            (item.possuiSistema === 'Sim' ||
-              item.possuiSistema === 'Não' ||
-              item.possuiSistema === 'Não se aplica')
-          ) {
-            respondidos++
-          }
-        })
-
-        const isConcluida =
-          vistoria?.status === 'concluida' ||
-          (totalItens > 0 ? respondidos >= totalItens : itens.length > 0)
-        const percentual = totalItens > 0 ? Math.round((respondidos / totalItens) * 100) : 0
-
-        return {
-          atribuicao: atrib,
-          hospital,
-          vistoria,
-          totalItensChecklist: totalItens,
-          itensRespondidosCount: respondidos,
-          isConcluida,
-          percentual,
-        }
-      }),
-    )
+      return {
+        atribuicao: atrib,
+        hospital,
+        vistoria,
+        totalItensChecklist: totalItens,
+        itensRespondidosCount: respondidos,
+        isConcluida,
+        percentual,
+      }
+    })
 
     return details
   },

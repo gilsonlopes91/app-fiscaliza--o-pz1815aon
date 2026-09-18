@@ -81,8 +81,7 @@ import { getIconComponent } from '@/pages/TiposEmpreendimento'
 import { useToast } from '@/hooks/use-toast'
 import { formatCNPJ } from '@/lib/formatters'
 import { useAuth } from '@/contexts/AuthContext'
-import { generateVistoriaPdf } from '@/lib/pdfReport'
-import { downloadAllVistoriaPhotosZip } from '@/lib/photoDownload'
+// PDF e ZIP são carregados dinamicamente sob demanda para acelerar carregamento do bundle
 import { PhotoCaptureMetadata } from '@/lib/watermark'
 import { atribuicoesService } from '@/services/atribuicoes'
 
@@ -1033,6 +1032,9 @@ export default function VistoriaPage() {
 
     try {
       setIsGeneratingPdf(true)
+      setPdfProgressText('Carregando módulo de PDF...')
+
+      const { generateVistoriaPdf } = await import('@/lib/pdfReport')
       setPdfProgressText('Iniciando geração do documento...')
 
       const fileName = await generateVistoriaPdf({
@@ -1087,6 +1089,8 @@ export default function VistoriaPage() {
         relevantCats.some((cat) => cat.id === sub.categoria),
       )
 
+      const { generateVistoriaPdf } = await import('@/lib/pdfReport')
+
       const fileName = await generateVistoriaPdf({
         vistoria: v,
         hospital: hosp,
@@ -1125,6 +1129,9 @@ export default function VistoriaPage() {
 
     try {
       setIsDownloadingZip(true)
+      setZipProgressText('Carregando módulo de compactação...')
+
+      const { downloadAllVistoriaPhotosZip } = await import('@/lib/photoDownload')
       setZipProgressText(`Compactando fotos (0/${totalPhotosInCurrentVistoria})...`)
 
       const result = await downloadAllVistoriaPhotosZip({
