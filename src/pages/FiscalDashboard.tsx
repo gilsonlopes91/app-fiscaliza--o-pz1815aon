@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   Building2,
+  Ban,
   MapPin,
   Calendar,
   Layers,
@@ -331,17 +332,22 @@ export default function FiscalDashboard() {
                       <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-xs font-semibold">
                         {hospTipo}
                       </Badge>
-                      {detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
+                      {detail.vistoria?.status === 'cancelada' ? (
+                        <Badge className="bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold gap-1">
+                          <Ban className="w-3.5 h-3.5 text-slate-500" />
+                          Cancelada
+                        </Badge>
+                      ) : detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
                         <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           Concluída
                         </Badge>
                       ) : (
                         <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold gap-1">
-                          <Clock className="w-3 h-3 text-amber-600" />
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
                           Em andamento
                         </Badge>
-                      )}
+                      )}{' '}
                     </div>
 
                     {/* Nome & Localização */}

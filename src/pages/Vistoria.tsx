@@ -27,6 +27,8 @@ import {
   Unlock,
   Calendar,
   XCircle,
+  Ban,
+  RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -131,10 +133,13 @@ export default function VistoriaPage() {
   // Batch "Não se aplica" marking loading tracking per category (Nível 1)
   const [batchMarkingCatIds, setBatchMarkingCatIds] = useState<Record<string, boolean>>({})
 
-  // Finalizar / Reabrir Vistoria dialogs & actions
+  // Finalizar / Reabrir / Cancelar Vistoria dialogs & actions
   const [isFinalizarDialogOpen, setIsFinalizarDialogOpen] = useState(false)
   const [isFinalizando, setIsFinalizando] = useState(false)
   const [isReabrindo, setIsReabrindo] = useState(false)
+  const [isCancelarDialogOpen, setIsCancelarDialogOpen] = useState(false)
+  const [isCancelando, setIsCancelando] = useState(false)
+  const [isReativando, setIsReativando] = useState(false)
 
   // Loading states for PDF report generation and ZIP download
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
@@ -157,19 +162,26 @@ export default function VistoriaPage() {
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [tiposList, hospList, catList, subList, vistoriasList] = await Promise.all([
+      const [tiposList, hospList, catList, subList, vistoriasList, atribsList] = await Promise.all([
         tiposEmpreendimentoService.getAll(),
         hospitaisService.getAll(),
         categoriasVistoriaService.getAll(),
         categoriasVistoriaService.getAllSubitens(),
         vistoriasService.getAll(),
+        atribuicoesService.getAll(),
       ])
       setTiposEmpreendimento(tiposList)
       setHospitais(hospList)
       setAllCategorias(catList)
       setAllSubitens(subList)
-      setAllVistorias(vistoriasList)
-      setOpenVistorias(vistoriasList.filter((v) => v.status !== 'concluida'))
+
+      // Filtra fora vistorias sem fiscal vinculado na coleção atribuicoes
+      const assignedHospitalIds = new Set(
+        atribsList.filter((a) => !!a.fiscal && !!a.hospital).map((a) => a.hospital),
+      )
+      const validVistorias = vistoriasList.filter((v) => assignedHospitalIds.has(v.hospital))
+      setAllVistorias(validVistorias)
+      setOpenVistorias(validVistorias.filter((v) => v.status !== 'concluida'))
     } catch (err) {
       console.error('Erro ao carregar dados de vistoria:', err)
       toast({
@@ -210,10 +222,18 @@ export default function VistoriaPage() {
       .sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
   }, [allCategorias, currentHospitalTipo])
 
-  // Is current vistoria completed / read-only
+  // Is current vistoria completed / read-only / cancelada
   const isVistoriaConcluida = useMemo(() => {
     return currentVistoria?.status === 'concluida'
   }, [currentVistoria?.status])
+
+  const isVistoriaCancelada = useMemo(() => {
+    return currentVistoria?.status === 'cancelada'
+  }, [currentVistoria?.status])
+
+  const isReadOnly = useMemo(() => {
+    return isVistoriaConcluida || isVistoriaCancelada
+  }, [isVistoriaConcluida, isVistoriaCancelada])
 
   // Subitens (Nível 2) grouped by Categoria (Nível 1)
   const subitensByCategoria = useMemo(() => {
@@ -375,7 +395,7 @@ export default function VistoriaPage() {
       targetSub: SubitemChecklist,
       targetCat: CategoriaVistoria,
     ) => {
-      if (!currentVistoria || isVistoriaConcluida || !selectedHospitalId) return
+      if (!currentVistoria || isReadOnly || !selectedHospitalId) return
 
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)
@@ -469,7 +489,7 @@ export default function VistoriaPage() {
     },
     [
       currentVistoria,
-      isVistoriaConcluida,
+      isReadOnly,
       selectedHospitalId,
       vistoriaItens,
       pendingPhotos,
@@ -486,7 +506,7 @@ export default function VistoriaPage() {
     targetSub?: SubitemChecklist,
     targetCat?: CategoriaVistoria,
   ) => {
-    if (isVistoriaConcluida) return
+    if (isReadOnly) return
 
     setItemForms((prev) => {
       const current = prev[subitemId] || {}
@@ -706,7 +726,7 @@ export default function VistoriaPage() {
     cat: CategoriaVistoria,
     subs: SubitemChecklist[],
   ) => {
-    if (isVistoriaConcluida || !currentVistoria || !selectedHospitalId || subs.length === 0) return
+    if (isReadOnly || !currentVistoria || !selectedHospitalId || subs.length === 0) return
 
     // Cancela qualquer timer de autosave pendente
     if (autoSaveTimerRef.current) {
@@ -826,8 +846,6 @@ export default function VistoriaPage() {
   const stats = useMemo(() => {
     let conformeCount = 0
     let naoConformeCount = 0
-    let vencidoCount = 0
-    let vencendoEmBreveCount = 0
     let naoSeAplicaCount = 0
     let pendenteCount = 0
 
@@ -846,9 +864,12 @@ export default function VistoriaPage() {
       }
 
       if (situacao === 'conforme') conformeCount++
-      else if (situacao === 'nao_conforme') naoConformeCount++
-      else if (situacao === 'vencido') vencidoCount++
-      else if (situacao === 'vencendo_em_breve') vencendoEmBreveCount++
+      else if (
+        situacao === 'nao_conforme' ||
+        situacao === 'vencido' ||
+        situacao === 'vencendo_em_breve'
+      )
+        naoConformeCount++
       else if (situacao === 'não se aplica') naoSeAplicaCount++
       else pendenteCount++
     })
@@ -857,8 +878,6 @@ export default function VistoriaPage() {
       total: allRelevantSubitens.length,
       conforme: conformeCount,
       naoConforme: naoConformeCount,
-      vencido: vencidoCount,
-      vencendoEmBreve: vencendoEmBreveCount,
       naoSeAplica: naoSeAplicaCount,
       pendente: pendenteCount,
     }
@@ -945,6 +964,55 @@ export default function VistoriaPage() {
       })
     } finally {
       setIsReabrindo(false)
+    }
+  }
+
+  // Cancelar Vistoria (Admin ou fiscal autorizado)
+  const handleCancelarVistoria = async () => {
+    if (!currentVistoria) return
+    try {
+      setIsCancelando(true)
+      const updated = await vistoriasService.cancelarVistoria(currentVistoria.id)
+      setCurrentVistoria(updated)
+      setIsCancelarDialogOpen(false)
+      toast({
+        title: 'Vistoria cancelada',
+        description: 'A vistoria foi cancelada e colocada em modo somente leitura.',
+      })
+      await loadInitialData()
+    } catch (err) {
+      console.error('Erro ao cancelar vistoria:', err)
+      toast({
+        title: 'Erro ao cancelar vistoria',
+        description: 'Não foi possível cancelar a vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsCancelando(false)
+    }
+  }
+
+  // Reativar Vistoria
+  const handleReativarVistoria = async () => {
+    if (!currentVistoria) return
+    try {
+      setIsReativando(true)
+      const updated = await vistoriasService.reativarVistoria(currentVistoria.id)
+      setCurrentVistoria(updated)
+      toast({
+        title: 'Vistoria reativada!',
+        description: 'A vistoria voltou para o status em andamento e a edição foi liberada.',
+      })
+      await loadInitialData()
+    } catch (err) {
+      console.error('Erro ao reativar vistoria:', err)
+      toast({
+        title: 'Erro ao reativar vistoria',
+        description: 'Não foi possível reativar a vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsReativando(false)
     }
   }
 
@@ -1303,10 +1371,26 @@ export default function VistoriaPage() {
               </span>
             </div>
 
-            {/* Ações Rápidas: Gerar Relatório PDF + Baixar Todas as Fotos + Finalizar / Reabrir */}
+            {/* Ações Rápidas: Gerar Relatório PDF + Baixar Todas as Fotos + Finalizar / Reabrir / Cancelar */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-              {/* Botão Finalizar / Reabrir Vistoria */}
-              {isVistoriaConcluida ? (
+              {/* Botão Finalizar / Reabrir / Reativar Vistoria */}
+              {isVistoriaCancelada ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isReativando}
+                  onClick={handleReativarVistoria}
+                  className="w-full sm:w-auto border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
+                  title="Reativar vistoria cancelada"
+                >
+                  {isReativando ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 text-amber-700" />
+                  )}
+                  <span>Reativar Vistoria</span>
+                </Button>
+              ) : isVistoriaConcluida ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1323,15 +1407,30 @@ export default function VistoriaPage() {
                   <span>Reabrir Vistoria</span>
                 </Button>
               ) : (
-                <Button
-                  type="button"
-                  onClick={() => setIsFinalizarDialogOpen(true)}
-                  className="w-full sm:w-auto bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
-                  title="Finalizar vistoria e travar checklist"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>Finalizar Vistoria</span>
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    onClick={() => setIsFinalizarDialogOpen(true)}
+                    className="w-full sm:w-auto bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-9 px-3.5 gap-1.5 cursor-pointer shadow-xs"
+                    title="Finalizar vistoria e travar checklist"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>Finalizar Vistoria</span>
+                  </Button>
+
+                  {user?.role === 'admin' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsCancelarDialogOpen(true)}
+                      className="w-full sm:w-auto border-rose-300 text-rose-700 hover:bg-rose-50 font-bold text-xs h-9 px-3 gap-1.5 cursor-pointer shadow-xs"
+                      title="Cancelar esta vistoria"
+                    >
+                      <Ban className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Cancelar Vistoria</span>
+                    </Button>
+                  )}
+                </>
               )}
 
               <Button
@@ -1398,7 +1497,26 @@ export default function VistoriaPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+          {/* Banner de Vistoria Cancelada */}
+          {isVistoriaCancelada && (
+            <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-between gap-3 text-xs text-slate-800">
+              <div className="flex items-center gap-2">
+                <Ban className="w-5 h-5 text-slate-600 shrink-0" />
+                <div>
+                  <strong className="font-bold">Vistoria Cancelada (Modo Somente Leitura):</strong>
+                  <span className="ml-1 text-slate-600">
+                    Esta vistoria foi cancelada e seu checklist está travado para edições. Caso
+                    necessário, utilize o botão &ldquo;Reativar Vistoria&rdquo; acima.
+                  </span>
+                </div>
+              </div>
+              <Badge className="bg-slate-700 text-white font-bold text-[11px] shrink-0">
+                Cancelada
+              </Badge>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-50 border border-emerald-200">
               <div className="flex items-center gap-1 text-emerald-800 text-[11px] sm:text-xs font-bold mb-0.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -1415,26 +1533,6 @@ export default function VistoriaPage() {
               </div>
               <div className="text-xl sm:text-2xl font-bold text-rose-900">{stats.naoConforme}</div>
               <div className="text-[10px] text-rose-700 truncate">Não regularizados</div>
-            </div>
-
-            <div className="p-2.5 sm:p-3 rounded-xl bg-rose-50/70 border border-rose-200">
-              <div className="flex items-center gap-1 text-rose-800 text-[11px] sm:text-xs font-bold mb-0.5">
-                <Clock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span className="truncate">Vencido</span>
-              </div>
-              <div className="text-xl sm:text-2xl font-bold text-rose-900">{stats.vencido}</div>
-              <div className="text-[10px] text-rose-700 truncate">Prazo expirado</div>
-            </div>
-
-            <div className="p-2.5 sm:p-3 rounded-xl bg-amber-50 border border-amber-300">
-              <div className="flex items-center gap-1 text-amber-800 text-[11px] sm:text-xs font-bold mb-0.5">
-                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span className="truncate">Vencendo</span>
-              </div>
-              <div className="text-xl sm:text-2xl font-bold text-amber-900">
-                {stats.vencendoEmBreve}
-              </div>
-              <div className="text-[10px] text-amber-700 truncate">Vence em até 30 dias</div>
             </div>
 
             <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-[#D3DFE9]">
@@ -1518,7 +1616,6 @@ export default function VistoriaPage() {
                 // Contar pendências / status do tema principal
                 let temaConforme = 0
                 let temaNaoConforme = 0
-                let temaVencido = 0
                 let temaNaoSeAplica = 0
                 let temaPendente = 0
 
@@ -1532,8 +1629,8 @@ export default function VistoriaPage() {
                   else if (item) s = item.situacaoCalculada || null
 
                   if (s === 'conforme') temaConforme++
-                  else if (s === 'nao_conforme') temaNaoConforme++
-                  else if (s === 'vencido') temaVencido++
+                  else if (s === 'nao_conforme' || s === 'vencido' || s === 'vencendo_em_breve')
+                    temaNaoConforme++
                   else if (s === 'não se aplica') temaNaoSeAplica++
                   else temaPendente++
                 })
@@ -1567,7 +1664,7 @@ export default function VistoriaPage() {
                         {/* Ações e Badges de situação agregadas no Tema */}
                         <div className="flex items-center gap-2 shrink-0">
                           {/* Botão Não se aplica em lote para o item principal */}
-                          {!isVistoriaConcluida && subs.length > 0 && (
+                          {!isReadOnly && subs.length > 0 && (
                             <Button
                               type="button"
                               size="sm"
@@ -1595,29 +1692,19 @@ export default function VistoriaPage() {
                               {temaNaoConforme} não conforme(s)
                             </Badge>
                           )}
-                          {temaVencido > 0 && (
-                            <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-[11px] font-bold gap-1">
-                              <AlertTriangle className="w-3 h-3 text-rose-600" />
-                              {temaVencido} vencido(s)
-                            </Badge>
-                          )}
                           {temaPendente > 0 && (
                             <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-medium gap-1">
                               <Clock className="w-3 h-3 text-amber-600" />
                               {temaPendente} pendente(s)
                             </Badge>
                           )}
+                          {temaNaoConforme === 0 && temaPendente === 0 && temaConforme > 0 && (
+                            <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Conforme
+                            </Badge>
+                          )}
                           {temaNaoConforme === 0 &&
-                            temaVencido === 0 &&
-                            temaPendente === 0 &&
-                            temaConforme > 0 && (
-                              <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold gap-1">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                Conforme
-                              </Badge>
-                            )}
-                          {temaNaoConforme === 0 &&
-                            temaVencido === 0 &&
                             temaPendente === 0 &&
                             temaConforme === 0 &&
                             temaNaoSeAplica > 0 && (
@@ -1707,18 +1794,6 @@ export default function VistoriaPage() {
                                     Não conforme
                                   </Badge>
                                 )}
-                                {situacao === 'vencendo_em_breve' && (
-                                  <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold gap-1">
-                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                    Vencendo em breve
-                                  </Badge>
-                                )}
-                                {situacao === 'vencido' && (
-                                  <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-xs font-bold gap-1">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-                                    Vencido
-                                  </Badge>
-                                )}
                                 {situacao === 'não se aplica' && (
                                   <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-xs font-medium">
                                     Não se aplica
@@ -1743,7 +1818,7 @@ export default function VistoriaPage() {
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={isVistoriaConcluida}
+                                  disabled={isReadOnly}
                                   variant={form.possuiSistema === 'Sim' ? 'default' : 'outline'}
                                   onClick={() =>
                                     handleFieldChange(subKey, 'possuiSistema', 'Sim', sub, cat)
@@ -1752,14 +1827,14 @@ export default function VistoriaPage() {
                                     form.possuiSistema === 'Sim'
                                       ? 'bg-[#004B8D] text-white'
                                       : 'border-[#D3DFE9] text-[#486581]'
-                                  } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                  } ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                                 >
                                   Sim
                                 </Button>
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={isVistoriaConcluida}
+                                  disabled={isReadOnly}
                                   variant={form.possuiSistema === 'Não' ? 'default' : 'outline'}
                                   onClick={() =>
                                     handleFieldChange(subKey, 'possuiSistema', 'Não', sub, cat)
@@ -1768,14 +1843,14 @@ export default function VistoriaPage() {
                                     form.possuiSistema === 'Não'
                                       ? 'bg-slate-700 text-white'
                                       : 'border-[#D3DFE9] text-[#486581]'
-                                  } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                  } ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                                 >
                                   Não
                                 </Button>
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={isVistoriaConcluida}
+                                  disabled={isReadOnly}
                                   variant={
                                     form.possuiSistema === 'Não se aplica' ? 'default' : 'outline'
                                   }
@@ -1792,7 +1867,7 @@ export default function VistoriaPage() {
                                     form.possuiSistema === 'Não se aplica'
                                       ? 'bg-[#486581] text-white'
                                       : 'border-[#D3DFE9] text-[#486581] hover:bg-[#F4F6F9]'
-                                  } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                  } ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                                 >
                                   Não se aplica
                                 </Button>
@@ -1810,10 +1885,10 @@ export default function VistoriaPage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    disabled={isVistoriaConcluida}
+                                    disabled={isReadOnly}
                                     variant={
                                       form.atividadeRegularizada === 'Sim' ||
-                                      (!form.atividadeRegularizada && !form.atividadeRegularizada) // Mantém compatibilidade visual se vazio
+                                      (!form.atividadeRegularizada && !form.atividadeRegularizada)
                                         ? form.atividadeRegularizada === 'Sim'
                                           ? 'default'
                                           : 'outline'
@@ -1832,14 +1907,14 @@ export default function VistoriaPage() {
                                       form.atividadeRegularizada === 'Sim'
                                         ? 'bg-[#004B8D] text-white'
                                         : 'border-[#D3DFE9] text-[#486581]'
-                                    } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    } ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                                   >
                                     Sim
                                   </Button>
                                   <Button
                                     type="button"
                                     size="sm"
-                                    disabled={isVistoriaConcluida}
+                                    disabled={isReadOnly}
                                     variant={
                                       form.atividadeRegularizada === 'Não' ? 'default' : 'outline'
                                     }
@@ -1856,7 +1931,7 @@ export default function VistoriaPage() {
                                       form.atividadeRegularizada === 'Não'
                                         ? 'bg-rose-700 hover:bg-rose-800 text-white'
                                         : 'border-[#D3DFE9] text-[#486581]'
-                                    } ${isVistoriaConcluida ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    } ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                                   >
                                     Não
                                   </Button>
@@ -1893,7 +1968,7 @@ export default function VistoriaPage() {
                                     </Label>
                                     <Input
                                       placeholder="Ex: Empresa de Engenharia Ltda"
-                                      disabled={isVistoriaConcluida}
+                                      disabled={isReadOnly}
                                       value={form.prestadorServico || ''}
                                       onChange={(e) =>
                                         handleFieldChange(
@@ -1926,7 +2001,7 @@ export default function VistoriaPage() {
                                     </div>
                                     <Input
                                       placeholder="Ex: PI20240012345"
-                                      disabled={isVistoriaConcluida}
+                                      disabled={isReadOnly}
                                       value={form.numeroArt || ''}
                                       onChange={(e) =>
                                         handleFieldChange(
@@ -1941,88 +2016,37 @@ export default function VistoriaPage() {
                                     />
                                   </div>
 
-                                  {/* Data do último serviço (Apenas quando o subitem tiver Periodicidade definida) */}
-                                  {sub.periodicidadeDias && sub.periodicidadeDias > 0 ? (
-                                    <div className="space-y-1.5">
-                                      <div className="flex items-center justify-between">
-                                        <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1">
-                                          <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
-                                          Data do último serviço{' '}
-                                          <span className="text-rose-600">*</span>
-                                        </Label>
-                                        <span className="text-[10px] text-[#004B8D] font-bold bg-[#E8F1F8] px-1.5 py-0.5 rounded border border-[#004B8D]/20">
+                                  {/* Data do último serviço */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs font-bold text-[#102A43] flex items-center gap-1">
+                                        <Calendar className="w-3.5 h-3.5 text-[#004B8D]" />
+                                        Data do último serviço
+                                      </Label>
+                                      {sub.periodicidadeDias && sub.periodicidadeDias > 0 && (
+                                        <span className="text-[10px] text-[#486581] bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
                                           Periodicidade: {sub.periodicidadeDias} dias
                                         </span>
-                                      </div>
-                                      <Input
-                                        type="date"
-                                        disabled={isVistoriaConcluida}
-                                        value={
-                                          form.dataUltimoServico || form.dataUltimaVerificacao || ''
-                                        }
-                                        onChange={(e) => {
-                                          handleFieldChange(
-                                            subKey,
-                                            'dataUltimoServico',
-                                            e.target.value,
-                                            sub,
-                                            cat,
-                                          )
-                                        }}
-                                        className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
-                                      />
-                                      {/* Informações detalhadas de vencimento calculado */}
-                                      {(() => {
-                                        const dateVal =
-                                          form.dataUltimoServico || form.dataUltimaVerificacao
-                                        if (!dateVal) {
-                                          return (
-                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-1.5 rounded border border-amber-200">
-                                              Informe a data em que o serviço foi realizado conforme
-                                              laudo/documento para calcular a validade.
-                                            </p>
-                                          )
-                                        }
-                                        const calc = calcularVencimentoSubitem(
-                                          dateVal,
-                                          sub.periodicidadeDias,
-                                        )
-                                        if (calc.status === 'vencido') {
-                                          return (
-                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-1.5 rounded border border-rose-200">
-                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                              <span>
-                                                Vencido há {calc.diasVencido}{' '}
-                                                {calc.diasVencido === 1 ? 'dia' : 'dias'} (expirou
-                                                em {calc.dataVencimentoStr})
-                                              </span>
-                                            </div>
-                                          )
-                                        }
-                                        if (calc.status === 'vencendo_em_breve') {
-                                          return (
-                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-1.5 rounded border border-amber-200">
-                                              <Clock className="w-3.5 h-3.5 shrink-0" />
-                                              <span>
-                                                Vencendo em breve: restam {calc.diasAteVencimento}{' '}
-                                                {calc.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
-                                                (vence em {calc.dataVencimentoStr})
-                                              </span>
-                                            </div>
-                                          )
-                                        }
-                                        return (
-                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200">
-                                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                            <span>
-                                              Válido até {calc.dataVencimentoStr} (faltam{' '}
-                                              {calc.diasAteVencimento} dias)
-                                            </span>
-                                          </div>
-                                        )
-                                      })()}
+                                      )}
                                     </div>
-                                  ) : null}
+                                    <Input
+                                      type="date"
+                                      disabled={isReadOnly}
+                                      value={
+                                        form.dataUltimoServico || form.dataUltimaVerificacao || ''
+                                      }
+                                      onChange={(e) => {
+                                        handleFieldChange(
+                                          subKey,
+                                          'dataUltimoServico',
+                                          e.target.value,
+                                          sub,
+                                          cat,
+                                        )
+                                      }}
+                                      className="border-[#D3DFE9] bg-white text-xs h-9 disabled:bg-slate-100 disabled:opacity-80"
+                                    />
+                                  </div>
 
                                   {/* Este serviço é feito periodicamente? */}
                                   <div className="space-y-1.5">
@@ -2030,7 +2054,7 @@ export default function VistoriaPage() {
                                       Este serviço é feito periodicamente?
                                     </Label>
                                     <Select
-                                      disabled={isVistoriaConcluida}
+                                      disabled={isReadOnly}
                                       value={form.servicoPeriodico || ''}
                                       onValueChange={(val) => {
                                         handleFieldChange(subKey, 'servicoPeriodico', val, sub, cat)
@@ -2077,7 +2101,7 @@ export default function VistoriaPage() {
                                           <Input
                                             id={`period-meses-${subKey}`}
                                             type="number"
-                                            disabled={isVistoriaConcluida}
+                                            disabled={isReadOnly}
                                             min={1}
                                             max={120}
                                             placeholder="Ex: 1, 3, 6, 12..."
@@ -2100,12 +2124,6 @@ export default function VistoriaPage() {
                                             }}
                                             className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
                                           />
-                                          {form.periodicidadeMeses ? (
-                                            <p className="text-[11px] font-semibold text-[#004B8D]">
-                                              Realizado a cada {form.periodicidadeMeses}{' '}
-                                              {form.periodicidadeMeses === 1 ? 'mês' : 'meses'}
-                                            </p>
-                                          ) : null}
                                         </div>
 
                                         {/* Data da última ART */}
@@ -2119,13 +2137,13 @@ export default function VistoriaPage() {
                                               Data da última ART
                                             </Label>
                                             <span className="text-[10px] text-[#486581] font-semibold bg-white px-1.5 py-0.5 rounded border border-[#D3DFE9]">
-                                              Conforme ART
+                                              Registro
                                             </span>
                                           </div>
                                           <Input
                                             id={`data-art-${subKey}`}
                                             type="date"
-                                            disabled={isVistoriaConcluida}
+                                            disabled={isReadOnly}
                                             value={form.dataUltimaArt || ''}
                                             onChange={(e) => {
                                               handleFieldChange(
@@ -2138,85 +2156,8 @@ export default function VistoriaPage() {
                                             }}
                                             className="border-[#D3DFE9] text-xs h-9 bg-white focus-visible:ring-[#004B8D] disabled:bg-slate-100 disabled:opacity-80"
                                           />
-                                          {form.dataUltimaArt && (
-                                            <p className="text-[11px] text-[#486581]">
-                                              Data informada da ART para cálculo de validade.
-                                            </p>
-                                          )}
                                         </div>
                                       </div>
-
-                                      {/* Alerta / Indicador de validade calculado a partir da ART e periodicidade em meses */}
-                                      {(() => {
-                                        if (!form.dataUltimaArt && !form.periodicidadeMeses) {
-                                          return null
-                                        }
-                                        if (
-                                          form.dataUltimaArt &&
-                                          (!form.periodicidadeMeses || form.periodicidadeMeses <= 0)
-                                        ) {
-                                          return (
-                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
-                                              Informe de quantos em quantos meses o serviço é
-                                              realizado para calcular o vencimento da ART.
-                                            </p>
-                                          )
-                                        }
-                                        if (
-                                          !form.dataUltimaArt &&
-                                          form.periodicidadeMeses &&
-                                          form.periodicidadeMeses > 0
-                                        ) {
-                                          return (
-                                            <p className="text-[11px] text-amber-700 bg-amber-50/70 p-2 rounded border border-amber-200">
-                                              Informe a <strong>Data da última ART</strong> para
-                                              calcular a vigência do serviço.
-                                            </p>
-                                          )
-                                        }
-                                        const calcArt = calcularVencimentoSubitem(
-                                          form.dataUltimoServico || form.dataUltimaVerificacao,
-                                          sub.periodicidadeDias,
-                                          {
-                                            periodicidadeMeses: form.periodicidadeMeses,
-                                            dataUltimaArt: form.dataUltimaArt,
-                                          },
-                                        )
-                                        if (calcArt.status === 'vencido') {
-                                          return (
-                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 p-2 rounded border border-rose-200">
-                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                              <span>
-                                                ART vencida há {calcArt.diasVencido}{' '}
-                                                {calcArt.diasVencido === 1 ? 'dia' : 'dias'}{' '}
-                                                (expirou em {calcArt.dataVencimentoStr})
-                                              </span>
-                                            </div>
-                                          )
-                                        }
-                                        if (calcArt.status === 'vencendo_em_breve') {
-                                          return (
-                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
-                                              <Clock className="w-3.5 h-3.5 shrink-0" />
-                                              <span>
-                                                ART vencendo em breve: restam{' '}
-                                                {calcArt.diasAteVencimento}{' '}
-                                                {calcArt.diasAteVencimento === 1 ? 'dia' : 'dias'}{' '}
-                                                (vence em {calcArt.dataVencimentoStr})
-                                              </span>
-                                            </div>
-                                          )
-                                        }
-                                        return (
-                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
-                                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                            <span>
-                                              ART válida até {calcArt.dataVencimentoStr} (faltam{' '}
-                                              {calcArt.diasAteVencimento} dias)
-                                            </span>
-                                          </div>
-                                        )
-                                      })()}
                                     </div>
                                   )}
                                 </div>
@@ -2226,19 +2167,17 @@ export default function VistoriaPage() {
                                   <PhotoUploadSection
                                     itemId={item?.id}
                                     subitemCode={subCode}
-                                    disabled={isVistoriaConcluida}
+                                    disabled={isReadOnly}
                                     existingPhotos={item?.fotos || []}
                                     pendingFiles={pending}
                                     onAddFiles={(files, metaList) =>
                                       handleAddPendingPhotos(subKey, files, metaList)
                                     }
                                     onRemovePendingFile={(index) =>
-                                      !isVistoriaConcluida &&
-                                      handleRemovePendingPhoto(subKey, index)
+                                      !isReadOnly && handleRemovePendingPhoto(subKey, index)
                                     }
                                     onDeleteExistingPhoto={(filename) =>
-                                      !isVistoriaConcluida &&
-                                      handleDeleteExistingPhoto(subKey, filename)
+                                      !isReadOnly && handleDeleteExistingPhoto(subKey, filename)
                                     }
                                   />
                                 </div>
@@ -2248,15 +2187,19 @@ export default function VistoriaPage() {
                             {/* Subitem Save Action (ou indicador de salvamento automático) */}
                             <div className="flex items-center justify-between pt-1">
                               <span className="text-[11px] text-[#627D98] italic">
-                                {isVistoriaConcluida
-                                  ? 'Item em modo somente leitura (vistoria concluída).'
+                                {isReadOnly
+                                  ? `Item em modo somente leitura (${
+                                      isVistoriaCancelada
+                                        ? 'vistoria cancelada'
+                                        : 'vistoria concluída'
+                                    }).`
                                   : 'As alterações são salvas automaticamente.'}
                               </span>
 
                               <Button
                                 type="button"
                                 onClick={() => handleSaveSubitem(sub, cat)}
-                                disabled={isSaving || isVistoriaConcluida}
+                                disabled={isSaving || isReadOnly}
                                 variant="outline"
                                 className="border-[#004B8D]/30 text-[#004B8D] hover:bg-[#E8F1F8] font-bold text-xs h-7 px-3 gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
                               >
@@ -2423,7 +2366,7 @@ export default function VistoriaPage() {
       />
 
       {/* Caixa Flutuante Discreta de Status do Salvamento Automático */}
-      {selectedHospitalId && !isVistoriaConcluida && (
+      {selectedHospitalId && !isReadOnly && (
         <div
           role="status"
           aria-live="polite"
@@ -2486,6 +2429,40 @@ export default function VistoriaPage() {
               className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold cursor-pointer"
             >
               {isFinalizando ? 'Finalizando...' : 'Sim, Finalizar Vistoria'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Cancelar Vistoria Dialog */}
+      <AlertDialog open={isCancelarDialogOpen} onOpenChange={setIsCancelarDialogOpen}>
+        <AlertDialogContent className="w-[calc(100vw-1.5rem)] sm:w-full max-w-lg border-[#D3DFE9] bg-white rounded-2xl sm:rounded-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-bold text-[#102A43] flex items-center gap-2">
+              <Ban className="w-5 h-5 text-rose-600" />
+              Cancelar Vistoria Técnica
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-[#486581] space-y-2">
+              <p>
+                Tem certeza que deseja cancelar a vistoria de &ldquo;
+                <strong>{selectedHospital?.nome}</strong>&rdquo;?
+              </p>
+              <p className="text-xs text-[#627D98] bg-[#F4F6F9] p-3 rounded-lg border border-[#D3DFE9]">
+                Ao cancelar, a vistoria entra em modo somente leitura e o status passa a ser
+                &ldquo;Cancelada&rdquo;. Você poderá reativá-la posteriormente se necessário.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#D3DFE9] text-[#486581] cursor-pointer">
+              Voltar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelarVistoria}
+              disabled={isCancelando}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer"
+            >
+              {isCancelando ? 'Cancelando...' : 'Sim, Cancelar Vistoria'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

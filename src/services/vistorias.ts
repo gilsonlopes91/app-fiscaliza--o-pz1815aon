@@ -22,7 +22,7 @@ export interface StatusVencimentoItem {
 export interface Vistoria {
   id: string
   hospital: string
-  status?: 'em_andamento' | 'concluida'
+  status?: 'em_andamento' | 'concluida' | 'cancelada'
   observacoes?: string
   created: string
   updated: string
@@ -365,7 +365,27 @@ export const vistoriasService = {
   /**
    * Get or create a vistoria for a given hospital (ensuring 1 vistoria per hospital)
    */
-  async getOrCreateForHospital(hospitalId: string): Promise<Vistoria> {
+  async getOrCreateForHospital(hospitalId: string, fiscalId?: string): Promise<Vistoria> {
+    // Garante que a unidade possua fiscal vinculado antes de persistir vistoria
+    const targetFiscalId = fiscalId || pb.authStore.record?.id
+    if (targetFiscalId && hospitalId) {
+      try {
+        const existingAtrib = await pb.collection('atribuicoes').getList(1, 1, {
+          filter: `hospital = "${hospitalId}"`,
+        })
+        if (existingAtrib.items.length === 0) {
+          await pb.collection('atribuicoes').create({
+            fiscal: targetFiscalId,
+            hospital: hospitalId,
+            created_by: targetFiscalId,
+            observacao: 'Atribuição automática vinculada ao checklist de vistoria',
+          })
+        }
+      } catch (err) {
+        console.warn('Erro ao garantir atribuição em getOrCreateForHospital:', err)
+      }
+    }
+
     const existing = await this.getByHospitalId(hospitalId)
     if (existing) {
       return existing
@@ -407,7 +427,31 @@ export const vistoriasService = {
   /**
    * Create a new vistoria for a hospital
    */
-  async createVistoria(hospitalId: string, observacoes?: string): Promise<Vistoria> {
+  async createVistoria(
+    hospitalId: string,
+    observacoes?: string,
+    fiscalId?: string,
+  ): Promise<Vistoria> {
+    // Garante que a unidade possua fiscal vinculado antes de criar vistoria
+    const targetFiscalId = fiscalId || pb.authStore.record?.id
+    if (targetFiscalId && hospitalId) {
+      try {
+        const existingAtrib = await pb.collection('atribuicoes').getList(1, 1, {
+          filter: `hospital = "${hospitalId}"`,
+        })
+        if (existingAtrib.items.length === 0) {
+          await pb.collection('atribuicoes').create({
+            fiscal: targetFiscalId,
+            hospital: hospitalId,
+            created_by: targetFiscalId,
+            observacao: 'Atribuição automática vinculada ao checklist de vistoria',
+          })
+        }
+      } catch (err) {
+        console.warn('Erro ao garantir atribuição em createVistoria:', err)
+      }
+    }
+
     return await pb.collection('vistorias').create<Vistoria>(
       {
         hospital: hospitalId,
@@ -628,11 +672,11 @@ export const vistoriasService = {
   },
 
   /**
-   * Update the status of a vistoria ('em_andamento' | 'concluida')
+   * Update the status of a vistoria ('em_andamento' | 'concluida' | 'cancelada')
    */
   async updateStatus(
     id: string,
-    status: 'em_andamento' | 'concluida',
+    status: 'em_andamento' | 'concluida' | 'cancelada',
     observacoes?: string,
   ): Promise<Vistoria> {
     const payload: Record<string, unknown> = { status }
@@ -642,6 +686,20 @@ export const vistoriasService = {
     return await pb.collection('vistorias').update<Vistoria>(id, payload, {
       expand: 'hospital',
     })
+  },
+
+  /**
+   * Cancelar vistoria
+   */
+  async cancelarVistoria(id: string, observacoes?: string): Promise<Vistoria> {
+    return await this.updateStatus(id, 'cancelada', observacoes)
+  },
+
+  /**
+   * Reativar vistoria cancelada (volta para em_andamento)
+   */
+  async reativarVistoria(id: string): Promise<Vistoria> {
+    return await this.updateStatus(id, 'em_andamento')
   },
 
   /**

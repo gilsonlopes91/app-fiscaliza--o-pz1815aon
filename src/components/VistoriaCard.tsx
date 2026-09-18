@@ -11,6 +11,7 @@ import {
   ClipboardList,
   FileText,
   Loader2,
+  Ban,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,12 +66,16 @@ export function VistoriaCard({
           <div className="flex items-center gap-3">
             <div
               className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors duration-200 shrink-0 shadow-xs ${
-                vistoria.status === 'concluida'
-                  ? 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white'
-                  : 'bg-[#E8F1F8] group-hover:bg-[#004B8D] text-[#004B8D] group-hover:text-white'
+                vistoria.status === 'cancelada'
+                  ? 'bg-slate-100 text-slate-700 group-hover:bg-slate-600 group-hover:text-white'
+                  : vistoria.status === 'concluida'
+                    ? 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white'
+                    : 'bg-[#E8F1F8] group-hover:bg-[#004B8D] text-[#004B8D] group-hover:text-white'
               }`}
             >
-              {vistoria.status === 'concluida' ? (
+              {vistoria.status === 'cancelada' ? (
+                <Ban className="w-5 h-5 stroke-[2]" />
+              ) : vistoria.status === 'concluida' ? (
                 <CheckCircle2 className="w-5 h-5 stroke-[2]" />
               ) : (
                 <ClipboardList className="w-5 h-5 stroke-[2]" />
@@ -79,12 +84,18 @@ export function VistoriaCard({
             <div>
               <span
                 className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded inline-flex items-center gap-1 ${
-                  vistoria.status === 'concluida'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-[#E8F1F8] text-[#004B8D]'
+                  vistoria.status === 'cancelada'
+                    ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                    : vistoria.status === 'concluida'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-[#E8F1F8] text-[#004B8D]'
                 }`}
               >
-                {vistoria.status === 'concluida' ? 'Concluída' : 'Em Andamento'}
+                {vistoria.status === 'cancelada'
+                  ? 'Cancelada'
+                  : vistoria.status === 'concluida'
+                    ? 'Concluída'
+                    : 'Em Andamento'}
               </span>
               <div className="text-xs text-[#486581] flex items-center gap-1 mt-1">
                 <Calendar className="w-3 h-3 text-[#004B8D]" />

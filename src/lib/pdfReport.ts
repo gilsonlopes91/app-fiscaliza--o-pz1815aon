@@ -218,7 +218,13 @@ export async function generateVistoriaPdf(params: GeneratePdfParams): Promise<st
   doc.setFont('helvetica', 'bold')
   doc.text('Status:', col2X, cursorY + 17)
   doc.setFont('helvetica', 'normal')
-  doc.text(vistoria.status === 'concluida' ? 'Concluída' : 'Em Andamento', col2X + 27, cursorY + 17)
+  const statusLabel =
+    vistoria.status === 'cancelada'
+      ? 'Cancelada'
+      : vistoria.status === 'concluida'
+        ? 'Concluída'
+        : 'Em Andamento'
+  doc.text(statusLabel, col2X + 27, cursorY + 17)
 
   doc.setFont('helvetica', 'bold')
   doc.text('Fiscal Responsável:', col2X, cursorY + 22)

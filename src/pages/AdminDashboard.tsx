@@ -22,6 +22,8 @@ import {
   Check,
   TrendingUp,
   ClipboardList,
+  Ban,
+  RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -100,13 +102,9 @@ export default function AdminDashboard() {
   const [atribuicoes, setAtribuicoes] = useState<Atribuicao[]>([])
   const [details, setDetails] = useState<AtribuicaoDetail[]>([])
 
-  // Modal de Itens com Vencimento
-  const [isVencimentoModalOpen, setIsVencimentoModalOpen] = useState(false)
-  const [vencimentoTab, setVencimentoTab] = useState<'todos' | 'vencidos' | 'vencendo'>('todos')
-
   // Filters & State
   const [selectedFiscalFiltro, setSelectedFiscalFiltro] = useState<string>('todos')
-  const [selectedStatusFiltro, setSelectedStatusFiltro] = useState<string>('todos') // todos | concluidas | pendentes
+  const [selectedStatusFiltro, setSelectedStatusFiltro] = useState<string>('todos') // todos | concluidas | pendentes | canceladas
   const [selectedTipoFiltro, setSelectedTipoFiltro] = useState<string>('todos')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -115,8 +113,14 @@ export default function AdminDashboard() {
   const [modalPreFiscalId, setModalPreFiscalId] = useState<string | undefined>()
   const [modalPreHospitalId, setModalPreHospitalId] = useState<string | undefined>()
   const [atribuicaoToDelete, setAtribuicaoToDelete] = useState<AtribuicaoDetail | null>(null)
+  const [vistoriaToCancel, setVistoriaToCancel] = useState<{ id: string; nome: string } | null>(
+    null,
+  )
+  const [isCancelingVistoria, setIsCancelingVistoria] = useState(false)
+  const [isReactivatingVistoria, setIsReactivatingVistoria] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [selectedHospitalForModal, setSelectedHospitalForModal] = useState<Hospital | null>(null)
+  const [selectedVistoriaIdForModal, setSelectedVistoriaIdForModal] = useState<string | undefined>()
   const [isIniciarModalOpen, setIsIniciarModalOpen] = useState(false)
 
   const loadData = useCallback(async () => {
@@ -148,13 +152,25 @@ export default function AdminDashboard() {
       setTipos(tiposList)
       setAllCategorias(catList)
       setAllSubitens(subList)
-      setAllVistorias(vistoriasList)
-      setAllVistoriaItens(itensList)
-      setAtribuicoes(atribList)
 
-      // Compute details
+      // Atribuições válidas com fiscal vinculado e hospital ativo
+      const validAtribList = atribList.filter(
+        (a) =>
+          !!a.fiscal &&
+          !!a.hospital &&
+          (a.expand?.fiscal || approvedUsers.some((u) => u.id === a.fiscal)),
+      )
+      setAtribuicoes(validAtribList)
+
+      // Vistorias com fiscal vinculado via atribuição
+      const assignedHospitalIds = new Set(validAtribList.map((a) => a.hospital))
+      const validVistoriasList = vistoriasList.filter((v) => assignedHospitalIds.has(v.hospital))
+      setAllVistorias(validVistoriasList)
+      setAllVistoriaItens(itensList)
+
+      // Compute details somente para atribuições válidas
       const computedDetails = await atribuicoesService.computeAtribuicoesProgress(
-        atribList,
+        validAtribList,
         catList,
       )
       setDetails(computedDetails)
@@ -175,183 +191,27 @@ export default function AdminDashboard() {
     loadData()
   }, [loadData])
 
-  // Estrutura detalhada de itens com alerta de vencimento em todos os empreendimentos
-  interface ItemAlertaVencimento {
-    itemId: string
-    vistoriaId: string
-    hospitalId: string
-    hospitalNome: string
-    hospitalTipo: string
-    hospitalMunicipio: string
-    hospitalCnes: string
-    subitemDescricao: string
-    subitemCodigo: string
-    categoriaNome: string
-    dataUltimoServicoStr: string
-    periodicidadeDias: number
-    periodicidadeMeses?: number | null
-    dataUltimaArtStr?: string | null
-    status: 'vencido' | 'vencendo_em_breve'
-    diasAteVencimento: number | null
-    diasVencido: number | null
-    dataVencimentoStr: string | null
-    prestadorServico?: string
-    numeroArt?: string
-  }
-
-  // Agrupa e calcula vencimento para todos os subitens preenchidos
-  const { itensComAlerta, vencimentoStats } = useMemo(() => {
-    // Mapa de subitens por ID para consulta rápida
-    const subitensMap = new Map<string, SubitemChecklist>()
-    allSubitens.forEach((s) => subitensMap.set(s.id, s))
-
-    // Mapa de hospitais por ID
-    const hospitaisMap = new Map<string, Hospital>()
-    hospitais.forEach((h) => hospitaisMap.set(h.id, h))
-
-    // Mapa de vistorias por ID
-    const vistoriasMap = new Map<string, Vistoria>()
-    allVistorias.forEach((v) => vistoriasMap.set(v.id, v))
-
-    // Mapa de categorias por ID
-    const categoriasMap = new Map<string, CategoriaVistoria>()
-    allCategorias.forEach((c) => categoriasMap.set(c.id, c))
-
-    const list: ItemAlertaVencimento[] = []
-    let vencidos = 0
-    let vencendo = 0
-
-    allVistoriaItens.forEach((item) => {
-      // Ignora itens onde o hospital marcou "Não" ou "Não se aplica"
-      if (item.possuiSistema === 'Não' || item.possuiSistema === 'Não se aplica') {
-        return
-      }
-
-      // Procura subitem correspondente
-      const sub = item.subitem ? subitensMap.get(item.subitem) : null
-      const cat = item.categoria ? categoriasMap.get(item.categoria) : null
-
-      // Periodicidade em dias (do subitem ou herdada da categoria)
-      const periodicidade =
-        sub?.periodicidadeDias && sub.periodicidadeDias > 0
-          ? sub.periodicidadeDias
-          : cat?.periodicidadeDias && cat.periodicidadeDias > 0
-            ? cat.periodicidadeDias
-            : 0
-
-      const dataServico = item.dataUltimoServico || item.dataUltimaVerificacao
-      const dataArt = item.dataUltimaArt
-      const periodMeses = item.periodicidadeMeses
-
-      // Se não tem periodicidade em dias e nem periodicidade em meses válida, não há o que calcular
-      const temPeriodicidade =
-        periodicidade > 0 || (periodMeses !== undefined && periodMeses !== null && periodMeses > 0)
-      if (!temPeriodicidade) {
-        return
-      }
-
-      // Se não tem nem data do último serviço nem data da ART, não calcula
-      if (!dataServico && !dataArt) {
-        return
-      }
-
-      const calc = calcularVencimentoSubitem(dataServico, periodicidade, {
-        periodicidadeMeses: periodMeses,
-        dataUltimaArt: dataArt,
-      })
-
-      if (calc.status === 'vencido' || calc.status === 'vencendo_em_breve') {
-        // Obter dados do hospital
-        const vistoria = item.vistoria ? vistoriasMap.get(item.vistoria) : null
-        const hospId = item.hospital || vistoria?.hospital || ''
-        const hosp = hospId ? hospitaisMap.get(hospId) : null
-
-        let dataFormatada = '—'
-        if (dataServico) {
-          const rawDate = dataServico.split('T')[0]
-          const [y, m, d] = rawDate.split('-')
-          dataFormatada = y && m && d ? `${d}/${m}/${y}` : rawDate
-        }
-
-        let dataArtFormatada: string | null = null
-        if (dataArt) {
-          const rawArt = dataArt.split('T')[0]
-          const [ay, am, ad] = rawArt.split('-')
-          dataArtFormatada = ay && am && ad ? `${ad}/${am}/${ay}` : rawArt
-        }
-
-        if (calc.status === 'vencido') vencidos++
-        if (calc.status === 'vencendo_em_breve') vencendo++
-
-        list.push({
-          itemId: item.id,
-          vistoriaId: item.vistoria || '',
-          hospitalId: hospId,
-          hospitalNome: hosp?.nome || 'Estabelecimento sem nome',
-          hospitalTipo: hosp?.tipo || 'Hospital',
-          hospitalMunicipio: hosp?.municipio || 'PI',
-          hospitalCnes: hosp?.cnes || '',
-          subitemDescricao: sub?.descricao || cat?.nome || 'Subitem do checklist',
-          subitemCodigo: sub?.codigo || '',
-          categoriaNome: cat?.nome || '',
-          dataUltimoServicoStr: dataFormatada,
-          periodicidadeDias: periodicidade,
-          periodicidadeMeses: periodMeses,
-          dataUltimaArtStr: dataArtFormatada,
-          status: calc.status,
-          diasAteVencimento: calc.diasAteVencimento,
-          diasVencido: calc.diasVencido,
-          dataVencimentoStr: calc.dataVencimentoStr,
-          prestadorServico: item.prestadorServico,
-          numeroArt: item.numeroArt,
-        })
-      }
-    })
-
-    // Ordenar: primeiro os mais vencidos (maior atraso), depois os mais próximos do vencimento
-    list.sort((a, b) => {
-      if (a.status === 'vencido' && b.status !== 'vencido') return -1
-      if (a.status !== 'vencido' && b.status === 'vencido') return 1
-      const diasA = a.diasAteVencimento ?? 0
-      const diasB = b.diasAteVencimento ?? 0
-      return diasA - diasB
-    })
-
-    return {
-      itensComAlerta: list,
-      vencimentoStats: {
-        totalAlertas: vencidos + vencendo,
-        vencidosCount: vencidos,
-        vencendoEmBreveCount: vencendo,
-      },
-    }
-  }, [allVistoriaItens, allSubitens, allCategorias, allVistorias, hospitais])
-
-  // Itens filtrados para o modal de vencimentos
-  const modalFilteredItens = useMemo(() => {
-    if (vencimentoTab === 'vencidos') {
-      return itensComAlerta.filter((i) => i.status === 'vencido')
-    }
-    if (vencimentoTab === 'vencendo') {
-      return itensComAlerta.filter((i) => i.status === 'vencendo_em_breve')
-    }
-    return itensComAlerta
-  }, [itensComAlerta, vencimentoTab])
-
-  // Overall statistics (unindo atribuições e status global das vistorias registradas)
+  // Overall statistics (unindo atribuições e status global das vistorias registradas com fiscal)
   const stats = useMemo(() => {
     const totalAtribuicoes = details.length
-    const concluidas = details.filter((d) => d.isConcluida).length
-    const pendentes = totalAtribuicoes - concluidas
+    const concluidas = details.filter(
+      (d) => d.isConcluida && d.vistoria?.status !== 'cancelada',
+    ).length
+    const pendentes = details.filter(
+      (d) => !d.isConcluida && d.vistoria?.status !== 'cancelada',
+    ).length
     const percentualGeral =
       totalAtribuicoes > 0 ? Math.round((concluidas / totalAtribuicoes) * 100) : 0
 
     const fiscaisComAtribuicaoCount = new Set(details.map((d) => d.atribuicao.fiscal)).size
 
-    // Contagem direta da base de vistorias
+    // Contagem direta das vistorias vinculadas a fiscais
     const totalVistoriasRegistradas = allVistorias.length
     const vistoriasConcluidasCount = allVistorias.filter((v) => v.status === 'concluida').length
-    const vistoriasEmAndamentoCount = allVistorias.filter((v) => v.status !== 'concluida').length
+    const vistoriasCanceladasCount = allVistorias.filter((v) => v.status === 'cancelada').length
+    const vistoriasEmAndamentoCount = allVistorias.filter(
+      (v) => v.status !== 'concluida' && v.status !== 'cancelada',
+    ).length
 
     return {
       totalAtribuicoes,
@@ -363,6 +223,7 @@ export default function AdminDashboard() {
       totalEmpreendimentos: hospitais.length,
       totalVistoriasRegistradas,
       vistoriasConcluidasCount,
+      vistoriasCanceladasCount,
       vistoriasEmAndamentoCount,
     }
   }, [details, fiscais, hospitais, allVistorias])
@@ -395,8 +256,15 @@ export default function AdminDashboard() {
       }
 
       // Status filter
-      if (selectedStatusFiltro === 'concluidas' && !d.isConcluida) return false
-      if (selectedStatusFiltro === 'pendentes' && d.isConcluida) return false
+      if (selectedStatusFiltro === 'canceladas') {
+        if (d.vistoria?.status !== 'cancelada') return false
+      } else if (selectedStatusFiltro === 'concluidas') {
+        if (d.vistoria?.status === 'cancelada') return false
+        if (!d.isConcluida) return false
+      } else if (selectedStatusFiltro === 'pendentes') {
+        if (d.vistoria?.status === 'cancelada') return false
+        if (d.isConcluida) return false
+      }
 
       // Tipo filter
       if (selectedTipoFiltro !== 'todos') {
@@ -423,6 +291,7 @@ export default function AdminDashboard() {
     const hosp = detail.hospital
     if (!hosp) return
     setSelectedHospitalForModal(hosp)
+    setSelectedVistoriaIdForModal(detail.vistoria?.id)
     setIsIniciarModalOpen(true)
   }
 
@@ -436,11 +305,22 @@ export default function AdminDashboard() {
         ),
       )
 
-      // Cria ou recupera vistoria ativa para o hospital
-      const vistoria = await vistoriasService.getOrCreateForHospital(updatedHospital.id)
+      // Usa a vistoria existente se já conhecida, senão recupera ou cria vinculando ao fiscal
+      let vistoria = null
+      if (selectedVistoriaIdForModal) {
+        try {
+          vistoria = await vistoriasService.getById(selectedVistoriaIdForModal)
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+      if (!vistoria) {
+        vistoria = await vistoriasService.getOrCreateForHospital(updatedHospital.id)
+      }
 
       setIsIniciarModalOpen(false)
       setSelectedHospitalForModal(null)
+      setSelectedVistoriaIdForModal(undefined)
 
       toast({
         title: 'Vistoria carregada',
@@ -455,6 +335,52 @@ export default function AdminDashboard() {
         description: 'Não foi possível carregar ou criar a vistoria para este hospital.',
         variant: 'destructive',
       })
+    }
+  }
+
+  // Cancelar vistoria pelo admin
+  const handleConfirmCancelarVistoria = async () => {
+    if (!vistoriaToCancel) return
+    try {
+      setIsCancelingVistoria(true)
+      await vistoriasService.cancelarVistoria(vistoriaToCancel.id)
+      toast({
+        title: 'Vistoria cancelada',
+        description: `A vistoria de "${vistoriaToCancel.nome}" foi cancelada.`,
+      })
+      setVistoriaToCancel(null)
+      await loadData()
+    } catch (err) {
+      console.error('Erro ao cancelar vistoria:', err)
+      toast({
+        title: 'Erro ao cancelar',
+        description: 'Não foi possível cancelar a vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsCancelingVistoria(false)
+    }
+  }
+
+  // Reativar vistoria pelo admin
+  const handleReativarVistoria = async (vistoriaId: string, hospNome: string) => {
+    try {
+      setIsReactivatingVistoria(true)
+      await vistoriasService.reativarVistoria(vistoriaId)
+      toast({
+        title: 'Vistoria reativada',
+        description: `A vistoria de "${hospNome}" voltou ao status em andamento.`,
+      })
+      await loadData()
+    } catch (err) {
+      console.error('Erro ao reativar vistoria:', err)
+      toast({
+        title: 'Erro ao reativar',
+        description: 'Não foi possível reativar a vistoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsReactivatingVistoria(false)
     }
   }
 
@@ -584,64 +510,25 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* NOVO CARD: Alerta de Vencimento de Serviços (Clicável) */}
+        {/* CARD: Canceladas (Substitui Alerta Prazos conforme requisito) */}
         <button
           type="button"
-          onClick={() => {
-            setVencimentoTab('todos')
-            setIsVencimentoModalOpen(true)
-          }}
-          className={`text-left p-3.5 sm:p-5 rounded-2xl border shadow-xs space-y-1.5 sm:space-y-2 cursor-pointer transition-all active:scale-[0.99] ${
-            vencimentoStats.totalAlertas > 0
-              ? vencimentoStats.vencidosCount > 0
-                ? 'bg-rose-50/80 border-rose-300 hover:border-rose-400 hover:shadow-md'
-                : 'bg-amber-50/80 border-amber-300 hover:border-amber-400 hover:shadow-md'
-              : 'bg-white border-[#D3DFE9] hover:border-[#004B8D]/40'
-          }`}
+          onClick={() => setSelectedStatusFiltro('canceladas')}
+          className="text-left p-3.5 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/70 shadow-xs space-y-1.5 sm:space-y-2 cursor-pointer transition-all active:scale-[0.99]"
+          title="Filtrar por vistorias canceladas"
         >
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold uppercase tracking-wider">
-            <span
-              className={`truncate ${
-                vencimentoStats.vencidosCount > 0
-                  ? 'text-rose-800'
-                  : vencimentoStats.vencendoEmBreveCount > 0
-                    ? 'text-amber-800'
-                    : 'text-[#486581]'
-              }`}
-            >
-              Alerta Prazos
-            </span>
-            <AlertTriangle
-              className={`w-4 h-4 shrink-0 ${
-                vencimentoStats.vencidosCount > 0
-                  ? 'text-rose-600 animate-pulse'
-                  : vencimentoStats.vencendoEmBreveCount > 0
-                    ? 'text-amber-600'
-                    : 'text-[#627D98]'
-              }`}
-            />
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
+            <span className="truncate">Canceladas</span>
+            <Ban className="w-4 h-4 text-slate-500 shrink-0" />
           </div>
           <div className="flex items-baseline gap-1.5 sm:gap-2">
-            <span
-              className={`text-xl sm:text-3xl font-extrabold ${
-                vencimentoStats.vencidosCount > 0
-                  ? 'text-rose-900'
-                  : vencimentoStats.vencendoEmBreveCount > 0
-                    ? 'text-amber-900'
-                    : 'text-[#102A43]'
-              }`}
-            >
-              {vencimentoStats.totalAlertas}
+            <span className="text-xl sm:text-3xl font-extrabold text-slate-800">
+              {stats.vistoriasCanceladasCount}
             </span>
-            <span className="text-[11px] sm:text-xs font-bold text-[#627D98]">itens</span>
+            <span className="text-[11px] sm:text-xs font-bold text-slate-500">vistorias</span>
           </div>
-          <div className="flex items-center gap-1 flex-wrap pt-0.5">
-            <span className="text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-              {vencimentoStats.vencidosCount} vencidos
-            </span>
-            <span className="text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-              {vencimentoStats.vencendoEmBreveCount} a vencer
-            </span>
+          <div className="text-[10px] sm:text-[11px] text-slate-600 truncate">
+            Checklists anulados
           </div>
         </button>
 
@@ -846,6 +733,7 @@ export default function AdminDashboard() {
               <SelectItem value="todos">Todos os status</SelectItem>
               <SelectItem value="pendentes">Apenas Pendentes</SelectItem>
               <SelectItem value="concluidas">Apenas Concluídas</SelectItem>
+              <SelectItem value="canceladas">Apenas Canceladas</SelectItem>
             </SelectContent>
           </Select>
 
@@ -927,7 +815,12 @@ export default function AdminDashboard() {
                       <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold shrink-0">
                         {hospTipo}
                       </Badge>
-                      {detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
+                      {detail.vistoria?.status === 'cancelada' ? (
+                        <Badge className="bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold gap-1 shrink-0">
+                          <Ban className="w-3 h-3 text-slate-500" />
+                          Cancelada
+                        </Badge>
+                      ) : detail.vistoria?.status === 'concluida' || detail.isConcluida ? (
                         <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold gap-1 shrink-0">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           Concluída
@@ -999,10 +892,46 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => handleIniciarFiscalizacaoClick(detail)}
                       className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white font-bold text-xs h-9 sm:h-8 px-3 cursor-pointer shadow-xs gap-1.5"
+                      title="Abrir checklist técnico da vistoria desta unidade"
                     >
                       <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
                       Iniciar Fiscalização
                     </Button>
+
+                    {detail.vistoria?.status === 'cancelada' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isReactivatingVistoria}
+                        onClick={() =>
+                          handleReativarVistoria(
+                            detail.vistoria!.id,
+                            detail.hospital?.nome || 'Unidade',
+                          )
+                        }
+                        className="h-9 sm:h-8 px-2.5 text-xs border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 cursor-pointer shrink-0 gap-1"
+                        title="Reativar vistoria cancelada"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Reativar</span>
+                      </Button>
+                    ) : detail.vistoria ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setVistoriaToCancel({
+                            id: detail.vistoria!.id,
+                            nome: detail.hospital?.nome || 'Unidade',
+                          })
+                        }
+                        className="h-9 sm:h-8 px-2 text-xs text-rose-700 hover:bg-rose-50 cursor-pointer shrink-0 gap-1"
+                        title="Cancelar vistoria desta unidade"
+                      >
+                        <Ban className="w-3.5 h-3.5 text-rose-600" />
+                        <span className="hidden sm:inline">Cancelar</span>
+                      </Button>
+                    ) : null}
 
                     <Button
                       size="sm"
@@ -1039,12 +968,52 @@ export default function AdminDashboard() {
           open={isIniciarModalOpen}
           onOpenChange={(open) => {
             setIsIniciarModalOpen(open)
-            if (!open) setSelectedHospitalForModal(null)
+            if (!open) {
+              setSelectedHospitalForModal(null)
+              setSelectedVistoriaIdForModal(undefined)
+            }
           }}
           hospital={selectedHospitalForModal}
           onConfirmAndContinue={handleConfirmPreVistoria}
         />
       )}
+
+      {/* Confirm Cancelar Vistoria Dialog */}
+      <AlertDialog
+        open={!!vistoriaToCancel}
+        onOpenChange={(open) => !open && setVistoriaToCancel(null)}
+      >
+        <AlertDialogContent className="w-[calc(100vw-1.5rem)] sm:w-full max-w-lg border-[#D3DFE9] bg-white rounded-2xl sm:rounded-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-bold text-[#102A43] flex items-center gap-2">
+              <Ban className="w-5 h-5 text-rose-600" />
+              Cancelar Vistoria
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-[#486581] space-y-2">
+              <p>
+                Tem certeza que deseja cancelar a vistoria de &ldquo;
+                <strong>{vistoriaToCancel?.nome}</strong>&rdquo;?
+              </p>
+              <p className="text-xs text-[#627D98] bg-[#F4F6F9] p-3 rounded-lg border border-[#D3DFE9]">
+                Ao cancelar, a vistoria entra em modo somente leitura e o status passa a ser
+                &ldquo;Cancelada&rdquo;. Você poderá reativá-la posteriormente se necessário.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#D3DFE9] text-[#486581] cursor-pointer">
+              Voltar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancelarVistoria}
+              disabled={isCancelingVistoria}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer"
+            >
+              {isCancelingVistoria ? 'Cancelando...' : 'Sim, Cancelar Vistoria'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Confirm Delete Atribuição Dialog */}
       <AlertDialog
@@ -1077,233 +1046,6 @@ export default function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Modal / Dialog de Alerta de Vencimento de Prazos */}
-      <Dialog open={isVencimentoModalOpen} onOpenChange={setIsVencimentoModalOpen}>
-        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border-[#D3DFE9] rounded-2xl">
-          <DialogHeader className="p-6 pb-4 border-b border-[#D3DFE9] bg-slate-50/50">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-1">
-                <DialogTitle className="text-lg font-bold text-[#102A43] flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-rose-600" />
-                  Prazos e Vencimentos de Serviços ({vencimentoStats.totalAlertas})
-                </DialogTitle>
-                <DialogDescription className="text-xs text-[#486581]">
-                  Subitens de checklist com periodicidade definida que estão vencidos ou vencendo em
-                  até 30 dias nos estabelecimentos fiscalizados.
-                </DialogDescription>
-              </div>
-            </div>
-
-            {/* Abas de filtro: Todos / Vencidos / Vencendo */}
-            <div className="flex items-center gap-2 pt-3">
-              <button
-                type="button"
-                onClick={() => setVencimentoTab('todos')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  vencimentoTab === 'todos'
-                    ? 'bg-[#004B8D] text-white shadow-xs'
-                    : 'bg-white text-[#486581] hover:bg-slate-100 border border-[#D3DFE9]'
-                }`}
-              >
-                Todos ({vencimentoStats.totalAlertas})
-              </button>
-              <button
-                type="button"
-                onClick={() => setVencimentoTab('vencidos')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  vencimentoTab === 'vencidos'
-                    ? 'bg-rose-600 text-white shadow-xs'
-                    : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-rose-600" />
-                Vencidos ({vencimentoStats.vencidosCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setVencimentoTab('vencendo')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  vencimentoTab === 'vencendo'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-amber-600" />
-                Vencendo em breve ({vencimentoStats.vencendoEmBreveCount})
-              </button>
-            </div>
-          </DialogHeader>
-
-          {/* Lista de Itens com Scroll */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-3">
-            {modalFilteredItens.length === 0 ? (
-              <div className="p-10 text-center space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                <h4 className="text-sm font-bold text-[#102A43]">
-                  Nenhum item com prazo pendente neste filtro!
-                </h4>
-                <p className="text-xs text-[#627D98] max-w-sm mx-auto">
-                  Todos os serviços com periodicidade informada estão regulares ou não foram
-                  preenchidos com data expirada.
-                </p>
-              </div>
-            ) : (
-              modalFilteredItens.map((alerta) => (
-                <div
-                  key={alerta.itemId}
-                  className={`p-4 rounded-xl border transition-all space-y-2.5 ${
-                    alerta.status === 'vencido'
-                      ? 'bg-rose-50/40 border-rose-200 hover:border-rose-300'
-                      : 'bg-amber-50/40 border-amber-200 hover:border-amber-300'
-                  }`}
-                >
-                  {/* Linha Superior: Estabelecimento e Tag de Vencimento */}
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 border-b border-[#D3DFE9]/60 pb-2.5">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-[#004B8D] shrink-0" />
-                        <h4 className="font-bold text-sm text-[#102A43]">{alerta.hospitalNome}</h4>
-                        <Badge className="bg-[#E8F1F8] text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold">
-                          {alerta.hospitalTipo}
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-[#627D98]">
-                        Município:{' '}
-                        <strong className="text-[#102A43]">{alerta.hospitalMunicipio}</strong> •
-                        CNES: {alerta.hospitalCnes || '—'}
-                      </p>
-                    </div>
-
-                    <div className="shrink-0 self-start sm:self-auto">
-                      {alerta.status === 'vencido' ? (
-                        <Badge className="bg-rose-600 text-white font-bold text-xs gap-1 shadow-2xs">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          Vencido há {alerta.diasVencido}{' '}
-                          {alerta.diasVencido === 1 ? 'dia' : 'dias'}
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-amber-600 text-white font-bold text-xs gap-1 shadow-2xs">
-                          <Clock className="w-3.5 h-3.5" />
-                          Vence em {alerta.diasAteVencimento}{' '}
-                          {alerta.diasAteVencimento === 1 ? 'dia' : 'dias'}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  {/* Detalhes do Subitem */}
-                  <div className="space-y-1 text-xs">
-                    <div className="flex items-baseline gap-2">
-                      {alerta.subitemCodigo && (
-                        <span className="font-mono font-bold text-[#004B8D] bg-white px-2 py-0.5 rounded border border-[#004B8D]/20 shrink-0">
-                          {alerta.subitemCodigo}
-                        </span>
-                      )}
-                      <span className="font-semibold text-[#102A43] leading-snug">
-                        {alerta.subitemDescricao}
-                      </span>
-                    </div>
-
-                    {alerta.categoriaNome && (
-                      <p className="text-[11px] text-[#627D98]">
-                        Grupo / Categoria: <strong>{alerta.categoriaNome}</strong>
-                      </p>
-                    )}
-                  </div>
-                  {/* Informações da Data e Prazo */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs bg-white p-2.5 rounded-lg border border-[#D3DFE9]/80">
-                    <div>
-                      <span className="text-[10px] text-[#627D98] block">
-                        Data do Último Serviço:
-                      </span>
-                      <strong className="text-[#102A43] flex items-center gap-1 font-mono text-[11px] sm:text-xs">
-                        <Calendar className="w-3 h-3 text-[#004B8D] shrink-0" />
-                        {alerta.dataUltimoServicoStr}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-[#627D98] block">Data da Última ART:</span>
-                      <strong className="text-[#004B8D] flex items-center gap-1 font-mono text-[11px] sm:text-xs">
-                        <Calendar className="w-3 h-3 text-[#004B8D] shrink-0" />
-                        {alerta.dataUltimaArtStr || '—'}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-[#627D98] block">Periodicidade:</span>
-                      <strong className="text-[#102A43] text-[11px] sm:text-xs">
-                        {alerta.periodicidadeMeses
-                          ? `${alerta.periodicidadeMeses} ${alerta.periodicidadeMeses === 1 ? 'mês' : 'meses'}`
-                          : alerta.periodicidadeDias > 0
-                            ? `${alerta.periodicidadeDias} dias`
-                            : '—'}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-[#627D98] block">
-                        Data Limite de Validade:
-                      </span>
-                      <strong
-                        className={`font-mono text-[11px] sm:text-xs ${
-                          alerta.status === 'vencido' ? 'text-rose-700' : 'text-amber-800'
-                        }`}
-                      >
-                        {alerta.dataVencimentoStr}
-                      </strong>
-                    </div>
-                  </div>
-                  {/* Botão de Ação: Abrir Checklist da Vistoria */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-                    <div className="text-[11px] text-[#627D98] truncate max-w-full">
-                      {alerta.prestadorServico && (
-                        <span className="truncate">
-                          Prestador: <strong>{alerta.prestadorServico}</strong>
-                        </span>
-                      )}
-                      {alerta.numeroArt && (
-                        <span className="ml-2 font-mono">ART: {alerta.numeroArt}</span>
-                      )}
-                    </div>
-
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setIsVencimentoModalOpen(false)
-                        navigate(
-                          `/vistoria?hospitalId=${alerta.hospitalId}${
-                            alerta.vistoriaId ? `&vistoriaId=${alerta.vistoriaId}` : ''
-                          }`,
-                        )
-                      }}
-                      className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs h-8 sm:h-7 px-3 font-semibold cursor-pointer gap-1 shrink-0 self-stretch sm:self-auto"
-                    >
-                      <ClipboardCheck className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                      Ver no Checklist
-                    </Button>
-                  </div>{' '}
-                </div>
-              ))
-            )}
-          </div>
-
-          <DialogFooter className="p-4 border-t border-[#D3DFE9] bg-slate-50/50 flex sm:justify-between items-center">
-            <span className="text-xs text-[#627D98]">
-              {vencimentoStats.vencidosCount} vencido(s) • {vencimentoStats.vencendoEmBreveCount}{' '}
-              vencendo em ≤ 30 dias
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsVencimentoModalOpen(false)}
-              className="border-[#D3DFE9] text-[#486581] cursor-pointer"
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
