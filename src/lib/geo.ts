@@ -151,21 +151,25 @@ export function coordenadasDoRegistro(
 }
 
 /**
- * Link do Google Maps.
+ * Link do Google Maps, na forma de CAMINHO (/maps/place/lat,lng) em vez de
+ * query string.
  *
- * Usamos o host "maps.google.com" (e não "www.google.com/maps") porque redes
- * corporativas — inclusive a do CREA-PI — costumam bloquear www.google.com por
- * política, derrubando o link com ERR_BLOCKED_BY_RESPONSE. A forma "?q=lat,lng"
- * é a mais compatível: funciona no navegador, no app do Android/iOS e em
- * webviews antigas.
+ * Motivo: o proxy da rede do CREA-PI bloqueia URLs de google.com que contenham
+ * parâmetros de busca ("?q=" ou "/search/?query="), devolvendo
+ * ERR_BLOCKED_BY_RESPONSE — é o filtro que força SafeSearch. Já as URLs em
+ * formato de caminho (/maps/place/... e /maps/dir/...) passam normalmente.
+ * Essa forma também abre direto no app do Google Maps no Android e no iOS.
  */
 export function googleMapsUrl(lat: number, lng: number): string {
-  return `https://maps.google.com/?q=${lat},${lng}`
+  return `https://www.google.com/maps/place/${lat},${lng}/@${lat},${lng},16z`
 }
 
-/** Link de rota até o ponto — útil para o fiscal sair do CREA direto para o local. */
+/**
+ * Rota até o ponto. A origem vazia (dir//destino) faz o Google usar
+ * "Seu local" automaticamente.
+ */
 export function googleMapsRotaUrl(lat: number, lng: number): string {
-  return `https://maps.google.com/?daddr=${lat},${lng}`
+  return `https://www.google.com/maps/dir//${lat},${lng}`
 }
 
 /** Alternativa quando o Google está bloqueado na rede: OpenStreetMap. */
