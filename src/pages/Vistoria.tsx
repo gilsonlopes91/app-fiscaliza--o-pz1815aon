@@ -1796,13 +1796,13 @@ export default function VistoriaPage() {
                                 e.stopPropagation()
                                 handleBatchMarkCategoryNaoSeAplica(cat, subs)
                               }}
-                              className="h-6 sm:h-7 px-2 sm:px-2.5 text-[11px] sm:text-xs font-bold border-orange-300 text-orange-700 bg-orange-50/80 hover:bg-orange-100 hover:text-orange-800 hover:border-orange-400 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              className="group h-6 sm:h-7 px-2 sm:px-2.5 text-[11px] sm:text-xs font-bold border-slate-300 text-slate-600 bg-white hover:bg-orange-50/80 hover:border-orange-300 hover:text-orange-700 active:bg-orange-100 active:border-orange-400 active:text-orange-800 focus-visible:border-orange-400 focus-visible:ring-1 focus-visible:ring-orange-300 transition-colors cursor-pointer shadow-2xs shrink-0"
                               title="Marcar todos os subitens deste item como Não se aplica"
                             >
                               {batchMarkingCatIds[cat.id] ? (
                                 <Loader2 className="w-3 h-3 animate-spin mr-1 text-orange-600" />
                               ) : (
-                                <XCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-orange-600" />
+                                <XCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-slate-500 group-hover:text-orange-600 group-active:text-orange-700 group-focus-visible:text-orange-600 transition-colors" />
                               )}
                               Não se aplica
                             </Button>
