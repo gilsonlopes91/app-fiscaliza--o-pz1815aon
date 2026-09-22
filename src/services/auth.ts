@@ -159,11 +159,50 @@ export const usersService = {
   /**
    * Redefine a senha de um usuário para uma senha provisória aleatória e
    * marca must_change_password = true para forçar troca no próximo acesso.
+   * Utiliza a rota customizada do backend (/backend/v1/users/reset-password)
+   * que roda com privilégios de administrador do sistema.
    * Retorna a senha provisória gerada e o perfil atualizado.
    */
   async resetUserPassword(id: string): Promise<{ provisionalPassword: string; user: UserProfile }> {
     const provisionalPassword = generateProvisionalPassword(10)
 
+    try {
+      const response = await pb.send<{
+        success: boolean
+        provisionalPassword: string
+        user: {
+          id: string
+          email: string
+          name: string
+          role: UserRole
+          approved: boolean
+          approvalStatus: UserApprovalStatus
+          must_change_password: boolean
+          created: string
+          updated: string
+        }
+      }>('/backend/v1/users/reset-password', {
+        method: 'POST',
+        body: {
+          userId: id,
+          provisionalPassword,
+        },
+      })
+
+      if (response && response.provisionalPassword) {
+        return {
+          provisionalPassword: response.provisionalPassword,
+          user: mapRecordToProfile(response.user),
+        }
+      }
+    } catch (endpointErr: any) {
+      console.warn(
+        'Falha no endpoint /backend/v1/users/reset-password, tentando fallback direto:',
+        endpointErr,
+      )
+    }
+
+    // Fallback: se o endpoint não estiver disponível, tenta a chamada direta do SDK
     const updated = await pb.collection('users').update(id, {
       password: provisionalPassword,
       passwordConfirm: provisionalPassword,

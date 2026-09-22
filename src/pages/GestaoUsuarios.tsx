@@ -228,7 +228,9 @@ export default function GestaoUsuarios() {
       setProcessingId(userToReset.id)
       const res = await usersService.resetUserPassword(userToReset.id)
       setUsers((prev) =>
-        prev.map((item) => (item.id === res.user.id ? { ...item, ...res.user } : item)),
+        prev.map((item) =>
+          item.id === res.user.id ? { ...item, ...res.user, mustChangePassword: true } : item,
+        ),
       )
       setResetModalResult({
         user: res.user,
@@ -240,11 +242,11 @@ export default function GestaoUsuarios() {
         title: 'Senha redefinida com sucesso!',
         description: `Uma senha provisória foi gerada para ${res.user.name}.`,
       })
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao redefinir senha do usuário:', err)
       toast({
         title: 'Erro ao redefinir senha',
-        description: 'Não foi possível gerar a nova senha provisória.',
+        description: err?.message || 'Não foi possível gerar a nova senha provisória.',
         variant: 'destructive',
       })
     } finally {
@@ -254,15 +256,37 @@ export default function GestaoUsuarios() {
 
   const handleCopyPassword = async () => {
     if (!resetModalResult?.provisionalPassword) return
+    const textToCopy = resetModalResult.provisionalPassword
+
+    let copied = false
     try {
-      await navigator.clipboard.writeText(resetModalResult.provisionalPassword)
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(textToCopy)
+        copied = true
+      } else {
+        const textArea = document.createElement('textarea')
+        textArea.value = textToCopy
+        textArea.style.position = 'fixed'
+        textArea.style.left = '-999999px'
+        textArea.style.top = '-999999px'
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        copied = document.execCommand('copy')
+        textArea.remove()
+      }
+    } catch {
+      copied = false
+    }
+
+    if (copied) {
       setHasCopiedPassword(true)
       toast({
         title: 'Senha copiada!',
         description: 'Senha provisória copiada para a área de transferência.',
       })
       setTimeout(() => setHasCopiedPassword(false), 3000)
-    } catch {
+    } else {
       toast({
         title: 'Erro ao copiar',
         description: 'Selecione e copie a senha manualmente.',

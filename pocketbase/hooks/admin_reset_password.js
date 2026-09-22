@@ -42,7 +42,11 @@ routerAdd(
 
     // 5. Obter ou gerar a senha provisória
     let provisionalPassword = body.provisionalPassword
-    if (!provisionalPassword || typeof provisionalPassword !== 'string' || provisionalPassword.length < 8) {
+    if (
+      !provisionalPassword ||
+      typeof provisionalPassword !== 'string' ||
+      provisionalPassword.length < 8
+    ) {
       // Gerar senha provisória aleatória segura de 10 caracteres
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*'
       const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
