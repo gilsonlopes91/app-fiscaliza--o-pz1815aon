@@ -1763,14 +1763,15 @@ export default function VistoriaPage() {
                     className="border border-[#D3DFE9] bg-white rounded-xl overflow-hidden shadow-xs data-[state=open]:border-[#004B8D]/60 transition-all"
                   >
                     {/* ACCORDION HEADER: ITEM PRINCIPAL (NÍVEL 1) */}
-                    <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-slate-50/70">
-                      <div className="flex flex-1 items-center justify-between gap-4 text-left pr-4">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-8 h-8 rounded-lg bg-[#004B8D] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                    <AccordionTrigger className="px-3.5 sm:px-5 py-3.5 sm:py-4 hover:no-underline hover:bg-slate-50/70">
+                      <div className="flex flex-1 flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 text-left pr-2 sm:pr-4 min-w-0">
+                        {/* Linha 1 no mobile: Número + Título + Subitens */}
+                        <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                          <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#004B8D] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
                             {itemNumber}
                           </span>
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-sm sm:text-base text-[#102A43] whitespace-normal sm:truncate leading-snug sm:leading-normal">
                               {cat.nome}
                             </h4>
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#627D98] mt-0.5">
@@ -1782,8 +1783,8 @@ export default function VistoriaPage() {
                           </div>
                         </div>
 
-                        {/* Ações e Badges de situação agregadas no Tema */}
-                        <div className="flex items-center gap-2 shrink-0">
+                        {/* Linha 2 no mobile / Lado direito no desktop: Ações e Badges quebrando linha */}
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 pl-9 sm:pl-0">
                           {/* Botão Não se aplica em lote para o item principal */}
                           {!isReadOnly && subs.length > 0 && (
                             <Button
@@ -1795,43 +1796,43 @@ export default function VistoriaPage() {
                                 e.stopPropagation()
                                 handleBatchMarkCategoryNaoSeAplica(cat, subs)
                               }}
-                              className="h-7 px-2.5 text-xs font-bold border-orange-300 text-orange-700 bg-orange-50/70 hover:bg-orange-100 hover:text-orange-800 hover:border-orange-400 transition-colors cursor-pointer shadow-2xs"
+                              className="h-6 sm:h-7 px-2 sm:px-2.5 text-[11px] sm:text-xs font-bold border-orange-300 text-orange-700 bg-orange-50/80 hover:bg-orange-100 hover:text-orange-800 hover:border-orange-400 transition-colors cursor-pointer shadow-2xs shrink-0"
                               title="Marcar todos os subitens deste item como Não se aplica"
                             >
                               {batchMarkingCatIds[cat.id] ? (
                                 <Loader2 className="w-3 h-3 animate-spin mr-1 text-orange-600" />
                               ) : (
-                                <XCircle className="w-3.5 h-3.5 mr-1 text-orange-600" />
+                                <XCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-orange-600" />
                               )}
                               Não se aplica
                             </Button>
                           )}
 
                           {temaNaoConforme > 0 && (
-                            <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-[11px] font-bold gap-1">
-                              <AlertTriangle className="w-3 h-3 text-rose-600" />
-                              {temaNaoConforme} não conforme(s)
+                            <Badge className="bg-rose-50 text-rose-800 border border-rose-300 text-[10px] sm:text-[11px] font-bold gap-1 py-0.5 px-2">
+                              <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                              <span>{temaNaoConforme} não conforme(s)</span>
                             </Badge>
                           )}
                           {temaSemComprovacao > 0 && (
-                            <Badge className="bg-orange-50 text-orange-800 border border-orange-300 text-[11px] font-bold gap-1">
-                              <FileWarning className="w-3 h-3 text-orange-600" />
-                              {temaSemComprovacao} sem comprovação
+                            <Badge className="bg-orange-50 text-orange-800 border border-orange-300 text-[10px] sm:text-[11px] font-bold gap-1 py-0.5 px-2">
+                              <FileWarning className="w-3 h-3 text-orange-600 shrink-0" />
+                              <span>{temaSemComprovacao} sem comprovação</span>
                             </Badge>
                           )}
                           {temaPendente > 0 && (
-                            <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-medium gap-1">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              {temaPendente} pendente(s)
+                            <Badge className="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] sm:text-[11px] font-medium gap-1 py-0.5 px-2">
+                              <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                              <span>{temaPendente} pendente(s)</span>
                             </Badge>
                           )}
                           {temaNaoConforme === 0 &&
                             temaSemComprovacao === 0 &&
                             temaPendente === 0 &&
                             temaConforme > 0 && (
-                              <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold gap-1">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                Conforme
+                              <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] sm:text-[11px] font-bold gap-1 py-0.5 px-2">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span>Conforme</span>
                               </Badge>
                             )}
                           {temaNaoConforme === 0 &&
@@ -1839,8 +1840,8 @@ export default function VistoriaPage() {
                             temaPendente === 0 &&
                             temaConforme === 0 &&
                             temaNaoSeAplica > 0 && (
-                              <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-[11px] font-medium">
-                                Não se aplica
+                              <Badge className="bg-slate-100 text-[#486581] border border-[#D3DFE9] text-[10px] sm:text-[11px] font-medium py-0.5 px-2">
+                                <span>Não se aplica</span>
                               </Badge>
                             )}
                         </div>
@@ -1876,18 +1877,18 @@ export default function VistoriaPage() {
                             className="bg-white rounded-xl border border-[#D3DFE9] p-4 sm:p-5 shadow-xs space-y-4 hover:border-[#004B8D]/30 transition-colors"
                           >
                             {/* Subitem Title + Metadata Header */}
-                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-[#D3DFE9]/70 pb-3">
-                              <div className="space-y-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-xs font-bold text-[#004B8D] bg-[#E8F1F8] px-2.5 py-0.5 rounded-md border border-[#004B8D]/20">
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 sm:gap-3 border-b border-[#D3DFE9]/70 pb-3">
+                              <div className="space-y-1.5 min-w-0 flex-1">
+                                <div className="flex items-start gap-2">
+                                  <span className="font-mono text-xs font-bold text-[#004B8D] bg-[#E8F1F8] px-2 py-0.5 rounded-md border border-[#004B8D]/20 shrink-0 mt-0.5">
                                     {subCode}
                                   </span>
-                                  <h5 className="font-bold text-sm text-[#102A43] leading-snug">
+                                  <h5 className="font-bold text-sm text-[#102A43] leading-snug break-words">
                                     {sub.descricao}
                                   </h5>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#627D98] pt-0.5">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#627D98] pt-0.5">
                                   <span className="flex items-center gap-1">
                                     Exige ART:{' '}
                                     <strong
@@ -1912,7 +1913,7 @@ export default function VistoriaPage() {
                                 </div>
                               </div>
                               {/* Status Badge */}
-                              <div className="shrink-0 self-start sm:self-auto flex items-center gap-1.5">
+                              <div className="shrink-0 self-start sm:self-auto flex flex-wrap items-center gap-1.5">
                                 {situacao === 'conforme' && (
                                   <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold gap-1">
                                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />

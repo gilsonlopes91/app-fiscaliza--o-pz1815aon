@@ -850,20 +850,20 @@ export default function TipoEmpreendimentoDetalhePage() {
                       <div className="bg-[#E8F1F8]/70 border-b border-[#D3DFE9] p-3.5 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div
                           onClick={() => toggleCategoryCollapse(cat.id)}
-                          className="flex items-center gap-3 cursor-pointer select-none flex-1 min-w-0"
+                          className="flex items-start sm:items-center gap-3 cursor-pointer select-none flex-1 min-w-0"
                         >
-                          <span className="w-7 h-7 rounded-lg bg-[#004B8D] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                          <span className="w-7 h-7 rounded-lg bg-[#004B8D] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
                             {itemNumber}
                           </span>
-                          <div className="min-w-0">
-                            <h3 className="font-bold text-sm sm:text-base text-[#102A43] truncate flex items-center gap-2">
-                              {cat.nome}
-                              <Badge className="bg-white text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold px-2 py-0.5 ml-1">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-sm sm:text-base text-[#102A43] whitespace-normal sm:truncate flex flex-wrap items-center gap-2 leading-snug sm:leading-normal">
+                              <span>{cat.nome}</span>
+                              <Badge className="bg-white text-[#004B8D] border border-[#004B8D]/20 text-[10px] font-bold px-2 py-0.5 shrink-0">
                                 {subsOfCat.length} {subsOfCat.length === 1 ? 'subitem' : 'subitens'}
                               </Badge>
                             </h3>
                           </div>
-                          <span className="text-[#627D98] ml-auto sm:ml-2">
+                          <span className="text-[#627D98] ml-2 shrink-0 self-start sm:self-center mt-1 sm:mt-0">
                             {isCollapsed ? (
                               <ChevronRight className="w-4 h-4 text-[#486581]" />
                             ) : (
