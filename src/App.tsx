@@ -8,6 +8,7 @@ const TiposEmpreendimento = lazy(() => import('./pages/TiposEmpreendimento'))
 const TipoEmpreendimentoDetalhe = lazy(() => import('./pages/TipoEmpreendimentoDetalhe'))
 const Login = lazy(() => import('./pages/Login'))
 const AguardandoAprovacao = lazy(() => import('./pages/AguardandoAprovacao'))
+const RedefinirSenhaObrigatoria = lazy(() => import('./pages/RedefinirSenhaObrigatoria'))
 const GestaoUsuarios = lazy(() => import('./pages/GestaoUsuarios'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const FiscalDashboard = lazy(() => import('./pages/FiscalDashboard'))
@@ -32,7 +33,7 @@ function ProtectedRoute({
   children: React.ReactNode
   requireAdmin?: boolean
 }) {
-  const { user, isLoading, isAuthenticated, isApproved, isAdmin } = useAuth()
+  const { user, isLoading, isAuthenticated, isApproved, isAdmin, mustChangePassword } = useAuth()
   const location = useLocation()
 
   if (isLoading) {
@@ -48,6 +49,11 @@ function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
+  // Interrompe qualquer acesso se must_change_password for true
+  if (mustChangePassword) {
+    return <Navigate to="/redefinir-senha" replace />
+  }
+
   if (!isApproved) {
     return <Navigate to="/aguardando-aprovacao" replace />
   }
@@ -60,9 +66,33 @@ function ProtectedRoute({
   return <>{children}</>
 }
 
+// Rota protegida especificamente para quem precisa redefinir senha
+function MustChangePasswordRoute({ children }: { children: React.ReactNode }) {
+  const { isLoading, isAuthenticated, mustChangePassword } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-[#004B8D]" />
+        <span className="text-xs font-semibold text-[#486581]">Verificando credenciais...</span>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (!mustChangePassword) {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
+}
+
 // Redirects index based on auth status and role
 function IndexRedirect() {
-  const { user, isLoading, isAuthenticated, isApproved, isAdmin } = useAuth()
+  const { user, isLoading, isAuthenticated, isApproved, isAdmin, mustChangePassword } = useAuth()
 
   if (isLoading) {
     return (
@@ -75,6 +105,10 @@ function IndexRedirect() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  if (mustChangePassword) {
+    return <Navigate to="/redefinir-senha" replace />
   }
 
   if (!isApproved) {
@@ -97,6 +131,14 @@ export default function App() {
             {/* Public Auth Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
+            <Route
+              path="/redefinir-senha"
+              element={
+                <MustChangePasswordRoute>
+                  <RedefinirSenhaObrigatoria />
+                </MustChangePasswordRoute>
+              }
+            />
 
             {/* Root Redirect */}
             <Route path="/" element={<IndexRedirect />} />

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T12:35:40.135Z",
+  "generatedAt": "2026-09-22T12:45:18.031Z",
   "collections": [
     {
       "name": "users",
@@ -57,6 +57,12 @@
           "required": false,
           "system": false,
           "selectValues": ["pendente", "aprovado", "rejeitado"]
+        },
+        {
+          "name": "must_change_password",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

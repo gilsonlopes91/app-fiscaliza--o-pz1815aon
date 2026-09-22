@@ -15,6 +15,9 @@ import {
   AlertTriangle,
   Trash2,
   Lock,
+  KeyRound,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +40,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { usersService, UserProfile, UserRole } from '@/services/auth'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
@@ -53,6 +64,14 @@ export default function GestaoUsuarios() {
   // Action states
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null)
+
+  // Reset password states
+  const [userToReset, setUserToReset] = useState<UserProfile | null>(null)
+  const [resetModalResult, setResetModalResult] = useState<{
+    user: UserProfile
+    provisionalPassword: string
+  } | null>(null)
+  const [hasCopiedPassword, setHasCopiedPassword] = useState(false)
 
   useEffect(() => {
     document.title = 'Controle de Usuários · CREA-PI Fiscalização'
@@ -189,6 +208,66 @@ export default function GestaoUsuarios() {
     } finally {
       setProcessingId(null)
       setUserToDelete(null)
+    }
+  }
+
+  const handleConfirmResetPassword = async () => {
+    if (!userToReset) return
+    if (userToReset.id === currentUser?.id) {
+      toast({
+        title: 'Ação não permitida',
+        description:
+          'Você não pode redefinir a própria senha através desta função para evitar bloqueio acidental.',
+        variant: 'destructive',
+      })
+      setUserToReset(null)
+      return
+    }
+
+    try {
+      setProcessingId(userToReset.id)
+      const res = await usersService.resetUserPassword(userToReset.id)
+      setUsers((prev) =>
+        prev.map((item) => (item.id === res.user.id ? { ...item, ...res.user } : item)),
+      )
+      setResetModalResult({
+        user: res.user,
+        provisionalPassword: res.provisionalPassword,
+      })
+      setUserToReset(null)
+      setHasCopiedPassword(false)
+      toast({
+        title: 'Senha redefinida com sucesso!',
+        description: `Uma senha provisória foi gerada para ${res.user.name}.`,
+      })
+    } catch (err) {
+      console.error('Erro ao redefinir senha do usuário:', err)
+      toast({
+        title: 'Erro ao redefinir senha',
+        description: 'Não foi possível gerar a nova senha provisória.',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleCopyPassword = async () => {
+    if (!resetModalResult?.provisionalPassword) return
+    try {
+      await navigator.clipboard.writeText(resetModalResult.provisionalPassword)
+      setHasCopiedPassword(true)
+      toast({
+        title: 'Senha copiada!',
+        description: 'Senha provisória copiada para a área de transferência.',
+      })
+      setTimeout(() => setHasCopiedPassword(false), 3000)
+    } catch {
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Selecione e copie a senha manualmente.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -404,6 +483,12 @@ export default function GestaoUsuarios() {
                             Rejeitado
                           </Badge>
                         )}
+                        {u.mustChangePassword && (
+                          <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold gap-1">
+                            <KeyRound className="w-3 h-3 text-amber-700" />
+                            Troca de senha pendente
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="text-xs text-[#486581] flex flex-wrap items-center gap-3">
@@ -489,6 +574,22 @@ export default function GestaoUsuarios() {
                       </Button>
                     )}
 
+                    {/* Redefinir Senha button (except self) */}
+                    {!isSelf && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setUserToReset(u)}
+                        disabled={isBusy}
+                        className="border-[#D3DFE9] text-[#004B8D] hover:bg-[#E8F1F8] font-semibold text-xs h-8 px-2.5 gap-1.5 cursor-pointer"
+                        title="Redefinir senha com provisória"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-[#004B8D]" />
+                        <span className="hidden sm:inline">Redefinir Senha</span>
+                        <span className="sm:hidden">Reset</span>
+                      </Button>
+                    )}
+
                     {/* Delete button (except self) */}
                     {!isSelf && (
                       <Button
@@ -496,7 +597,7 @@ export default function GestaoUsuarios() {
                         variant="ghost"
                         onClick={() => setUserToDelete(u)}
                         disabled={isBusy}
-                        className="text-[#829AB1] hover:text-rose-600 hover:bg-rose-50 h-8 w-8 p-0"
+                        className="text-[#829AB1] hover:text-rose-600 hover:bg-rose-50 h-8 w-8 p-0 cursor-pointer"
                         title="Excluir usuário"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -509,6 +610,130 @@ export default function GestaoUsuarios() {
           </div>
         )}
       </div>
+
+      {/* Reset Password Confirmation Dialog */}
+      <AlertDialog open={!!userToReset} onOpenChange={(open) => !open && setUserToReset(null)}>
+        <AlertDialogContent className="border-[#D3DFE9] bg-white max-w-md">
+          <AlertDialogHeader>
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#004B8D] border border-blue-100 flex items-center justify-center mb-1">
+              <KeyRound className="w-6 h-6 stroke-[2]" />
+            </div>
+            <AlertDialogTitle className="text-lg font-bold text-[#102A43]">
+              Redefinir Senha de Usuário
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-[#486581] space-y-2">
+              <p>
+                Deseja gerar uma nova senha provisória para{' '}
+                <strong className="text-[#102A43]">{userToReset?.name}</strong> (
+                {userToReset?.email})?
+              </p>
+              <div className="bg-[#E8F1F8] p-3 rounded-lg border border-[#004B8D]/20 text-xs text-[#004B8D]">
+                <p className="font-semibold mb-1">Como funciona:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-[#102A43]">
+                  <li>Uma senha aleatória e segura será gerada imediatamente.</li>
+                  <li>O usuário será obrigado a criar uma nova senha pessoal no próximo login.</li>
+                  <li>
+                    O acesso às telas do sistema fica bloqueado até a definição da nova senha.
+                  </li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#D3DFE9] text-[#486581]">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmResetPassword}
+              className="bg-[#004B8D] hover:bg-[#003666] text-white font-semibold cursor-pointer"
+            >
+              Confirmar Redefinição
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Provisional Password Display Dialog */}
+      <Dialog open={!!resetModalResult} onOpenChange={(open) => !open && setResetModalResult(null)}>
+        <DialogContent className="border-[#D3DFE9] bg-white sm:max-w-md">
+          <DialogHeader>
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center mb-1">
+              <CheckCircle2 className="w-7 h-7 stroke-[2]" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-[#102A43]">
+              Senha Provisória Gerada
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#486581]">
+              A senha do usuário foi redefinida. Copie e envie os dados abaixo com segurança para o
+              usuário.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 my-2">
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-[#D3DFE9] space-y-2">
+              <div className="text-xs text-[#627D98]">
+                Usuário: <strong className="text-[#102A43]">{resetModalResult?.user.name}</strong>
+              </div>
+              <div className="text-xs text-[#627D98]">
+                E-mail:{' '}
+                <span className="font-mono text-[#102A43]">{resetModalResult?.user.email}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#102A43] flex items-center justify-between">
+                <span>Senha Provisória (Válida apenas para o 1º acesso):</span>
+                <span className="text-[11px] font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  Uso temporário
+                </span>
+              </label>
+
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-amber-50/70 border-2 border-amber-300/80 rounded-xl px-3.5 py-2.5 font-mono text-base font-bold text-[#102A43] tracking-widest text-center select-all">
+                  {resetModalResult?.provisionalPassword}
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleCopyPassword}
+                  className={`h-11 px-4 font-semibold text-xs gap-1.5 transition-colors cursor-pointer ${
+                    hasCopiedPassword
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-[#004B8D] hover:bg-[#003666] text-white'
+                  }`}
+                >
+                  {hasCopiedPassword ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-xl text-xs text-amber-900 leading-relaxed">
+              <p className="font-semibold mb-1">Aviso de Segurança:</p>
+              Ao entrar no aplicativo com esta senha provisória, o sistema irá bloquear o acesso e
+              exigir que o usuário cadastre sua própria senha definitiva imediatamente.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => setResetModalResult(null)}
+              className="w-full bg-[#102A43] hover:bg-[#243B53] text-white font-semibold text-xs h-9"
+            >
+              Concluir e Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>

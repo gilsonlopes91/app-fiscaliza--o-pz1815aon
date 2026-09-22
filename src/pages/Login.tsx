@@ -27,7 +27,7 @@ import { useToast } from '@/hooks/use-toast'
 import logoCreaPi from '@/assets/creapi-a5c20.png'
 
 export default function Login() {
-  const { login, register, isAuthenticated, isApproved, isAdmin } = useAuth()
+  const { login, register, isAuthenticated, isApproved, isAdmin, mustChangePassword } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { isInstallable, isInstalled, isIos, installApp } = usePwa()
@@ -50,12 +50,25 @@ export default function Login() {
   const [isRegistering, setIsRegistering] = useState(false)
   const [registrationSuccess, setRegistrationSuccess] = useState(false)
 
+  // Message passed from redirected flows (like password reset completion)
+  React.useEffect(() => {
+    const stateMsg = (location.state as any)?.message
+    if (stateMsg) {
+      toast({
+        title: 'Aviso',
+        description: stateMsg,
+      })
+    }
+  }, [location.state, toast])
+
   // Auto redirect if already logged in and approved
   React.useEffect(() => {
     if (isAuthenticated) {
-      if (isApproved) {
+      if (mustChangePassword) {
+        navigate('/redefinir-senha', { replace: true })
+      } else if (isApproved) {
         if (isAdmin) {
-          navigate('/hospitais', { replace: true })
+          navigate('/dashboard', { replace: true })
         } else {
           navigate('/tipos-empreendimento', { replace: true })
         }
@@ -63,7 +76,7 @@ export default function Login() {
         navigate('/aguardando-aprovacao', { replace: true })
       }
     }
-  }, [isAuthenticated, isApproved, isAdmin, navigate])
+  }, [isAuthenticated, isApproved, isAdmin, mustChangePassword, navigate])
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,12 +97,14 @@ export default function Login() {
         description: 'Autenticação realizada com sucesso.',
       })
 
-      if (!user.approved && user.approvalStatus !== 'aprovado') {
-        navigate('/aguardando-aprovacao')
+      if (user.mustChangePassword) {
+        navigate('/redefinir-senha', { replace: true })
+      } else if (!user.approved && user.approvalStatus !== 'aprovado') {
+        navigate('/aguardando-aprovacao', { replace: true })
       } else if (user.role === 'admin') {
-        navigate('/hospitais')
+        navigate('/dashboard', { replace: true })
       } else {
-        navigate('/tipos-empreendimento')
+        navigate('/tipos-empreendimento', { replace: true })
       }
     } catch (err: any) {
       console.error('Erro de login:', err)

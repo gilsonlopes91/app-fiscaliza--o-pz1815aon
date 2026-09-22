@@ -10,44 +10,67 @@ export interface UserProfile {
   role: UserRole
   approved: boolean
   approvalStatus: UserApprovalStatus
+  mustChangePassword?: boolean
   avatar?: string
   created: string
   updated: string
+}
+
+function mapRecordToProfile(model: any): UserProfile {
+  return {
+    id: model.id,
+    email: model.email,
+    name: model.name || model.email?.split('@')[0] || 'Usuário',
+    role: (model.role as UserRole) || 'usuario',
+    approved: Boolean(model.approved),
+    approvalStatus:
+      (model.approvalStatus as UserApprovalStatus) || (model.approved ? 'aprovado' : 'pendente'),
+    mustChangePassword: Boolean(model.must_change_password),
+    avatar: model.avatar ? pb.files.getURL(model, model.avatar) : undefined,
+    created: model.created,
+    updated: model.updated,
+  }
+}
+
+/**
+ * Gera uma senha provisória aleatória e segura atendendo aos requisitos mínimos:
+ * Letras maiúsculas, minúsculas, números e caracteres especiais legíveis.
+ */
+export function generateProvisionalPassword(length = 10): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*'
+  let result = ''
+  // Garante ao menos 1 maiúscula, 1 minúscula, 1 dígito e 1 caractere especial
+  const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lowers = 'abcdefghijkmnpqrstuvwxyz'
+  const digits = '23456789'
+  const symbols = '!@#$%&*'
+
+  result += uppers[Math.floor(Math.random() * uppers.length)]
+  result += lowers[Math.floor(Math.random() * lowers.length)]
+  result += digits[Math.floor(Math.random() * digits.length)]
+  result += symbols[Math.floor(Math.random() * symbols.length)]
+
+  for (let i = result.length; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)]
+  }
+
+  // Embaralha
+  return result
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('')
 }
 
 export const authService = {
   getCurrentUser(): UserProfile | null {
     const model = pb.authStore.record
     if (!model) return null
-    return {
-      id: model.id,
-      email: model.email,
-      name: model.name || model.email.split('@')[0],
-      role: (model.role as UserRole) || 'usuario',
-      approved: Boolean(model.approved),
-      approvalStatus:
-        (model.approvalStatus as UserApprovalStatus) || (model.approved ? 'aprovado' : 'pendente'),
-      avatar: model.avatar ? pb.files.getURL(model, model.avatar) : undefined,
-      created: model.created,
-      updated: model.updated,
-    }
+    return mapRecordToProfile(model)
   },
 
   async login(email: string, password: string): Promise<UserProfile> {
     const authData = await pb.collection('users').authWithPassword(email.trim(), password)
-    const model = authData.record
-    return {
-      id: model.id,
-      email: model.email,
-      name: model.name || model.email.split('@')[0],
-      role: (model.role as UserRole) || 'usuario',
-      approved: Boolean(model.approved),
-      approvalStatus:
-        (model.approvalStatus as UserApprovalStatus) || (model.approved ? 'aprovado' : 'pendente'),
-      avatar: model.avatar ? pb.files.getURL(model, model.avatar) : undefined,
-      created: model.created,
-      updated: model.updated,
-    }
+    return mapRecordToProfile(authData.record)
   },
 
   async register(data: {
@@ -64,18 +87,10 @@ export const authService = {
       role: 'usuario',
       approved: false,
       approvalStatus: 'pendente',
+      must_change_password: false,
     })
 
-    return {
-      id: record.id,
-      email: record.email,
-      name: record.name,
-      role: 'usuario',
-      approved: false,
-      approvalStatus: 'pendente',
-      created: record.created,
-      updated: record.updated,
-    }
+    return mapRecordToProfile(record)
   },
 
   logout(): void {
@@ -86,24 +101,29 @@ export const authService = {
     if (!pb.authStore.isValid) return null
     try {
       const authData = await pb.collection('users').authRefresh()
-      const model = authData.record
-      return {
-        id: model.id,
-        email: model.email,
-        name: model.name || model.email.split('@')[0],
-        role: (model.role as UserRole) || 'usuario',
-        approved: Boolean(model.approved),
-        approvalStatus:
-          (model.approvalStatus as UserApprovalStatus) ||
-          (model.approved ? 'aprovado' : 'pendente'),
-        avatar: model.avatar ? pb.files.getURL(model, model.avatar) : undefined,
-        created: model.created,
-        updated: model.updated,
-      }
+      return mapRecordToProfile(authData.record)
     } catch {
       pb.authStore.clear()
       return null
     }
+  },
+
+  /**
+   * Usuário autenticado define uma nova senha e limpa a flag must_change_password.
+   */
+  async changePassword(password: string, passwordConfirm: string): Promise<UserProfile> {
+    const current = pb.authStore.record
+    if (!current?.id) {
+      throw new Error('Nenhum usuário logado para alterar senha.')
+    }
+
+    const updated = await pb.collection('users').update(current.id, {
+      password,
+      passwordConfirm,
+      must_change_password: false,
+    })
+
+    return mapRecordToProfile(updated)
   },
 }
 
@@ -112,18 +132,7 @@ export const usersService = {
     const records = await pb.collection('users').getFullList({
       sort: '-created',
     })
-    return records.map((r) => ({
-      id: r.id,
-      email: r.email,
-      name: r.name || r.email,
-      role: (r.role as UserRole) || 'usuario',
-      approved: Boolean(r.approved),
-      approvalStatus:
-        (r.approvalStatus as UserApprovalStatus) || (r.approved ? 'aprovado' : 'pendente'),
-      avatar: r.avatar ? pb.files.getURL(r, r.avatar) : undefined,
-      created: r.created,
-      updated: r.updated,
-    }))
+    return records.map(mapRecordToProfile)
   },
 
   async approveUser(id: string): Promise<UserProfile> {
@@ -131,16 +140,7 @@ export const usersService = {
       approved: true,
       approvalStatus: 'aprovado',
     })
-    return {
-      id: record.id,
-      email: record.email,
-      name: record.name,
-      role: (record.role as UserRole) || 'usuario',
-      approved: true,
-      approvalStatus: 'aprovado',
-      created: record.created,
-      updated: record.updated,
-    }
+    return mapRecordToProfile(record)
   },
 
   async rejectUser(id: string): Promise<UserProfile> {
@@ -148,31 +148,31 @@ export const usersService = {
       approved: false,
       approvalStatus: 'rejeitado',
     })
-    return {
-      id: record.id,
-      email: record.email,
-      name: record.name,
-      role: (record.role as UserRole) || 'usuario',
-      approved: false,
-      approvalStatus: 'rejeitado',
-      created: record.created,
-      updated: record.updated,
-    }
+    return mapRecordToProfile(record)
   },
 
   async updateUserRole(id: string, role: UserRole): Promise<UserProfile> {
     const record = await pb.collection('users').update(id, { role })
+    return mapRecordToProfile(record)
+  },
+
+  /**
+   * Redefine a senha de um usuário para uma senha provisória aleatória e
+   * marca must_change_password = true para forçar troca no próximo acesso.
+   * Retorna a senha provisória gerada e o perfil atualizado.
+   */
+  async resetUserPassword(id: string): Promise<{ provisionalPassword: string; user: UserProfile }> {
+    const provisionalPassword = generateProvisionalPassword(10)
+
+    const updated = await pb.collection('users').update(id, {
+      password: provisionalPassword,
+      passwordConfirm: provisionalPassword,
+      must_change_password: true,
+    })
+
     return {
-      id: record.id,
-      email: record.email,
-      name: record.name,
-      role: (record.role as UserRole) || 'usuario',
-      approved: Boolean(record.approved),
-      approvalStatus:
-        (record.approvalStatus as UserApprovalStatus) ||
-        (record.approved ? 'aprovado' : 'pendente'),
-      created: record.created,
-      updated: record.updated,
+      provisionalPassword,
+      user: mapRecordToProfile(updated),
     }
   },
 

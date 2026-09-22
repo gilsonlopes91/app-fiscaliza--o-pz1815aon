@@ -9,6 +9,7 @@ interface AuthContextType {
   isAdmin: boolean
   isApproved: boolean
   isAuthenticated: boolean
+  mustChangePassword: boolean
   login: (email: string, password: string) => Promise<UserProfile>
   register: (data: {
     name: string
@@ -16,6 +17,7 @@ interface AuthContextType {
     password: string
     passwordConfirm: string
   }) => Promise<UserProfile>
+  changePassword: (password: string, passwordConfirm: string) => Promise<UserProfile>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -79,6 +81,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return profile
   }
 
+  const changePassword = async (
+    password: string,
+    passwordConfirm: string,
+  ): Promise<UserProfile> => {
+    const updated = await authService.changePassword(password, passwordConfirm)
+    setUser(updated)
+    return updated
+  }
+
   const logout = () => {
     authService.logout()
     setUser(null)
@@ -87,6 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAuthenticated = !!user
   const isAdmin = user?.role === 'admin'
   const isApproved = user?.approved === true || user?.approvalStatus === 'aprovado'
+  const mustChangePassword = Boolean(user?.mustChangePassword)
 
   return (
     <AuthContext.Provider
@@ -96,8 +108,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         isApproved,
         isAuthenticated,
+        mustChangePassword,
         login,
         register,
+        changePassword,
         logout,
         refreshUser,
       }}
