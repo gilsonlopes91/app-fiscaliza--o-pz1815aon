@@ -106,10 +106,13 @@ export const hospitaisService = {
     }
   },
 
-  async create(data: HospitalFormData): Promise<Hospital> {
+  async create(data: HospitalFormData, fiscalId?: string): Promise<Hospital> {
+    const currentUserId = fiscalId || pbClient.authStore.record?.id
+    const currentUserRole = pbClient.authStore.record?.role
+
     // Sem rede: cadastra no celular e agenda o envio
     if (!estaOnline()) {
-      return await criarHospitalOffline(data, pbClient.authStore.record?.id)
+      return await criarHospitalOffline(data, currentUserId)
     }
 
     const payload: Record<string, unknown> = {
@@ -135,6 +138,29 @@ export const hospitaisService = {
     const record = await pb.collection('hospitais').create<Hospital>(payload)
     // Mantém o cache de campo em dia sem precisar sincronizar de novo
     await guardarLocal('hospitais', record)
+
+    // Se quem cadastrou foi um fiscal (perfil não-admin ou explicitamente informado),
+    // vincula automaticamente o empreendimento ao fiscal na collection 'atribuicoes'
+    const isFiscal = currentUserRole !== 'admin'
+    if (currentUserId && (isFiscal || fiscalId)) {
+      try {
+        // Verifica se já não foi criado por hook ou concorrência
+        const existingAtrib = await pb.collection('atribuicoes').getList(1, 1, {
+          filter: `hospital = "${record.id}" && fiscal = "${currentUserId}"`,
+        })
+        if (existingAtrib.items.length === 0) {
+          await pb.collection('atribuicoes').create({
+            fiscal: currentUserId,
+            hospital: record.id,
+            created_by: currentUserId,
+            observacao: 'Empreendimento cadastrado pelo próprio fiscal',
+          })
+        }
+      } catch (atribErr) {
+        console.warn('Erro ao vincular automaticamente empreendimento ao fiscal:', atribErr)
+      }
+    }
+
     return record
   },
 

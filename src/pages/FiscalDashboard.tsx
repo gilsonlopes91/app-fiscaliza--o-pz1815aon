@@ -17,6 +17,7 @@ import {
   FileCheck2,
   AlertCircle,
   HelpCircle,
+  Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,8 +34,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { categoriasVistoriaService, CategoriaVistoria } from '@/services/categoriasVistoria'
 import { tiposEmpreendimentoService, TipoEmpreendimento } from '@/services/tiposEmpreendimento'
 import { atribuicoesService, Atribuicao, AtribuicaoDetail } from '@/services/atribuicoes'
+import { hospitaisService, HospitalFormData } from '@/services/hospitais'
 import { vistoriasService } from '@/services/vistorias'
 import { SyncCampoCard } from '@/components/SyncCampoCard'
+import { HospitalFormDialog } from '@/components/HospitalFormDialog'
 import { useToast } from '@/hooks/use-toast'
 
 export default function FiscalDashboard() {
@@ -47,6 +50,7 @@ export default function FiscalDashboard() {
   const [details, setDetails] = useState<AtribuicaoDetail[]>([])
   const [tipos, setTipos] = useState<TipoEmpreendimento[]>([])
   const [allCategorias, setAllCategorias] = useState<CategoriaVistoria[]>([])
+  const [isNovoDialogOpen, setIsNovoDialogOpen] = useState(false)
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -135,6 +139,26 @@ export default function FiscalDashboard() {
     })
   }, [details, selectedStatusFiltro, selectedTipoFiltro, searchQuery])
 
+  const handleCreateHospital = async (data: HospitalFormData) => {
+    try {
+      const criado = await hospitaisService.create(data, user?.id)
+      toast({
+        title: 'Empreendimento cadastrado',
+        description: `O empreendimento "${criado.nome}" foi cadastrado com sucesso e já está vinculado a você.`,
+      })
+      await loadData()
+    } catch (err: unknown) {
+      console.error('Erro ao cadastrar empreendimento:', err)
+      const msg = err instanceof Error ? err.message : 'Erro ao cadastrar empreendimento.'
+      toast({
+        title: 'Erro ao cadastrar',
+        description: msg,
+        variant: 'destructive',
+      })
+      throw err
+    }
+  }
+
   return (
     <div className="animate-page-enter space-y-6 sm:space-y-8 pb-16 w-full max-w-full overflow-x-hidden">
       {/* 1. Header do Fiscal */}
@@ -148,11 +172,19 @@ export default function FiscalDashboard() {
           </div>
           <p className="text-xs sm:text-sm text-[#486581] mt-0.5">
             Olá, <strong>{user?.name || user?.email}</strong>. Acompanhe os empreendimentos
-            delegados a você e preencha o checklist de vistoria.
+            delegados a você ou cadastre um novo para vistoriar em campo.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
+          <Button
+            onClick={() => setIsNovoDialogOpen(true)}
+            className="flex-1 sm:flex-none bg-[#004B8D] hover:bg-[#003666] text-white font-semibold h-10 px-4 text-xs gap-1.5 cursor-pointer shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo Empreendimento</span>
+          </Button>
+
           <Button
             variant="outline"
             onClick={loadData}
@@ -308,11 +340,19 @@ export default function FiscalDashboard() {
               </h4>
               <p className="text-xs text-[#486581] max-w-md mx-auto">
                 {details.length === 0
-                  ? 'O administrador do CREA-PI pode atribuir unidades para você vistoriar. Você também pode navegar pelo catálogo de tipos para consultar informações.'
+                  ? 'Você pode cadastrar um novo empreendimento agora mesmo pelo botão abaixo, ou aguardar o administrador atribuir unidades.'
                   : 'Tente alterar os filtros de status ou tipo para visualizar as unidades.'}
               </p>
             </div>
-            {details.length > 0 && (
+            {details.length === 0 ? (
+              <Button
+                onClick={() => setIsNovoDialogOpen(true)}
+                className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs font-semibold gap-1.5 cursor-pointer mt-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Cadastrar Primeiro Empreendimento</span>
+              </Button>
+            ) : (
               <Button
                 variant="outline"
                 size="sm"
@@ -443,6 +483,12 @@ export default function FiscalDashboard() {
           </div>
         )}
       </div>
+
+      <HospitalFormDialog
+        open={isNovoDialogOpen}
+        onOpenChange={setIsNovoDialogOpen}
+        onSave={handleCreateHospital}
+      />
     </div>
   )
 }

@@ -32,7 +32,7 @@ import { useAuth } from '@/contexts/AuthContext'
 
 export default function Hospitais() {
   const { toast } = useToast()
-  const { isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
 
   const [hospitais, setHospitais] = useState<Hospital[]>([])
   const [tiposEmpreendimento, setTiposEmpreendimento] = useState<TipoEmpreendimento[]>([])
@@ -111,7 +111,7 @@ export default function Hospitais() {
 
   const handleCreateHospital = async (formData: HospitalFormData) => {
     try {
-      const created = await hospitaisService.create(formData)
+      const created = await hospitaisService.create(formData, user?.id)
       setHospitais((prev) => [created, ...prev])
       toast({
         title: 'Hospital cadastrado!',
@@ -191,18 +191,16 @@ export default function Hospitais() {
 
         {/* Header Actions */}
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
-          {isAdmin && (
-            <Button
-              onClick={() => {
-                setHospitalToEdit(null)
-                setIsFormOpen(true)
-              }}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              Novo Hospital
-            </Button>
-          )}
+          <Button
+            onClick={() => {
+              setHospitalToEdit(null)
+              setIsFormOpen(true)
+            }}
+            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Novo Hospital
+          </Button>
 
           <Button
             variant="outline"

@@ -70,7 +70,7 @@ import { useToast } from '@/hooks/use-toast'
 export default function TipoEmpreendimentoDetalhePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
   const { toast } = useToast()
 
   // State
@@ -235,11 +235,11 @@ export default function TipoEmpreendimentoDetalhePage() {
         ...formData,
         tipo: tipo.nome,
       }
-      const created = await hospitaisService.create(payload)
+      const created = await hospitaisService.create(payload, user?.id)
       setUnidades((prev) => [created, ...prev])
       toast({
         title: 'Unidade cadastrada com sucesso!',
-        description: `"${created.nome}" foi cadastrada em ${tipo.nome}.`,
+        description: `"${created.nome}" foi cadastrada em ${tipo.nome} e já vinculada a você.`,
       })
     } catch (err) {
       console.error('Erro ao criar unidade:', err)
@@ -581,18 +581,16 @@ export default function TipoEmpreendimentoDetalhePage() {
 
         {/* Quick action buttons */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start sm:self-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-[#D3DFE9] w-full sm:w-auto">
-          {isAdmin && (
-            <Button
-              onClick={() => {
-                setHospitalToEdit(null)
-                setIsFormOpen(true)
-              }}
-              className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2 text-xs sm:text-sm"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              Nova Unidade
-            </Button>
-          )}
+          <Button
+            onClick={() => {
+              setHospitalToEdit(null)
+              setIsFormOpen(true)
+            }}
+            className="bg-[#004B8D] hover:bg-[#003666] text-white shadow-sm font-semibold h-10 px-4 cursor-pointer gap-2 text-xs sm:text-sm"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Nova Unidade
+          </Button>
 
           <Button
             onClick={() => navigate(`/vistoria?tipo=${encodeURIComponent(tipo.nome)}`)}
@@ -730,19 +728,17 @@ export default function TipoEmpreendimentoDetalhePage() {
                     Limpar filtros
                   </Button>
                 ) : (
-                  isAdmin && (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setHospitalToEdit(null)
-                        setIsFormOpen(true)
-                      }}
-                      className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs font-bold px-4 cursor-pointer gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Cadastrar Primeira Unidade
-                    </Button>
-                  )
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setHospitalToEdit(null)
+                      setIsFormOpen(true)
+                    }}
+                    className="bg-[#004B8D] hover:bg-[#003666] text-white text-xs font-bold px-4 cursor-pointer gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Cadastrar Primeira Unidade
+                  </Button>
                 )}
               </div>
             </div>
