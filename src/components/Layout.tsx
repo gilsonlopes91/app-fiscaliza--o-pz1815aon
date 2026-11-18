@@ -101,9 +101,9 @@ export function Layout() {
   })()
 
   return (
-    <div className="min-h-screen flex bg-[#F4F6F9] text-[#102A43] font-sans antialiased selection:bg-[#004B8D] selection:text-white w-full max-w-full overflow-x-hidden">
-      {/* 1. Sidebar Fixa em Desktop */}
-      <div className="hidden md:block shrink-0 sticky top-0 h-screen z-30">
+    <div className="min-h-screen flex bg-[#F4F6F9] text-[#102A43] font-sans antialiased selection:bg-[#004B8D] selection:text-white w-full max-w-full overflow-x-clip">
+      {/* 1. Sidebar Fixa em Desktop: sticky ocupa a viewport inteira e acompanha o scroll */}
+      <div className="hidden md:block shrink-0 sticky top-0 h-screen self-start z-30">
         <AppSidebar isCollapsed={isCollapsed} onToggleCollapse={toggleCollapse} isMobile={false} />
       </div>
 
