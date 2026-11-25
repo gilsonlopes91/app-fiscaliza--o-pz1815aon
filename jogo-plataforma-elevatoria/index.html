@@ -1,0 +1,926 @@
+<title>Operador PEMT</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: cena 3D em tela cheia; instrumentos da máquina nos cantos, como um painel de comando; telas de texto em folha lateral. */
+:root{
+  color-scheme:dark;
+  --bg:#10151b; --panel:rgba(16,22,29,.86); --panel-solid:#161d26; --line:rgba(160,185,210,.2);
+  --fg:#e9eef3; --mute:#9aa8b6; --amber:#ffb81c; --ok:#3ddc84; --bad:#ff4d42; --blue:#3b9cff;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif; --body:"Barlow","Segoe UI",system-ui,sans-serif;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;overflow:hidden}
+#game{position:relative;height:100%;overflow:hidden;user-select:none;-webkit-user-select:none}
+#view{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-transform:uppercase;margin:0;text-wrap:balance}
+.num{font-variant-numeric:tabular-nums}
+.kicker{font-family:var(--display);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-size:13px}
+
+/* botões */
+.btn{background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:4px;padding:10px 16px;font-weight:600;text-align:left}
+.btn:hover:not(:disabled){background:rgba(255,255,255,.14)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#16130a}
+.btn.primary:hover:not(:disabled){background:#ffc94d}
+.btn.danger{border-color:var(--bad);color:#ffd9d6}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* menu */
+#menu{position:absolute;inset:0;display:flex;align-items:stretch;background:linear-gradient(90deg,rgba(10,14,19,.94) 0,rgba(10,14,19,.8) 38%,rgba(10,14,19,0) 70%)}
+#menu .col{width:min(560px,100%);overflow-y:auto;display:flex;flex-direction:column;gap:22px;padding-block:28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media(min-width:700px){#menu .col{padding-left:44px;padding-right:28px}}
+#menu h1{font-size:clamp(44px,8vw,76px);line-height:.9}
+#menu h1 span{color:var(--amber)}
+.stripe{height:8px;width:120px;background:repeating-linear-gradient(-45deg,var(--amber) 0 10px,#16130a 10px 20px)}
+.types{display:flex;flex-wrap:wrap;gap:8px}
+.type{border:1px solid var(--line);border-radius:4px;padding:7px 12px;background:rgba(255,255,255,.04);font-weight:600}
+.type[aria-pressed=true]{border-color:var(--amber);color:var(--amber)}
+.type small{display:block;font-weight:400;color:var(--mute)}
+.phases{display:flex;flex-direction:column;gap:8px}
+.phase{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:4px;padding:12px 14px;text-align:left}
+.phase:hover{background:rgba(255,255,255,.12);border-color:var(--amber)}
+.phase b{font-family:var(--display);font-size:34px;color:var(--amber);line-height:1}
+.phase strong{font-family:var(--display);font-size:21px;text-transform:uppercase;letter-spacing:.03em;display:block}
+.phase span{color:var(--mute)}
+.phase em{font-style:normal;font-weight:600}
+.keys{width:100%;border-collapse:collapse;font-size:14px}
+.keys th{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--mute);text-align:left;padding:4px 8px 4px 0}
+.keys td{padding:4px 8px 4px 0;border-top:1px solid var(--line)}
+kbd{font-family:var(--body);font-weight:600;font-size:12.5px;background:#232d39;border:1px solid #3a4756;border-bottom-width:2px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.note{color:var(--mute);font-size:13.5px;max-width:60ch}
+
+/* HUD */
+#hud>*{position:absolute}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;backdrop-filter:blur(6px)}
+#obj{top:12px;left:max(12px,env(safe-area-inset-left,0px));width:min(360px,calc(100% - 24px));padding:10px 14px}
+#obj h3{font-size:19px}
+#obj ol{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:14px}
+#obj li{display:grid;grid-template-columns:18px 1fr;gap:6px;color:var(--mute)}
+#obj li.cur{color:var(--fg);font-weight:500}
+#obj li.done{color:var(--ok)}
+#obj li::before{content:"○"}#obj li.cur::before{content:"▶";color:var(--amber)}#obj li.done::before{content:"✓"}
+#obj .btn{margin-top:10px;width:100%}
+#wind{top:12px;right:max(12px,env(safe-area-inset-right,0px));width:210px;padding:10px 14px}
+#wind .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#wind .big{font-family:var(--display);font-size:38px;line-height:1}
+#wind .bar{position:relative;height:8px;background:#27313d;border-radius:2px;margin:8px 0 4px}
+#wind .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--ok)}
+#wind .bar u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--bad);left:62.5%}
+#wind small{color:var(--mute)}
+#inst{left:max(12px,env(safe-area-inset-left,0px));bottom:12px;padding:10px 14px;display:flex;gap:16px;align-items:center}
+#inst canvas{width:92px;height:92px}
+.gauges{display:grid;grid-template-columns:auto auto;gap:2px 14px;align-items:baseline}
+.gauges dt{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.gauges dd{margin:0;font-family:var(--display);font-size:24px;text-align:right}
+.gauges dd small{font-size:13px;color:var(--mute);font-family:var(--body)}
+#risk{grid-column:1/-1;height:6px;background:#27313d;border-radius:2px;margin-top:4px;overflow:hidden}
+#risk i{display:block;height:100%;width:0;background:var(--ok)}
+#lamps{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:6px;padding:8px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px)}
+.lamp{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;padding:5px 9px;border-radius:3px;background:#1d2630;color:#5d6b7a;border:1px solid transparent;white-space:nowrap}
+.lamp.on{background:rgba(61,220,132,.16);color:var(--ok);border-color:var(--ok)}
+.lamp.warn.on{background:rgba(255,184,28,.16);color:var(--amber);border-color:var(--amber)}
+.lamp.bad.on{background:rgba(255,77,66,.2);color:#ff8d85;border-color:var(--bad)}
+.lamp.blink.on{animation:bl .33s steps(2) infinite}
+@keyframes bl{50%{opacity:.35}}
+#help{right:max(12px,env(safe-area-inset-right,0px));bottom:12px;padding:8px 12px;font-size:13px;display:grid;grid-template-columns:auto auto;gap:3px 10px;color:var(--mute)}
+#help b{color:var(--fg);font-weight:500;text-align:right}
+#prompt{left:50%;top:22%;transform:translateX(-50%);padding:10px 18px;font-weight:600;text-align:center;border-color:var(--amber)}
+#prompt .pb{height:6px;background:#27313d;border-radius:2px;margin-top:8px;overflow:hidden}#prompt .pb i{display:block;height:100%;background:var(--amber);width:0}
+#tgt{pointer-events:none;font-family:var(--display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:14px;background:rgba(16,22,29,.8);border:1px solid var(--amber);color:var(--amber);padding:3px 8px;border-radius:3px;white-space:nowrap;transform:translate(-50%,-140%)}
+@media(max-width:820px){#help{display:none}#wind{width:150px}#obj{width:min(300px,calc(100% - 190px))}#inst{bottom:64px}}
+
+/* marcadores de inspeção */
+#spots button{position:absolute;left:0;top:0;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--amber);background:rgba(16,22,29,.75);color:var(--amber);font-weight:700;font-size:15px;display:grid;place-items:center;padding:0}
+#spots button::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid var(--amber);opacity:.5;animation:pulse 1.6s ease-out infinite}
+#spots button.ok{border-color:var(--ok);color:var(--ok)}#spots button.def{border-color:var(--bad);color:var(--bad)}
+#spots button.ok::after,#spots button.def::after{display:none}
+#spots button:hover{background:#27313d}
+@keyframes pulse{to{transform:scale(1.5);opacity:0}}
+@media(prefers-reduced-motion:reduce){#spots button::after,.lamp.blink.on{animation:none}}
+
+/* folha lateral e modal */
+#sheet{position:absolute;top:0;right:0;bottom:0;width:min(400px,100%);background:var(--panel-solid);border-left:1px solid var(--line);padding:22px;padding-right:max(22px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+#sheet h2{font-size:28px}
+#sheet p{margin:0;line-height:1.5}
+#sheet .ref{color:var(--mute);font-size:13.5px;border-left:3px solid var(--line);padding-left:10px}
+#sheet .acts{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+#modal{position:absolute;inset:0;background:rgba(8,11,15,.72);display:grid;place-items:center;padding:16px;overflow-y:auto}
+#modal .box{background:var(--panel-solid);border:1px solid var(--line);border-top:6px solid var(--amber);border-radius:4px;width:min(680px,100%);max-height:100%;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:14px}
+#modal h2{font-size:34px;line-height:1}
+#modal p{margin:0;line-height:1.5;max-width:65ch}
+#modal ul{margin:0;padding-left:20px;line-height:1.5}
+#modal .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.score{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.score .n{font-family:var(--display);font-size:72px;line-height:.9}
+.score .n.pass{color:var(--ok)}.score .n.fail{color:var(--bad)}
+.inf{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.inf li{border-left:3px solid var(--bad);padding:2px 0 2px 10px}
+.inf li.good{border-color:var(--ok)}
+.inf b{display:block}.inf span{color:var(--mute);font-size:13.5px}
+.inf em{font-style:normal;float:right;font-weight:600;color:#ff8d85}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{text-align:left;padding:4px 8px 4px 0;border-top:1px solid var(--line)}
+.tbl th{color:var(--mute);font-weight:500;border-top:0}
+.tag-ok{color:var(--ok)}.tag-bad{color:#ff8d85}
+.loadrow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.loadrow input{width:20px;height:20px;accent-color:var(--amber)}
+.loadtot{font-family:var(--display);font-size:30px}
+#toasts{position:absolute;top:84px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;width:min(520px,calc(100% - 24px));pointer-events:none}
+.toast{background:var(--panel-solid);border:1px solid var(--line);border-left:5px solid var(--amber);border-radius:4px;padding:9px 14px}
+.toast.bad{border-left-color:var(--bad)}.toast.good{border-left-color:var(--ok)}
+.toast b{display:block}.toast span{color:var(--mute);font-size:13.5px}
+#fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .5s}
+#err{position:absolute;inset:auto 12px 12px 12px;background:#3a1512;border:1px solid var(--bad);padding:10px 14px;border-radius:4px}
+</style>
+
+<div id="game">
+  <canvas id="view" aria-label="Cena 3D do simulador"></canvas>
+  <div id="spots"></div>
+
+  <div id="hud" hidden>
+    <div id="obj" class="card"><div class="kicker" id="objk"></div><h3 id="objt"></h3><ol id="objl"></ol><button class="btn primary" id="objb" hidden></button></div>
+    <div id="wind" class="card">
+      <div class="kicker">Vento na plataforma</div>
+      <div class="row"><span class="big num" id="wp">0,0</span><span>m/s</span></div>
+      <div class="bar"><i id="wbar"></i><u title="Limite 12,5 m/s"></u></div>
+      <div class="row"><small>No solo <span class="num" id="wg">0,0</span> m/s</small><small>limite 12,5</small></div>
+      <div class="row" id="pl" hidden><small>Rede elétrica</small><small class="num" id="pld"></small></div>
+    </div>
+    <div id="inst" class="card">
+      <canvas id="incl" width="184" height="184" aria-label="Inclinômetro"></canvas>
+      <dl class="gauges">
+        <dt>Piso</dt><dd class="num"><span id="gh">1,05</span> <small>m</small></dd>
+        <dt>Veloc.</dt><dd class="num"><span id="gv">0,0</span> <small>km/h</small></dd>
+        <dt>Carga</dt><dd class="num"><span id="gl">85</span> <small>/227 kg</small></dd>
+        <dt>Inclin.</dt><dd class="num"><span id="gt">0,0</span><small>°</small></dd>
+        <div id="risk" title="Risco de tombamento"><i></i></div>
+      </dl>
+    </div>
+    <div id="lamps" class="card">
+      <span class="lamp" id="l-en">Enable</span>
+      <span class="lamp bad" id="l-es">Emergência</span>
+      <span class="lamp bad blink" id="l-ti">Inclinação LL</span>
+      <span class="lamp" id="l-ph">Protetor de buraco</span>
+      <span class="lamp" id="l-ta">Talabarte</span>
+      <span class="lamp bad blink" id="l-ov">Sobrecarga</span>
+      <span class="lamp warn" id="l-sp">Lento</span>
+    </div>
+    <div id="help" class="card"></div>
+    <div id="prompt" class="card" hidden><span id="pt"></span><div class="pb"><i id="pbar"></i></div></div>
+    <div id="tgt" hidden></div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <aside id="sheet" hidden></aside>
+
+  <div id="menu">
+    <div class="col">
+      <div><div class="kicker">Simulador de treinamento · NR-18 · NR-35 · IPAF</div>
+        <h1>Operador <span>PEMT</span></h1></div>
+      <div class="stripe"></div>
+      <p class="note" style="font-size:15px;color:var(--fg)">Opere uma plataforma elevatória com as regras do manual do fabricante: checklist antes do turno, piso nivelado, carga, talabarte e limite de vento de 12,5 m/s.</p>
+      <div><div class="kicker" style="margin-bottom:8px">Tipo de plataforma</div>
+        <div class="types">
+          <button class="type" aria-pressed="true" id="ty-tesoura">Tesoura<small>227 kg · 2 pessoas · piso a 5,8 m</small></button>
+          <button class="type" disabled>Mastro vertical<small>em breve</small></button>
+          <button class="type" disabled>Lança telescópica<small>em breve</small></button>
+          <button class="type" disabled>Lança articulada<small>em breve</small></button>
+        </div></div>
+      <div><div class="kicker" style="margin-bottom:8px">Fases</div><div class="phases" id="phases"></div></div>
+      <div><div class="kicker" style="margin-bottom:8px">Comandos</div>
+        <table class="keys"><thead><tr><th>Ação</th><th>Teclado</th><th>Controle PS5</th></tr></thead><tbody id="keys"></tbody></table>
+        <p class="note" style="margin-top:10px">O <b>enable</b> é o botão de homem-morto: sem ele apertado, a máquina não anda nem sobe. Ligue o controle e aperte qualquer botão para o jogo reconhecer.</p></div>
+    </div>
+  </div>
+
+  <div id="modal" hidden><div class="box" id="mbox"></div></div>
+  <div id="fade"></div>
+  <div id="err" hidden></div>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = s => document.querySelector(s);
+window.addEventListener('error', e => { const el = $('#err'); el.hidden = false; el.textContent = 'Erro: ' + (e.message || e); });
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, t) => a + (b - a) * t;
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const fmt = (v, d = 1) => v.toFixed(d).replace('.', ',');
+const DEG = Math.PI / 180;
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+/* ───────── limites da máquina (ref. manual de tesoura elétrica de 5,8 m) ───────── */
+const SPEC = { cap: 227, wind: 12.5, grade: 14.0, tilt: 2.0, riseMax: 4.75, floor0: 1.05, vFast: 1.11, vSlow: 0.5, vRaised: 0.22, WB: 1.4, TR: 0.72 };
+
+/* ───────── render ───────── */
+const canvas = $('#view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.62;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 600);
+const rt = new THREE.WebGLRenderTarget(4, 4, { samples: 4, type: THREE.HalfFloatType });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.22, 0.7, 0.92); composer.addPass(bloom);
+composer.addPass(new OutputPass());
+function resize() { const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight; renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+const pmrem = new THREE.PMREMGenerator(renderer);
+const sun = new THREE.DirectionalLight(0xfff1dc, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 140 });
+const hemi = new THREE.HemisphereLight(0xbfd6ff, 0x3a3328, 0.6);
+scene.add(sun, sun.target, hemi);
+const sunDir = new THREE.Vector3();
+
+/* ───────── texturas procedurais ───────── */
+function ctex(w, h, draw, rep, srgb = true) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (rep) t.repeat.set(rep[0], rep[1]); return t;
+}
+function speckle(g, w, h, n, cols, max = 2.2) { for (let i = 0; i < n; i++) { g.fillStyle = cols[(Math.random() * cols.length) | 0]; g.globalAlpha = 0.15 + Math.random() * 0.5; const r = Math.random() * max + 0.4; g.beginPath(); g.arc(Math.random() * w, Math.random() * h, r, 0, 7); g.fill(); } g.globalAlpha = 1; }
+const T = {};
+function makeTextures() {
+  T.asphalt = ctex(512, 512, (g, w, h) => { g.fillStyle = '#3b3e42'; g.fillRect(0, 0, w, h); speckle(g, w, h, 9000, ['#2a2c2f', '#55585d', '#6a6d70', '#1f2123']); }, [26, 26]);
+  T.asphaltB = ctex(512, 512, (g, w, h) => { g.fillStyle = '#808080'; g.fillRect(0, 0, w, h); speckle(g, w, h, 9000, ['#404040', '#c0c0c0', '#606060']); }, [26, 26], false);
+  T.concrete = ctex(512, 512, (g, w, h) => { g.fillStyle = '#9a9a96'; g.fillRect(0, 0, w, h); speckle(g, w, h, 5000, ['#84847f', '#aeaea9', '#74746f'], 3); g.strokeStyle = 'rgba(60,60,58,.5)'; g.lineWidth = 3; g.strokeRect(0, 0, w, h); g.strokeStyle = 'rgba(50,50,48,.25)'; g.lineWidth = 1; for (let i = 0; i < 5; i++) { g.beginPath(); let x = Math.random() * w, y = Math.random() * h; g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (Math.random() - .5) * 90; y += (Math.random() - .5) * 90; g.lineTo(x, y); } g.stroke(); } }, [10, 10]);
+  T.concreteB = ctex(256, 256, (g, w, h) => { g.fillStyle = '#808080'; g.fillRect(0, 0, w, h); speckle(g, w, h, 2500, ['#606060', '#a0a0a0']); }, [10, 10], false);
+  T.metalWall = ctex(256, 64, (g, w, h) => { for (let x = 0; x < w; x += 32) { const gr = g.createLinearGradient(x, 0, x + 32, 0); gr.addColorStop(0, '#6f7a84'); gr.addColorStop(.5, '#b9c3cb'); gr.addColorStop(1, '#6f7a84'); g.fillStyle = gr; g.fillRect(x, 0, 32, h); } }, [14, 1]);
+  T.hazard = ctex(128, 128, (g, w, h) => { g.fillStyle = '#f5b301'; g.fillRect(0, 0, w, h); g.fillStyle = '#17171a'; for (let i = -2; i < 4; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64 + 32, 0); g.lineTo(i * 64 + 32 + 128, 128); g.lineTo(i * 64 + 128, 128); g.fill(); } }, [3, 1]);
+  T.deck = ctex(128, 128, (g, w, h) => { g.fillStyle = '#7d848b'; g.fillRect(0, 0, w, h); g.strokeStyle = '#a9b0b6'; g.lineWidth = 3; g.lineCap = 'round'; for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { const cx = x * 16 + 8, cy = y * 16 + 8, d = (x + y) % 2 ? 4 : -4; g.beginPath(); g.moveTo(cx - 4, cy - d); g.lineTo(cx + 4, cy + d); g.stroke(); } }, [6, 3]);
+  T.facade = ctex(512, 512, (g, w, h) => { g.fillStyle = '#c9c2b4'; g.fillRect(0, 0, w, h); speckle(g, w, h, 1500, ['#b9b2a4', '#d6d0c4'], 3); for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { const X = x * 256 + 48, Y = y * 256 + 60; const gr = g.createLinearGradient(X, Y, X + 160, Y + 150); gr.addColorStop(0, '#24384a'); gr.addColorStop(.5, '#5f89a8'); gr.addColorStop(1, '#1b2a38'); g.fillStyle = gr; g.fillRect(X, Y, 160, 150); g.strokeStyle = '#3a3a3a'; g.lineWidth = 6; g.strokeRect(X, Y, 160, 150); g.beginPath(); g.moveTo(X + 80, Y); g.lineTo(X + 80, Y + 150); g.stroke(); g.fillStyle = '#8e877a'; g.fillRect(X - 8, Y + 150, 176, 10); } }, [5, 2]);
+  T.dirt = ctex(256, 256, (g, w, h) => { g.fillStyle = '#6b563c'; g.fillRect(0, 0, w, h); speckle(g, w, h, 4000, ['#54432e', '#7d6748', '#4a3a27'], 3); }, [20, 20]);
+  T.crate = ctex(128, 128, (g, w, h) => { g.fillStyle = '#b08a55'; g.fillRect(0, 0, w, h); speckle(g, w, h, 600, ['#9c7846', '#c29a63']); g.strokeStyle = '#6e5230'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6); g.fillStyle = 'rgba(40,30,20,.5)'; g.font = 'bold 20px sans-serif'; g.fillText('FRÁGIL', 26, 72); });
+}
+function signTex(lines, bg = '#f5b301', fg = '#17171a', w = 512, h = 256) {
+  return ctex(w, h, (g) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.strokeStyle = fg; g.lineWidth = 10; g.strokeRect(8, 8, w - 16, h - 16); g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; const fs = Math.min(h / (lines.length + .6), 96); g.font = `700 ${fs}px "Barlow Condensed","Arial Narrow",sans-serif`; lines.forEach((l, i) => g.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * fs * 1.05)); });
+}
+const M = {};
+function makeMaterials() {
+  const S = (o) => new THREE.MeshStandardMaterial(o);
+  M.paint = new THREE.MeshPhysicalMaterial({ color: 0x0f5fb0, metalness: 0.3, roughness: 0.38, clearcoat: 0.7, clearcoatRoughness: 0.25 });
+  M.paintD = new THREE.MeshPhysicalMaterial({ color: 0x0b4a8a, metalness: 0.3, roughness: 0.45, clearcoat: 0.5 });
+  M.steel = S({ color: 0x8b949c, metalness: 0.85, roughness: 0.35 });
+  M.dark = S({ color: 0x24282d, metalness: 0.5, roughness: 0.6 });
+  M.rubber = S({ color: 0x17181a, roughness: 0.92 });
+  M.hub = S({ color: 0xd9dde1, metalness: 0.7, roughness: 0.35 });
+  M.yellow = S({ color: 0xf5b301, roughness: 0.5, metalness: 0.2 });
+  M.red = S({ color: 0xd9281c, roughness: 0.4, emissive: 0x4a0a05 });
+  M.deck = S({ map: T.deck, metalness: 0.6, roughness: 0.5 });
+  M.hazard = S({ map: T.hazard, roughness: 0.6 });
+  M.chrome = S({ color: 0xffffff, metalness: 1, roughness: 0.12 });
+  M.skin = S({ color: 0xc98d68, roughness: 0.8 });
+  M.vest = S({ color: 0xff6a13, roughness: 0.75, emissive: 0x3a1500 });
+  M.reflect = S({ color: 0xe8ff7a, roughness: 0.3, emissive: 0x6c7a20 });
+  M.pants = S({ color: 0x25344a, roughness: 0.9 });
+  M.helmet = S({ color: 0xf4f4f0, roughness: 0.35 });
+  M.strap = S({ color: 0x1b1b1b, roughness: 0.9 });
+  M.concrete = S({ map: T.concrete, bumpMap: T.concreteB, bumpScale: 0.6, roughness: 0.85 });
+  M.wall = S({ map: T.metalWall, metalness: 0.5, roughness: 0.55 });
+  M.crate = S({ map: T.crate, roughness: 0.85 });
+  M.wood = S({ color: 0x9a7848, roughness: 0.9 });
+  M.cone = S({ color: 0xff5a12, roughness: 0.6 });
+  M.white = S({ color: 0xf2f2ee, roughness: 0.55 });
+  M.leaf = S({ color: 0x3f7a35, roughness: 0.9, flatShading: true });
+  M.trunk = S({ color: 0x5a4330, roughness: 1 });
+  M.glass = new THREE.MeshStandardMaterial({ color: 0x6f9cc0, metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.75 });
+  M.lampOn = S({ color: 0xffffff, emissive: 0xfff2cc, emissiveIntensity: 4 });
+  M.lampOff = S({ color: 0x555555, roughness: 0.4 });
+  M.amberOn = S({ color: 0xffb81c, emissive: 0xffa000, emissiveIntensity: 5 });
+  M.oil = new THREE.MeshPhysicalMaterial({ color: 0x1a120a, roughness: 0.05, metalness: 0.4, clearcoat: 1 });
+  M.panel = S({ color: 0xeeeeea, roughness: 0.3, metalness: 0.4 });
+}
+const mk = (geo, mat, x = 0, y = 0, z = 0, parent, sh = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = sh; m.receiveShadow = true; if (parent) parent.add(m); return m; };
+const box = (w, h, d, mat, x, y, z, parent, sh) => mk(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent, sh);
+const cyl = (r, h, mat, x, y, z, parent, seg = 16, r2) => mk(new THREE.CylinderGeometry(r2 ?? r, r, h, seg), mat, x, y, z, parent);
+const UP = new THREE.Vector3(0, 1, 0), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
+function between(mesh, a, b) { v1.subVectors(b, a); const len = v1.length(); mesh.position.copy(a).addScaledVector(v1, 0.5); mesh.quaternion.setFromUnitVectors(UP, v1.normalize()); mesh.scale.y = len; }
+
+/* ───────── máquina ───────── */
+function person(parent, x, z, vestMat = M.vest) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); parent.add(g);
+  box(0.13, 0.82, 0.15, M.pants, -0.09, 0.41, 0, g); box(0.13, 0.82, 0.15, M.pants, 0.09, 0.41, 0, g);
+  box(0.15, 0.08, 0.26, M.dark, -0.09, 0.04, 0.04, g); box(0.15, 0.08, 0.26, M.dark, 0.09, 0.04, 0.04, g);
+  mk(new RoundedBoxGeometry(0.4, 0.56, 0.23, 3, 0.05), vestMat, 0, 1.1, 0, g);
+  box(0.41, 0.045, 0.24, M.reflect, 0, 0.98, 0, g, false); box(0.41, 0.045, 0.24, M.reflect, 0, 1.2, 0, g, false);
+  const aL = box(0.1, 0.5, 0.1, vestMat, -0.25, 1.12, 0.12, g); aL.rotation.x = -0.9; const aR = box(0.1, 0.5, 0.1, vestMat, 0.25, 1.12, 0.12, g); aR.rotation.x = -0.9;
+  cyl(0.05, 0.08, M.skin, 0, 1.42, 0, g, 10);
+  mk(new THREE.SphereGeometry(0.115, 18, 14), M.skin, 0, 1.55, 0, g);
+  mk(new THREE.SphereGeometry(0.135, 18, 10, 0, 7, 0, 1.45), M.helmet, 0, 1.58, 0, g);
+  cyl(0.15, 0.015, M.helmet, 0, 1.59, 0.04, g, 18);
+  const har = new THREE.Group(); g.add(har);
+  box(0.42, 0.04, 0.25, M.strap, 0, 0.86, 0, har, false);
+  const s1 = box(0.05, 0.6, 0.25, M.strap, -0.1, 1.1, 0, har, false); s1.rotation.z = 0.18; const s2 = box(0.05, 0.6, 0.25, M.strap, 0.1, 1.1, 0, har, false); s2.rotation.z = -0.18;
+  g.userData.harness = har; return g;
+}
+function buildMachine() {
+  const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
+  const R = { root, tilt, wheels: [], anchors: {} };
+  const anchor = (k, parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); R.anchors[k] = o; };
+  // chassi
+  mk(new RoundedBoxGeometry(0.8, 0.36, 1.9, 4, 0.05), M.paint, 0, 0.39, 0, tilt);
+  box(0.74, 0.1, 1.5, M.dark, 0, 0.2, 0, tilt);
+  box(0.82, 0.07, 0.04, M.hazard, 0, 0.26, 0.95, tilt, false); box(0.82, 0.07, 0.04, M.hazard, 0, 0.26, -0.95, tilt, false);
+  // bandejas laterais
+  R.trayL = new THREE.Group(); R.trayL.position.set(0.405, 0.27, 0); tilt.add(R.trayL);
+  box(0.02, 0.26, 1.0, M.paintD, 0, 0.13, 0, R.trayL); box(0.025, 0.03, 0.18, M.dark, 0.01, 0.2, 0, R.trayL, false);
+  R.trayR = new THREE.Group(); R.trayR.position.set(-0.405, 0.27, 0); tilt.add(R.trayR);
+  box(0.02, 0.26, 1.0, M.paintD, 0, 0.13, 0, R.trayR); box(0.025, 0.03, 0.18, M.dark, -0.01, 0.2, 0, R.trayR, false);
+  // baterias atrás da bandeja direita (visíveis quando ela abre)
+  for (let i = 0; i < 4; i++) box(0.16, 0.2, 0.2, M.dark, -0.3, 0.4, -0.33 + i * 0.22, tilt, false);
+  // decalque de capacidade
+  const dtex = signTex(['CAP. 227 kg · 2 PESSOAS', 'VENTO MÁX. 12,5 m/s'], '#f2f2ee', '#17171a', 512, 128);
+  R.decal = mk(new THREE.PlaneGeometry(0.62, 0.155), new THREE.MeshStandardMaterial({ map: dtex, roughness: 0.5 }), 0.418, 0.47, 0.45, tilt, false); R.decal.rotation.y = Math.PI / 2;
+  const d2 = R.decal.clone(); d2.position.set(-0.418, 0.47, 0.45); d2.rotation.y = -Math.PI / 2; tilt.add(d2);
+  // comando de solo (traseira)
+  box(0.3, 0.2, 0.05, M.dark, -0.2, 0.44, -0.965, tilt);
+  cyl(0.03, 0.03, M.red, -0.27, 0.47, -1.0, tilt).rotation.x = Math.PI / 2;
+  cyl(0.012, 0.03, M.chrome, -0.16, 0.47, -1.0, tilt).rotation.x = Math.PI / 2;
+  cyl(0.02, 0.05, M.red, 0.2, 0.3, -0.98, tilt).rotation.x = Math.PI / 2; // manopla de descida de emergência
+  // escada
+  for (let i = 0; i < 3; i++) box(0.36, 0.025, 0.07, M.steel, 0.1, 0.22 + i * 0.22, -1.0, tilt);
+  box(0.025, 0.7, 0.025, M.steel, -0.08, 0.5, -1.0, tilt); box(0.025, 0.7, 0.025, M.steel, 0.28, 0.5, -1.0, tilt);
+  // sinalizador
+  R.beacon = cyl(0.035, 0.05, M.lampOff, 0.33, 0.6, 0.85, tilt, 12);
+  // rodas
+  const tyreG = new THREE.CylinderGeometry(0.19, 0.19, 0.13, 28), hubG = new THREE.CylinderGeometry(0.11, 0.11, 0.135, 18);
+  [[0.36, 0.7], [-0.36, 0.7], [0.36, -0.7], [-0.36, -0.7]].forEach(([x, z], i) => {
+    const pivot = new THREE.Group(); pivot.position.set(x, 0.19, z); tilt.add(pivot);
+    const spin = new THREE.Group(); pivot.add(spin);
+    const t = mk(tyreG, M.rubber, 0, 0, 0, spin); t.rotation.z = Math.PI / 2; const h = mk(hubG, M.hub, 0, 0, 0, spin); h.rotation.z = Math.PI / 2;
+    for (let k = 0; k < 5; k++) { const b = cyl(0.014, 0.14, M.dark, 0, Math.cos(k * 1.2566) * 0.07, Math.sin(k * 1.2566) * 0.07, spin, 6); b.rotation.z = Math.PI / 2; }
+    R.wheels.push({ pivot, spin, front: z > 0 });
+  });
+  // protetores de buraco
+  R.ph = [box(0.03, 0.06, 0.95, M.yellow, 0.3, 0.14, 0, tilt), box(0.03, 0.06, 0.95, M.yellow, -0.3, 0.14, 0, tilt)];
+  // poça de óleo (defeito)
+  R.puddle = mk(new THREE.CircleGeometry(0.34, 24), M.oil, -0.15, 0.006, 0.25, root, false); R.puddle.rotation.x = -Math.PI / 2; R.puddle.scale.set(1.3, 0.8, 1); R.puddle.visible = false;
+  // tesoura
+  const sc = new THREE.Group(); sc.position.y = 0.57; tilt.add(sc); R.sc = sc; R.sway = new THREE.Group(); R.sway.position.y = 0.57; tilt.add(R.sway); sc.position.y = 0; R.sway.add(sc);
+  R.arms = []; const NL = 4, AL = 1.62; R.NL = NL; R.AL = AL;
+  const armG = new THREE.BoxGeometry(0.035, 0.075, AL), pinG = new THREE.CylinderGeometry(0.022, 0.022, 0.72, 10);
+  for (let i = 0; i < NL; i++) {
+    const lv = { a: [], b: [], pins: [] };
+    for (const sx of [1, -1]) { lv.a.push(mk(armG, M.paint, sx * 0.31, 0, 0, sc)); lv.b.push(mk(armG, M.paintD, sx * 0.265, 0, 0, sc)); }
+    for (let k = 0; k < 3; k++) { const p = mk(pinG, M.steel, 0, 0, 0, sc); p.rotation.z = Math.PI / 2; lv.pins.push(p); }
+    R.arms.push(lv);
+  }
+  R.cylB = cyl(0.045, 1, M.dark, 0, 0, 0, sc, 14); R.cylR = cyl(0.025, 1, M.chrome, 0, 0, 0, sc, 12);
+  // mangueira
+  R.hose = cyl(0.014, 1, M.rubber, 0, 0, 0, sc, 8);
+  // plataforma
+  const pf = new THREE.Group(); R.sway.add(pf); R.pf = pf;
+  box(0.82, 0.06, 1.9, M.deck, 0, 0, 0, pf); box(0.84, 0.1, 1.92, M.paint, 0, -0.07, 0, pf);
+  const railM = M.paint, post = (x, z) => cyl(0.02, 1.1, railM, x, 0.58, z, pf, 10);
+  for (const x of [0.39, -0.39]) for (const z of [0.93, 0, -0.93]) post(x, z);
+  const rail = (len, x, y, z, ry) => { const r = cyl(0.018, len, railM, x, y, z, pf, 10); r.rotation.z = Math.PI / 2; r.rotation.y = ry; return r; };
+  for (const y of [1.13, 0.6]) { rail(1.86, 0.39, y, 0, Math.PI / 2); rail(1.86, -0.39, y, 0, Math.PI / 2); rail(0.78, 0, y, 0.93, 0); }
+  for (const x of [0.4, -0.4]) box(0.012, 0.15, 1.86, M.dark, x, 0.1, 0, pf, false);
+  box(0.8, 0.15, 0.012, M.dark, 0, 0.1, 0.94, pf, false);
+  // portão traseiro
+  R.gate = new THREE.Group(); R.gate.position.set(0.39, 0, -0.93); pf.add(R.gate);
+  for (const y of [1.13, 0.6, 0.15]) { const r = cyl(0.018, 0.78, M.yellow, -0.39, y, 0, R.gate, 10); r.rotation.z = Math.PI / 2; }
+  // caixa de comando da plataforma
+  box(0.26, 0.2, 0.14, M.dark, -0.15, 1.02, 0.86, pf);
+  cyl(0.012, 0.09, M.dark, -0.2, 1.16, 0.84, pf, 8); mk(new THREE.SphereGeometry(0.025, 10, 8), M.dark, -0.2, 1.21, 0.84, pf);
+  cyl(0.026, 0.03, M.red, -0.08, 1.135, 0.84, pf, 12);
+  // caixa do manual
+  box(0.24, 0.3, 0.05, M.dark, 0.2, 0.8, 0.9, pf); box(0.2, 0.24, 0.012, M.white, 0.2, 0.83, 0.87, pf, false);
+  // pontos de ancoragem
+  const ringG = new THREE.TorusGeometry(0.035, 0.01, 8, 16);
+  mk(ringG, M.yellow, 0.36, 0.08, 0.5, pf, false); mk(ringG, M.yellow, -0.36, 0.08, 0.5, pf, false);
+  // entulho (defeito)
+  R.debris = new THREE.Group(); pf.add(R.debris); box(0.2, 0.08, 0.3, M.wood, 0.15, 0.07, -0.5, R.debris).rotation.y = 0.5; box(0.12, 0.12, 0.12, M.crate, -0.2, 0.09, -0.6, R.debris); const sp = mk(new THREE.CircleGeometry(0.2, 16), M.oil, 0, 0.032, -0.3, R.debris, false); sp.rotation.x = -Math.PI / 2; R.debris.visible = false;
+  // pessoas e carga
+  R.op = person(pf, 0.02, 0.5); R.op.position.y = 0.03;
+  R.helper = person(pf, 0.05, -0.45, new THREE.MeshStandardMaterial({ color: 0xd8e021, roughness: 0.75, emissive: 0x2a2c00 })); R.helper.position.y = 0.03; R.helper.rotation.y = 0.5; R.helper.visible = false; R.helper.userData.harness.visible = false;
+  R.tools = box(0.34, 0.2, 0.2, M.red, -0.2, 0.13, -0.1, pf); R.tools.visible = false;
+  R.panelA = box(0.03, 1.15, 1.65, M.panel, 0.33, 0.66, -0.1, pf); R.panelA.rotation.z = 0.08; R.panelA.visible = false;
+  R.panelB = box(0.03, 1.15, 1.65, M.panel, 0.28, 0.66, -0.1, pf); R.panelB.rotation.z = 0.08; R.panelB.visible = false;
+  // talabarte
+  R.lan = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0.02, 0.9, 0.42), new THREE.Vector3(0.2, 0.4, 0.5), new THREE.Vector3(0.36, 0.1, 0.5)]), new THREE.LineBasicMaterial({ color: 0xffd000 })); pf.add(R.lan);
+  // âncoras de inspeção
+  anchor('docs', pf, 0.2, 0.85, 0.95); anchor('pneus', tilt, 0.5, 0.2, 0.7); anchor('bateria', tilt, -0.5, 0.42, -0.2); anchor('hidraulico', tilt, -0.5, 0.1, 0.35);
+  anchor('mangueiras', tilt, 0.45, 0.62, -0.5); anchor('tesoura', tilt, 0.45, 0.78, 0.1); anchor('guarda', pf, 0, 0.9, -1.0); anchor('ancoragem', pf, 0.42, 0.15, 0.5);
+  anchor('decalques', tilt, 0.45, 0.47, 0.45); anchor('protetor', tilt, 0.4, 0.1, -0.25); anchor('bandejas', tilt, 0.45, 0.33, -0.05); anchor('piso', pf, -0.1, 0.25, -0.45); anchor('solo', tilt, -0.2, 0.5, -1.05);
+  return R;
+}
+const a3 = new THREE.Vector3(), b3 = new THREE.Vector3();
+function poseMachine(R, s) {
+  R.root.position.set(s.x, s.y, s.z); R.root.rotation.y = s.yaw;
+  R.tilt.rotation.set(-s.pitch + (s.tipX || 0), 0, s.roll + (s.tipZ || 0));
+  const stack = 0.45 + s.rise, hl = stack / R.NL, phi = Math.asin(clamp(hl / R.AL, 0, 1)), half = R.AL / 2 * Math.cos(phi);
+  R.arms.forEach((lv, i) => {
+    const y = i * hl + hl / 2;
+    lv.a.forEach(m => { m.position.y = y; m.rotation.x = phi; }); lv.b.forEach(m => { m.position.y = y; m.rotation.x = -phi; });
+    lv.pins[0].position.set(0, y, 0); lv.pins[1].position.set(0, y + hl / 2, half); lv.pins[2].position.set(0, y + hl / 2, -half);
+  });
+  a3.set(0, -0.12, -0.55); b3.set(0, hl * 1.5, 0.0); between(R.cylR, a3, b3); v2.copy(b3).sub(a3).multiplyScalar(0.55).add(a3); between(R.cylB, a3, v2);
+  a3.set(0.2, -0.1, -0.6); b3.set(0.2, hl * 0.6, -half * 0.8); between(R.hose, a3, b3);
+  R.pf.position.y = stack + 0.1;
+  R.sway.rotation.set(s.swayX || 0, 0, s.swayZ || 0);
+  R.wheels.forEach((w, i) => { if (w.front) w.pivot.rotation.y = s.steer; w.spin.rotation.x = s.spin; });
+  const py = lerp(0.14, 0.055, s.pothole); R.ph[0].position.y = py; R.ph[1].position.y = py;
+  R.gate.rotation.y = s.gateOpen ? -1.9 : 0;
+  R.lan.visible = s.harness; R.op.userData.harness.visible = s.harness;
+  R.beacon.material = (s.moving && Math.floor(s.blink * 4) % 2 === 0) ? M.amberOn : M.lampOff;
+}
+
+/* ───────── estado ───────── */
+const G = { mode: 'menu', t: 0, level: null, stage: '', inf: [], cool: {}, ev: {}, objs: [], obj: 0, pad: false, failed: null, best: {}, spots: [], load: { helper: false, tools: false, panels: 0 }, camYaw: 0, camPitch: 0.32, camDist: 8, fp: false, wind: { g: 0, p: 0, dir: 0 } };
+const S = {}; let MR = null, world = null, L = null;
+try { G.best = JSON.parse(localStorage.getItem('pemt-best') || '{}'); } catch (e) { }
+function resetMachine(st) { Object.assign(S, { x: st.x, z: st.z, yaw: st.yaw, y: 0, pitch: 0, roll: 0, v: 0, steer: 0, spin: 0, rise: 0, pothole: 0, estop: true, fast: true, harness: false, gateOpen: false, tipX: 0, tipZ: 0, swayX: 0, swayZ: 0, moving: false, blink: 0, risk: 0, riskT: 0, tiltDeg: 0, harnessFlag: false, windT: 0, work: 0, descending: false }); }
+
+/* ───────── infrações ───────── */
+const INF = {
+  elevarInclinado: { t: 'Tentou elevar em piso inclinado', n: 'Manual do fabricante: só eleve em superfície firme e nivelada. O sensor de inclinação bloqueia a subida acima de 2°.', p: 8 },
+  rampa: { t: 'Rampa acima do limite da máquina', n: 'A tesoura sobe rampas de até 25% (14°), e só com a plataforma recolhida. Acima disso, use guincho ou transporte.', p: 12 },
+  buraco: { t: 'Roda em buraco', n: 'Inspeção do local (NR-18 e IPAF): identifique e desvie de buracos, valas e desníveis antes de movimentar a máquina.', p: 8 },
+  colisao: { t: 'Colisão', n: 'Ajuste a velocidade ao local e observe pontos cegos e obstáculos antes de manobrar.', p: 6 },
+  pedestre: { t: 'Pessoa na área de manobra', n: 'Isole a área de trabalho, pare a máquina e use a buzina. Pessoas não autorizadas não podem ficar no raio de operação.', p: 10 },
+  rede: { t: 'Distância insegura da rede elétrica', n: 'A máquina não é isolada. Mantenha no mínimo 3,05 m de redes de até 50 kV, contando o balanço do cabo.', p: 30 },
+  talabarte: { t: 'Elevou sem prender o talabarte', n: 'Regra do local e análise de risco (NR-35): cinto com talabarte preso ao ponto de ancoragem antes de elevar.', p: 8 },
+  sobrecarga: { t: 'Tentou elevar com sobrecarga', n: 'Pessoas, ferramentas e materiais não podem passar da capacidade da plataforma (227 kg). O sensor bloqueia a subida.', p: 12 },
+  ventoElevado: { t: 'Permaneceu elevado com vento acima do limite', n: 'Com vento acima de 12,5 m/s, desça a plataforma e pare a operação até o vento baixar (manual do fabricante).', p: 15 },
+  ventoSubir: { t: 'Elevou a plataforma com vento acima do limite', n: 'Não eleve a plataforma quando o vento passar de 12,5 m/s. O vento na altura é maior que no solo.', p: 12 },
+  tombamento: { t: 'A máquina tombou', n: 'Causas de tombamento: piso desnivelado ou buraco com a plataforma elevada, vento forte, efeito vela de placas e sobrecarga.', p: 100 },
+  choque: { t: 'Contato com a rede elétrica', n: 'A máquina não é isolada. Em caso de contato, ninguém toca na máquina até a rede ser desligada.', p: 100 },
+};
+function infr(id, cd = 6) { if (G.mode !== 'play' || G.failed) return; if (G.cool[id] && G.t < G.cool[id]) return; G.cool[id] = G.t + cd; G.inf.push({ id, p: INF[id].p }); toast(INF[id].t, INF[id].n, 'bad'); snd.buzz(); rumble(0.9, 350); }
+function penalty(title, note, p) { G.inf.push({ custom: title, note, p }); }
+function fail(id) { if (G.failed) return; G.inf.push({ id, p: INF[id].p }); G.failed = { id, t: 0 }; toast(INF[id].t, INF[id].n, 'bad'); snd.crash(); rumble(1, 900); }
+
+/* ───────── som ───────── */
+const snd = (() => {
+  let ac, motor, motorG, windG, hornG;
+  function init() { if (ac) { ac.resume(); return; } try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 70; const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 320; motorG = ac.createGain(); motorG.gain.value = 0; o.connect(f).connect(motorG).connect(ac.destination); o.start(); motor = o;
+    const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const n = ac.createBufferSource(); n.buffer = buf; n.loop = true; const bf = ac.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = 420; bf.Q.value = 0.6; windG = ac.createGain(); windG.gain.value = 0; n.connect(bf).connect(windG).connect(ac.destination); n.start();
+    const h1 = ac.createOscillator(), h2 = ac.createOscillator(); h1.type = h2.type = 'square'; h1.frequency.value = 392; h2.frequency.value = 494; hornG = ac.createGain(); hornG.gain.value = 0; h1.connect(hornG); h2.connect(hornG); hornG.connect(ac.destination); h1.start(); h2.start(); }
+  function tone(f, d, type = 'square', v = 0.07) { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + d); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + d); }
+  return { init, beep: (f = 880, d = 0.12) => tone(f, d), ok: () => { tone(660, 0.1, 'sine', 0.1); setTimeout(() => tone(990, 0.16, 'sine', 0.1), 90); }, buzz: () => tone(140, 0.4, 'sawtooth', 0.12), click: () => tone(220, 0.05, 'square', 0.08), crash: () => { tone(60, 1.2, 'sawtooth', 0.25); tone(90, 0.8, 'square', 0.15); },
+    set(m, w, h) { if (!ac) return; const t = ac.currentTime; motorG.gain.setTargetAtTime(m * 0.05, t, 0.08); motor.frequency.setTargetAtTime(60 + m * 50, t, 0.1); windG.gain.setTargetAtTime(clamp(w / 16, 0, 1) ** 1.5 * 0.35, t, 0.3); hornG.gain.setTargetAtTime(h ? 0.06 : 0, t, 0.01); } };
+})();
+function rumble(mag, ms) { try { for (const p of navigator.getGamepads()) p?.vibrationActuator?.playEffect?.('dual-rumble', { duration: ms, strongMagnitude: mag, weakMagnitude: mag * 0.6 }); } catch (e) { } }
+
+/* ───────── entrada ───────── */
+const keys = new Set(), edges = new Set(); const I = { drive: 0, steer: 0, lift: 0, enable: false, horn: false, work: false, emerg: false, cx: 0, cy: 0 };
+const KEYMAP = { Space: 'estop', KeyQ: 'speed', KeyT: 'harness', KeyV: 'view', KeyC: 'board', Escape: 'pause' };
+addEventListener('keydown', e => { if (e.repeat) return; G.pad = false; keys.add(e.code); if (KEYMAP[e.code]) edges.add(KEYMAP[e.code]); if (G.mode === 'play' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code) && !(e.target instanceof HTMLButtonElement && e.code === 'Space' && !$('#modal').hidden)) e.preventDefault(); });
+addEventListener('keyup', e => keys.delete(e.code)); addEventListener('blur', () => keys.clear());
+let drag = null;
+canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); snd.init(); });
+canvas.addEventListener('pointermove', e => { if (!drag) return; G.camYaw -= (e.clientX - drag.x) * 0.006; G.camPitch = clamp(G.camPitch + (e.clientY - drag.y) * 0.004, -0.15, 1.35); drag = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('pointerup', () => drag = null); canvas.addEventListener('pointercancel', () => drag = null);
+canvas.addEventListener('wheel', e => { G.camDist = clamp(G.camDist * (e.deltaY > 0 ? 1.1 : 0.9), 3, 60); e.preventDefault(); }, { passive: false });
+let prevB = [];
+function pollInput() {
+  const k = c => keys.has(c);
+  I.drive = (k('KeyW') ? 1 : 0) - (k('KeyS') ? 1 : 0); I.steer = (k('KeyA') ? 1 : 0) - (k('KeyD') ? 1 : 0); I.lift = (k('ArrowUp') ? 1 : 0) - (k('ArrowDown') ? 1 : 0);
+  I.enable = k('ShiftLeft') || k('ShiftRight'); I.horn = k('KeyH'); I.work = k('KeyF'); I.emerg = k('KeyE'); I.cx = (k('ArrowRight') ? 1 : 0) - (k('ArrowLeft') ? 1 : 0); I.cy = 0;
+  let gp = null; try { gp = [...navigator.getGamepads()].find(p => p && p.connected); } catch (e) { }
+  if (gp) {
+    const b = gp.buttons.map(x => x.pressed), ax = gp.axes, dz = v => Math.abs(v) < 0.14 ? 0 : v;
+    const just = i => b[i] && !prevB[i];
+    if (b.some(x => x) || ax.some(v => Math.abs(v) > 0.3)) G.pad = true;
+    if (G.pad) {
+      I.drive = -dz(ax[1] || 0); I.steer = -dz(ax[0] || 0); I.lift = (b[5] ? 1 : 0) - (b[4] ? 1 : 0); I.enable = b[6] || b[7]; I.horn = b[10]; I.work = b[0]; I.emerg = b[17] || b[13]; I.cx = dz(ax[2] || 0); I.cy = dz(ax[3] || 0);
+      if (just(2)) edges.add('estop'); if (just(1)) edges.add('speed'); if (just(3)) edges.add('harness'); if (just(11)) edges.add('view'); if (just(9)) edges.add('pause'); if (just(8)) edges.add('board');
+      // navegação de telas
+      const ui = uiButtons(); if (ui.length) { const idx = ui.indexOf(document.activeElement); if (just(12) || just(14)) ui[(idx - 1 + ui.length) % ui.length].focus(); if (just(13) || just(15)) ui[(idx + 1) % ui.length].focus(); if (just(0)) { (idx >= 0 ? ui[idx] : ui[0]).click(); I.work = false; } }
+    }
+    prevB = b;
+  }
+}
+function uiButtons() { const c = !$('#modal').hidden ? $('#modal') : !$('#sheet').hidden ? $('#sheet') : !$('#menu').hidden ? $('#menu') : (G.spots.length ? $('#game') : null); return c ? [...c.querySelectorAll(c.id === 'game' ? '#spots button,#objb:not([hidden])' : 'button:not(:disabled)')] : []; }
+const edge = n => edges.has(n);
+const K = (kb, ps) => `<b>${G.pad ? ps : kb}</b>`;
+
+/* ───────── UI ───────── */
+function toast(t, n, kind = '') { const el = document.createElement('div'); el.className = 'toast ' + kind; el.innerHTML = `<b>${t}</b>${n ? `<span>${n}</span>` : ''}`; const box = $('#toasts'); box.appendChild(el); while (box.children.length > 3) box.firstChild.remove(); setTimeout(() => el.remove(), kind === 'bad' ? 8000 : 4500); }
+function modal({ kicker = '', title, html = '', acts = [] }) { const m = $('#mbox'); m.innerHTML = `<div class="kicker">${kicker}</div><h2>${title}</h2>${html}<div class="acts"></div>`; const a = m.querySelector('.acts'); acts.forEach((x, i) => { const b = document.createElement('button'); b.className = 'btn' + (x.primary ? ' primary' : '') + (x.danger ? ' danger' : ''); b.textContent = x.label; b.onclick = () => { snd.init(); snd.click(); if (!x.keep) $('#modal').hidden = true; x.fn && x.fn(); }; a.appendChild(b); if (i === 0) setTimeout(() => b.focus(), 30); }); $('#modal').hidden = false; }
+function setObjs(k, t, list) { G.objs = list.map(x => ({ text: x })); G.obj = 0; $('#objk').textContent = k; $('#objt').textContent = t; drawObjs(); }
+function drawObjs() { $('#objl').innerHTML = G.objs.map((o, i) => `<li class="${i < G.obj ? 'done' : i === G.obj ? 'cur' : ''}">${o.text}</li>`).join(''); }
+function nextObj() { G.obj++; G.ev = {}; drawObjs(); snd.ok(); }
+function fade(fn) { const f = $('#fade'); f.style.opacity = 1; setTimeout(() => { fn(); f.style.opacity = 0; }, 450); }
+const KEYS = [['Andar e virar', 'W A S D', 'Analógico esquerdo'], ['Enable (segurar)', 'Shift', 'L2 ou R2'], ['Subir / descer plataforma', '↑ / ↓', 'R1 / L1'], ['Parada de emergência', 'Espaço', '□'], ['Trabalhar (segurar)', 'F', '✕'], ['Talabarte', 'T', '△'], ['Buzina', 'H', 'L3'], ['Velocidade lenta / rápida', 'Q', '○'], ['Descida de emergência (segurar)', 'E', 'Touchpad'], ['Câmera', 'Arrastar o mouse, V', 'Analógico direito, R3'], ['Pausa', 'Esc', 'Options']];
+$('#keys').innerHTML = KEYS.map(r => `<tr><td>${r[0]}</td><td><kbd>${r[1]}</kbd></td><td><kbd>${r[2]}</kbd></td></tr>`).join('');
+function drawHelp() { $('#help').innerHTML = [['W A S D', 'Analógico E', 'andar'], ['Shift', 'L2/R2', 'enable'], ['↑ ↓', 'R1 L1', 'plataforma'], ['Espaço', '□', 'emergência'], ['F', '✕', 'trabalhar'], ['T', '△', 'talabarte'], ['H', 'L3', 'buzina'], ['Q', '○', 'velocidade'], ['E', 'Touchpad', 'descida emerg.'], ['Esc', 'Options', 'pausa']].map(r => `${K(r[0], r[1])}<span>${r[2]}</span>`).join(''); }
+
+/* ───────── cenário: utilidades ───────── */
+function setSky(elev, az, turb = 6, ray = 1.6, exposure = 0.62, envI = 0.9) {
+  const sky = new Sky(); sky.scale.setScalar(450); const u = sky.material.uniforms; u.turbidity.value = turb; u.rayleigh.value = ray; u.mieCoefficient.value = 0.006; u.mieDirectionalG.value = 0.8;
+  sunDir.setFromSphericalCoords(1, (90 - elev) * DEG, az * DEG); u.sunPosition.value.copy(sunDir);
+  const tmp = new THREE.Scene(); tmp.add(sky); const env = pmrem.fromScene(tmp, 0, 0.1, 1000).texture; scene.environment = env; world.add(sky);
+  renderer.toneMappingExposure = exposure; scene.environmentIntensity = envI; if ('environmentIntensity' in scene === false) { }
+}
+function ground(size, seg, hAt, colAt, mat) {
+  const g = new THREE.PlaneGeometry(size, size, seg, seg); g.rotateX(-Math.PI / 2); const p = g.attributes.position, col = new Float32Array(p.count * 3), c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, hAt(x, z)); colAt(x, z, c); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals(); mat.vertexColors = true; const m = new THREE.Mesh(g, mat); m.receiveShadow = true; world.add(m); return m;
+}
+function cone(x, z, y = 0) { const g = new THREE.Group(); g.position.set(x, y, z); world.add(g); box(0.34, 0.03, 0.34, M.dark, 0, 0.015, 0, g); cyl(0.13, 0.5, M.cone, 0, 0.28, 0, g, 14, 0.03); cyl(0.095, 0.08, M.white, 0, 0.3, 0, g, 14, 0.075); return g; }
+function tree(x, z, s = 1, y = 0) { const g = new THREE.Group(); g.position.set(x, y, z); g.scale.setScalar(s); world.add(g); cyl(0.16, 2.4, M.trunk, 0, 1.2, 0, g, 8, 0.1); const top = new THREE.Group(); top.position.y = 2.4; g.add(top); mk(new THREE.IcosahedronGeometry(1.3, 1), M.leaf, 0, 0.9, 0, top); mk(new THREE.IcosahedronGeometry(0.9, 1), M.leaf, 0.6, 0.3, 0.3, top); mk(new THREE.IcosahedronGeometry(0.8, 1), M.leaf, -0.5, 0.5, -0.4, top); return top; }
+function crateStack(x, z, n = 2, y = 0, rot = 0) { const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rot; world.add(g); box(1.2, 0.14, 1.0, M.wood, 0, 0.07, 0, g); for (let i = 0; i < n; i++) box(1.0, 0.8, 0.9, M.crate, (rnd() - .5) * 0.1, 0.54 + i * 0.8, 0, g); return g; }
+function sign(lines, x, y, z, ry = 0, w = 1.6, h = 0.8, bg, fg) { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; world.add(g); cyl(0.03, y, M.steel, 0, y / 2, 0, g, 8); const m = mk(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: signTex(lines, bg, fg), roughness: 0.6, side: THREE.DoubleSide }), 0, y + h / 2, 0.02, g); return g; }
+function parkZone(x, z, y = 0) { const tex = ctex(256, 256, (g) => { g.clearRect(0, 0, 256, 256); g.fillStyle = 'rgba(245,179,1,.28)'; g.fillRect(0, 0, 256, 256); g.strokeStyle = '#f5b301'; g.lineWidth = 22; g.strokeRect(11, 11, 234, 234); }); const m = mk(new THREE.PlaneGeometry(2.6, 3.4), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, transparent: true, polygonOffset: true, polygonOffsetFactor: -4 }), x, y + 0.012, z, world, false); m.rotation.x = -Math.PI / 2; return m; }
+function workMarker(x, y, z) { const g = new THREE.Group(); g.position.set(x, y, z); world.add(g); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffb81c })); g.add(ring); g.userData.ring = ring; return g; }
+function skyline(n, rad, y = 0) { for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rnd() * 0.2, r = rad + rnd() * 30, w = 8 + rnd() * 14, h = 8 + rnd() * 30; const m = box(w, h, w, new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.58, 0.08, 0.35 + rnd() * 0.2), roughness: 0.9 }), Math.cos(a) * r, y + h / 2, Math.sin(a) * r, world, false); m.rotation.y = rnd() * 3; } }
+
+/* ───────── FASE 1: galpão ───────── */
+const ITEMS = [
+  { k: 'docs', n: 'Documentação', ok: 'O manual do operador está na caixa da plataforma e o número de série confere com a placa. A etiqueta de inspeção periódica vence daqui a 5 meses.', def: 'O manual está na caixa, mas a etiqueta de inspeção periódica venceu há 3 meses.', ref: 'IPAF itens 1 e 2: inspeção periódica em dia e manual do fabricante na máquina.' },
+  { k: 'pneus', n: 'Rodas e pneus', ok: 'Os quatro pneus maciços estão íntegros, sem cortes, e as porcas estão apertadas.', def: 'O pneu dianteiro esquerdo tem um corte fundo na lateral e está achatado.', ref: 'IPAF itens 4 a 6: sem cortes, rachaduras ou aros danificados.', fx: 'tire' },
+  { k: 'bateria', n: 'Baterias', ok: 'Terminais limpos e apertados, nível de eletrólito correto e plugue do carregador em bom estado.', def: 'Um dos cabos está solto e o terminal tem crosta de corrosão esverdeada.', ref: 'IPAF item 9: eletrólito, conexões, terminais e plugue.' },
+  { k: 'hidraulico', n: 'Sistema hidráulico', ok: 'O nível de óleo está na marca e o piso embaixo da máquina está seco.', def: 'Há uma poça de óleo no piso, embaixo do chassi, e o nível do reservatório está abaixo da marca.', ref: 'IPAF itens 10 e 11. Não opere com vazamento: o jato de óleo sob pressão perfura a pele.', fx: 'puddle' },
+  { k: 'mangueiras', n: 'Mangueiras e cabos', ok: 'Mangueiras e cabos presos nas abraçadeiras, sem cortes nem ressecamento.', def: 'A mangueira do cilindro está ressecada e tem uma fissura perto da conexão.', ref: 'IPAF itens 12 e 13: sem cortes, fissuras ou imperfeições.' },
+  { k: 'tesoura', n: 'Estrutura da tesoura', ok: 'Braços alinhados, soldas sem trincas, todos os pinos com seus retentores.', def: 'Um pino de articulação está sem o anel retentor e já saiu alguns milímetros do lugar.', ref: 'IPAF itens 17 a 19: sem trincas de solda, pinos e retentores no lugar.' },
+  { k: 'guarda', n: 'Guarda-corpo e portão', ok: 'Guarda-corpos firmes e aparafusados. O portão fecha sozinho e trava.', def: 'O portão de entrada não fecha: a trava está quebrada e ele fica aberto.', ref: 'IPAF item 22. O portão deve estar fechado antes de operar.', fx: 'gate' },
+  { k: 'ancoragem', n: 'Pontos de ancoragem', ok: 'Os dois olhais de ancoragem do talabarte estão firmes, sem trincas nem deformação.', def: null, ref: 'IPAF item 23: pontos de fixação do cinto e talabarte.' },
+  { k: 'decalques', n: 'Decalques e placa de carga', ok: 'A placa mostra capacidade de 227 kg, 2 pessoas e vento máximo de 12,5 m/s. Todos os decalques estão legíveis.', def: 'O decalque de capacidade e vento máximo foi arrancado deste lado da máquina.', ref: 'IPAF itens 26 a 28: carga, vento máximo e número de pessoas legíveis.', fx: 'decal' },
+  { k: 'protetor', n: 'Protetor de buraco', ok: 'As barras do protetor estão retas e livres para descer.', def: 'A barra do protetor de buraco está empenada e presa: não vai descer quando a plataforma subir.', ref: 'IPAF item 39. Sem o protetor, a máquina não pode andar elevada.' },
+  { k: 'bandejas', n: 'Bandejas do chassi', ok: 'As duas bandejas estão fechadas e travadas.', def: 'A bandeja lateral está destravada e entreaberta.', ref: 'Manual: bandejas fechadas e travadas antes de elevar ou andar. As baterias fazem parte do contrapeso.', fx: 'tray' },
+  { k: 'piso', n: 'Piso da plataforma', ok: 'Piso limpo e seco, sem ferramentas soltas.', def: 'Há restos de madeira, uma caixa solta e uma mancha de óleo no piso da plataforma.', ref: 'IPAF item 24: plataforma livre de lixo, detritos e obstruções.', fx: 'debris' },
+  { k: 'solo', n: 'Comando de solo', ok: 'Chave de três posições, botão de emergência e manopla de descida de emergência presentes e identificados. O funcionamento será conferido nos testes de função.', def: null, ref: 'IPAF itens 29 a 31: parada e descida de emergência totalmente funcionais.' },
+];
+function applyDefects(set) { MR.wheels[0].spin.scale.set(1, set.has('pneus') ? 0.8 : 1, 1); MR.puddle.visible = set.has('hidraulico'); S.gateOpen = set.has('guarda'); MR.decal.visible = !set.has('decalques'); MR.trayL.rotation.z = set.has('bandejas') ? -0.5 : 0; MR.debris.visible = set.has('piso'); }
+function buildL1() {
+  setSky(38, 150, 2, 1, 0.5, 0.45); sun.intensity = 2.4; sun.color.set(0xfff0d8); hemi.intensity = 0.35; sunDir.set(0.25, 1, 0.2).normalize(); scene.fog = new THREE.Fog(0x2a3038, 40, 120);
+  const fl = mk(new THREE.PlaneGeometry(44, 32), new THREE.MeshStandardMaterial({ color: 0xb4b6b8, map: T.concrete, bumpMap: T.concreteB, bumpScale: 0.3, roughness: 0.38, metalness: 0.05 }), 0, 0, 0, world, false); fl.rotation.x = -Math.PI / 2;
+  const wm = M.wall; const wN = box(44, 9, 0.3, wm, 0, 4.5, -16, world, false), wW = box(0.3, 9, 32, wm, -22, 4.5, 0, world, false), wE = box(0.3, 9, 32, wm, 22, 4.5, 0, world, false); wW.material = wE.material = new THREE.MeshStandardMaterial({ map: T.metalWall.clone(), metalness: 0.5, roughness: 0.55 }); wW.material.map.rotation = 0;
+  box(16, 9, 0.3, wm, -14, 4.5, 16, world, false); box(16, 9, 0.3, wm, 14, 4.5, 16, world, false); box(12, 3, 0.3, wm, 0, 7.5, 16, world, false);
+  box(44, 0.3, 32, new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.8 }), 0, 9.1, 0, world, false);
+  for (let x = -18; x <= 18; x += 9) { box(0.25, 0.5, 32, M.dark, x, 8.6, 0, world, false); }
+  for (let z = -10; z <= 10; z += 10) for (let x = -13.5; x <= 13.5; x += 9) { box(1.6, 0.12, 0.5, M.lampOn, x, 8.2, z, world, false); }
+  for (const [x, z] of [[-9, -5], [9, -5], [-9, 6], [9, 6]]) { const p = new THREE.PointLight(0xffe8c0, 34, 26, 1.8); p.position.set(x, 7.6, z); world.add(p); }
+  // claraboias
+  for (let x = -13.5; x <= 13.5; x += 9) box(2.2, 0.05, 24, new THREE.MeshBasicMaterial({ color: 0xcfe4ff }), x + 4.5, 8.94, 0, world, false);
+  // faixas pintadas
+  const line = (w, d, x, z, mat = M.yellow) => { const m = mk(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ color: mat.color, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -4 }), x, 0.008, z, world, false); m.rotation.x = -Math.PI / 2; };
+  line(0.12, 28, -12, 0); line(0.12, 28, 12, 0); line(24, 0.12, 0, -12); line(10, 0.3, 0, 14.5, M.hazard);
+  // estantes
+  const obs = { c: [], b: [{ x0: -23, x1: -21.6, z0: -17, z1: 17 }, { x0: 21.6, x1: 23, z0: -17, z1: 17 }, { x0: -23, x1: 23, z0: -17, z1: -15.6 }, { x0: -23, x1: -6, z0: 15.6, z1: 17 }, { x0: 6, x1: 23, z0: 15.6, z1: 17 }] };
+  for (const sx of [-1, 1]) { const x = sx * 18; for (let z = -12; z <= 8; z += 5) { for (const dz of [-2.2, 2.2]) for (const dx of [-0.6, 0.6]) box(0.1, 6.5, 0.1, new THREE.MeshStandardMaterial({ color: 0x1f5fa8, metalness: 0.4, roughness: 0.5 }), x + dx, 3.25, z + dz, world); for (let y = 0.2; y < 6; y += 2.1) { box(1.3, 0.1, 4.5, new THREE.MeshStandardMaterial({ color: 0xe86a17, metalness: 0.3, roughness: 0.5 }), x, y, z, world); for (let k = -1; k <= 1; k++) if (rnd() > 0.2) box(1.0, 0.7 + rnd() * 0.6, 1.1, rnd() > 0.5 ? M.crate : M.wood, x, y + 0.6, z + k * 1.4, world); } } obs.b.push({ x0: x - 1, x1: x + 1, z0: -14.6, z1: 10.6 }); }
+  crateStack(-8, -10, 2); crateStack(-6.4, -10.3, 1, 0, 0.3); crateStack(11, 8, 2, 0, 0.2); obs.c.push({ x: -8, z: -10, r: 0.9 }, { x: -6.4, z: -10.3, r: 0.9 }, { x: 11, z: 8, r: 0.9 });
+  [[3, -3], [3, 3], [-3, 3], [-3, -3]].forEach(([x, z]) => { cone(x, z); });
+  parkZone(8, -7); skyline(14, 120);
+  // lá fora, pela porta
+  const out = mk(new THREE.PlaneGeometry(80, 60), new THREE.MeshStandardMaterial({ map: T.asphalt, roughness: 0.9 }), 0, -0.01, 46, world, false); out.rotation.x = -Math.PI / 2; tree(-6, 24, 1.3); tree(7, 28, 1.6);
+  return { hAt: () => 0, mud: () => 0, obs, start: { x: 0, z: 0, yaw: 0.5 }, park: { x: 8, z: -7 }, harness: false, baseWind: 0, bound: 20 };
+}
+/* ───────── FASE 2: pátio com rampa ───────── */
+const HOLES = [[6.6, 2.5, 1.0], [8.2, -11.5, 0.9], [-3.5, -17.5, 1.0]];
+function hL2(x, z) {
+  let h = 0;
+  if (z < -8) h = 1.2;
+  else if (x > 5 && x < 9 && z < -2.5) h = 1.2 * (-2.5 - z) / 5.5;
+  else if (x > -3.6 && x < -0.4 && z < -4.6) h = 1.2 * (-4.6 - z) / 3.4;
+  for (const [hx, hz, r] of HOLES) { const d = Math.hypot(x - hx, z - hz); if (d < r) h -= 0.32 * (1 - sstep(r * 0.45, r, d)); }
+  return h;
+}
+const mudL2 = (x, z) => (1 - sstep(2.2, 3.4, Math.hypot((x + 0.5) * 0.75, z + 13.5)));
+function buildL2() {
+  setSky(34, 215, 2.2, 1.1, 0.5, 0.8); sun.intensity = 3.6; sun.color.set(0xffe9c8); hemi.intensity = 0.45; scene.fog = new THREE.Fog(0x9fbcd8, 70, 300);
+  ground(90, 300, hL2, (x, z, c) => { c.setRGB(1, 1, 1); if (z < -8) c.setRGB(1.25, 1.24, 1.2); for (const [hx, hz, r] of HOLES) { const d = Math.hypot(x - hx, z - hz); if (d < r * 1.15) c.multiplyScalar(0.25 + 0.75 * sstep(r * 0.3, r * 1.15, d)); } const m = mudL2(x, z); if (m > 0) c.lerp(new THREE.Color(0.75, 0.5, 0.28), m * 0.9); }, new THREE.MeshStandardMaterial({ map: T.asphalt, bumpMap: T.asphaltB, bumpScale: 0.8, roughness: 0.92 }));
+  const obs = { c: [], b: [] };
+  // muro de arrimo e guias das rampas
+  const wallM = new THREE.MeshStandardMaterial({ map: T.concrete, roughness: 0.9 });
+  const seg = (x0, x1) => { box(x1 - x0, 1.5, 0.35, wallM, (x0 + x1) / 2, 0.6, -8.0, world); obs.b.push({ x0, x1, z0: -8.4, z1: -7.5 }); };
+  seg(-30, -3.6); seg(-0.4, 5); seg(9, 30);
+  const curb = (x, z0, z1, top) => { const len = z0 - z1; const m = box(0.25, 0.35, Math.hypot(len, top), M.hazard, x, top / 2 + 0.17, (z0 + z1) / 2, world); m.rotation.x = Math.atan2(top, len); obs.b.push({ x0: x - 0.25, x1: x + 0.25, z0: z1, z1: z0 }); };
+  curb(4.9, -2.5, -8, 1.2); curb(9.1, -2.5, -8, 1.2); curb(-3.7, -4.6, -8, 1.2); curb(-0.3, -4.6, -8, 1.2);
+  sign(['RAMPA 22%', 'SÓ RECOLHIDA'], 10.2, 1.4, -1.6, -0.3); sign(['RAMPA 35%'], -4.6, 1.4, -3.8, 0.3, 1.3, 0.6, '#d9281c', '#ffffff');
+  // galpão no platô, com refletor (ponto de trabalho 1)
+  box(12, 6.5, 8, new THREE.MeshStandardMaterial({ map: T.metalWall, metalness: 0.4, roughness: 0.6 }), 12, 1.2 + 3.25, -21, world); box(12.6, 0.3, 8.6, M.dark, 12, 7.85, -21, world);
+  obs.b.push({ x0: 5.6, x1: 18.4, z0: -25.4, z1: -16.6 });
+  box(0.5, 0.3, 0.4, M.dark, 8, 1.2 + 5.3, -16.8, world); mk(new THREE.SphereGeometry(0.16, 12, 8), M.lampOff, 8, 1.2 + 5.2, -16.55, world);
+  // poste com luminária (ponto 2) e rede elétrica
+  cyl(0.11, 7, M.steel, -8, 1.2 + 3.5, -14, world, 12); box(0.9, 0.12, 0.3, M.dark, -7.6, 1.2 + 6.95, -14, world); obs.c.push({ x: -8, z: -14, r: 0.35 });
+  const wireM = new THREE.LineBasicMaterial({ color: 0x111111 });
+  for (const pz of [-34, -18, -2, 14]) { const y0 = pz < -8 ? 1.2 : 0; cyl(0.16, 10.4 - y0, new THREE.MeshStandardMaterial({ color: 0x6b5a48, roughness: 1 }), -12, y0 + (10.4 - y0) / 2, pz, world, 10); box(2.2, 0.12, 0.12, M.trunk, -12, 9.9, pz, world); for (const dx of [-0.9, 0, 0.9]) cyl(0.05, 0.2, M.white, -12 + dx, 10.05, pz, world, 8); obs.c.push({ x: -12, z: pz, r: 0.4 }); }
+  for (const dx of [-0.9, 0, 0.9]) { const pts = []; for (let z = -34; z <= 14; z += 1) { const u = ((z + 34) % 16) / 16; pts.push(new THREE.Vector3(-12 + dx, 10.1 - 1.4 * 4 * u * (1 - u), z)); } world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireM)); }
+  sign(['PERIGO', 'REDE ELÉTRICA 13,8 kV'], -10.6, 1.3 + 1.2, -9.6, 0.5, 1.5, 0.75, '#d9281c', '#ffffff').position.y = 1.2;
+  // contêineres, caixas, cones, árvores
+  const cont = (x, z, col, ry = 0, y = 0) => { const m = mk(new RoundedBoxGeometry(6, 2.6, 2.4, 2, 0.04), new THREE.MeshStandardMaterial({ color: col, metalness: 0.4, roughness: 0.55, map: T.metalWall }), x, y + 1.3, z, world); m.rotation.y = ry; return m; };
+  cont(-9, 4, 0xb5462a); cont(-9, 4, 0x2f6f9e, 0, 2.6); cont(16, 3, 0x3c7a4a, 1.57); obs.b.push({ x0: -12.2, x1: -5.8, z0: 2.6, z1: 5.4 }, { x0: 14.6, x1: 17.4, z0: -0.2, z1: 6.2 });
+  crateStack(2.5, 5.5, 2, 0, 0.4); obs.c.push({ x: 2.5, z: 5.5, r: 0.9 }); crateStack(-4, -24, 1, 1.2); obs.c.push({ x: -4, z: -24, r: 0.9 });
+  cone(5.3, 2.2); cone(7.9, 3.4); cone(6.2, 4.0); cone(-1, -3.6); cone(-3, -3.6); cone(7, -10.4, 1.2); cone(9.4, -11.8, 1.2);
+  for (const [x, z, s] of [[-20, -30, 1.5], [22, -32, 1.8], [24, 8, 1.4], [-22, 12, 1.7], [-18, -2, 1.3], [4, -34, 1.6]]) tree(x, z, s, z < -8 ? 1.2 : 0);
+  parkZone(0, -24, 1.2); skyline(18, 130);
+  // área isolada com fita perto do ponto 1 (chamariz seguro)
+  // pedestre
+  const ped = person(world, -2, -11, new THREE.MeshStandardMaterial({ color: 0x4a6fa5, roughness: 0.8 })); ped.position.y = 1.2; ped.userData.harness.visible = false;
+  obs.c.push({ x: -2, z: -11, r: 0.45, ped: true });
+  return { hAt: hL2, mud: mudL2, holes: HOLES, obs, start: { x: 0.5, z: 10, yaw: Math.PI }, park: { x: 0, z: -24 }, harness: true, baseWind: 3.2, bound: 34, ped, pedC: obs.c[obs.c.length - 1], line: { x: -12, y: 8.7 },
+    targets: [{ x: 8, z: -15.2, h: 4.9, label: 'Refletor do galpão', marker: [8, 1.2 + 5.2, -16.0] }, { x: -8, z: -14, h: 5.4, r: 1.7, label: 'Luminária do poste', marker: [-8, 1.2 + 7.0, -14] }] };
+}
+const SITE = [
+  { n: 'Buraco no asfalto', p: [6.6, 0.6, 2.5], risk: true, d: 'Um buraco de quase 2 m de largura no caminho da rampa. Os cones estão caídos ao redor.', ref: 'Buracos e desníveis são a principal causa de tombamento. Desvie sempre, mesmo com a plataforma recolhida.' },
+  { n: 'Rampa curta de 35%', p: [-2, 1.4, -6.2], risk: true, d: 'Uma rampa curta e íngreme logo à frente, com placa de 35%.', ref: 'A tesoura sobe até 25% (14°), recolhida. Esta rampa passa do limite.' },
+  { n: 'Rampa longa de 22%', p: [7, 1.4, -5.2], risk: false, d: 'Rampa de concreto com guias laterais e placa de 22%, só para máquina recolhida.', ref: 'Dentro do limite de 25% da máquina. É o acesso correto, desde que com a plataforma recolhida.' },
+  { n: 'Solo de terra molhada', p: [-0.5, 1.8, -13.5], risk: true, d: 'Uma mancha de terra mole e úmida no meio do platô, entre os dois pontos de trabalho.', ref: 'Piso instável: as rodas afundam de forma desigual e a máquina inclina. Nunca eleve sobre solo mole.' },
+  { n: 'Rede elétrica aérea', p: [-12, 9, -12], risk: true, d: 'Três cabos de 13,8 kV passam a cerca de 4 m do poste da luminária.', ref: 'Distância mínima de 3,05 m. Posicione a máquina do lado oposto à rede.' },
+  { n: 'Pedestre circulando', p: [-2, 3.2, -11], risk: true, d: 'Uma pessoa sem relação com o serviço anda pela área de manobra.', ref: 'Isole a área. Com gente por perto: pare e use a buzina.' },
+  { n: 'Piso de concreto junto ao galpão', p: [8, 1.6, -14.5], risk: false, d: 'Laje de concreto firme, seca e nivelada em frente ao refletor.', ref: 'Superfície firme e nivelada: condição correta para elevar a plataforma.' },
+];
+/* ───────── FASE 3: fachada com vento ───────── */
+function buildL3() {
+  setSky(20, 250, 5, 1.8, 0.5, 0.8); sun.intensity = 3.2; sun.color.set(0xffd9a8); hemi.intensity = 0.5; scene.fog = new THREE.Fog(0xa9b6c4, 60, 260);
+  ground(90, 60, () => 0, (x, z, c) => { c.setRGB(1, 1, 1); if (z < -6.5) c.setRGB(1.35, 1.34, 1.3); }, new THREE.MeshStandardMaterial({ map: T.asphalt, bumpMap: T.asphaltB, bumpScale: 0.8, roughness: 0.92 }));
+  const obs = { c: [], b: [{ x0: -20, x1: 20, z0: -22, z1: -9.45 }] };
+  box(36, 11, 12, new THREE.MeshStandardMaterial({ map: T.facade, roughness: 0.8 }), 0, 5.5, -16, world); box(36.6, 0.5, 12.6, M.dark, 0, 11.2, -16, world); box(36, 0.9, 0.3, M.dark, 0, 0.45, -9.9, world);
+  box(4, 0.2, 1.4, M.dark, 12, 3.2, -9.4, world); mk(new THREE.PlaneGeometry(2.4, 2.9), M.glass, 12, 1.5, -9.95, world, false);
+  // suportes das placas na fachada
+  const frames = [[-5, 5.9], [5, 6.9]].map(([x, y]) => { box(2.6, 1.3, 0.06, M.dark, x, y, -9.95, world, false); const p = box(2.5, 1.2, 0.05, new THREE.MeshStandardMaterial({ map: signTex(['ATACADO', 'CENTRAL'], '#0f5fb0', '#ffffff'), roughness: 0.35, metalness: 0.3 }), x, y, -9.9, world); p.visible = false; return p; });
+  // palete com placas
+  const pal = new THREE.Group(); pal.position.set(7, 0, 7); world.add(pal); box(1.4, 0.14, 2.0, M.wood, 0, 0.07, 0, pal); const stock = [box(0.04, 1.15, 1.7, M.panel, -0.15, 0.75, 0, pal), box(0.04, 1.15, 1.7, M.panel, 0.05, 0.75, 0, pal)]; stock.forEach(s => s.rotation.z = 0.12); box(0.36, 0.22, 0.22, M.red, 0.45, 0.25, 0.5, pal);
+  obs.c.push({ x: 7, z: 7, r: 1.0 });
+  const lz = mk(new THREE.RingGeometry(2.4, 2.6, 40), new THREE.MeshBasicMaterial({ color: 0xffb81c, transparent: true, opacity: 0.8 }), 7, 0.02, 7, world, false); lz.rotation.x = -Math.PI / 2;
+  // biruta
+  cyl(0.05, 6, M.steel, -11, 3, 2, world, 8); const sock = new THREE.Group(); sock.position.set(-11, 6, 2); world.add(sock); const sk = mk(new THREE.CylinderGeometry(0.1, 0.3, 1.6, 12, 4, true), new THREE.MeshStandardMaterial({ map: ctex(64, 64, (g) => { for (let i = 0; i < 4; i++) { g.fillStyle = i % 2 ? '#ffffff' : '#ff5a12'; g.fillRect(0, i * 16, 64, 16); } }), side: THREE.DoubleSide, roughness: 0.8 }), 0, 0, 0.8, sock); sk.rotation.x = Math.PI / 2; obs.c.push({ x: -11, z: 2, r: 0.3 });
+  // bandeira
+  cyl(0.05, 8, M.steel, 15, 4, 0, world, 8); const flag = new THREE.Group(); flag.position.set(15, 7.3, 0); world.add(flag); mk(new THREE.PlaneGeometry(1.8, 1.1, 8, 1), new THREE.MeshStandardMaterial({ color: 0x1c8a4a, side: THREE.DoubleSide, roughness: 0.8 }), 0, 0, 0.9, flag).rotation.y = Math.PI / 2; obs.c.push({ x: 15, z: 0, r: 0.3 });
+  const trees = [[-16, 6, 1.4], [18, 9, 1.6], [-14, 14, 1.8], [10, 16, 1.5], [0, 18, 1.7], [-24, -4, 1.5], [24, -2, 1.6]].map(([x, z, s]) => tree(x, z, s));
+  for (const [x, z] of [[-8.5, -5], [-8.5, 9], [-1.5, 9.5], [9.5, 9.5], [9.5, -5]]) cone(x, z);
+  parkZone(-7, 6); skyline(18, 130);
+  // partículas de poeira e folhas
+  const N = 420, pg = new THREE.BufferGeometry(), pp = new Float32Array(N * 3); for (let i = 0; i < N; i++) { pp[i * 3] = (Math.random() - .5) * 50; pp[i * 3 + 1] = Math.random() * 9; pp[i * 3 + 2] = (Math.random() - .5) * 36; } pg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+  const dust = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xd8c9a6, size: 0.09, transparent: true, opacity: 0.0, depthWrite: false })); world.add(dust);
+  return { hAt: () => 0, mud: () => 0, obs, start: { x: 4.6, z: 7, yaw: Math.PI }, park: { x: -7, z: 6 }, harness: true, baseWind: 5.5, bound: 24, sock, flag, trees, dust, frames, stock, loadZone: { x: 7, z: 7, r: 3.6 }, wall: true,
+    targets: [{ x: -5, z: -8.2, h: 4.4, label: 'Suporte da placa 1', marker: [-5, 5.9, -9.6] }, { x: 5, z: -8.2, h: 5.4, label: 'Suporte da placa 2', marker: [5, 6.9, -9.6] }] };
+}
+const LEVELS = [
+  { id: 1, name: 'Galpão', sub: 'Checklist pré-uso e testes de função', build: buildL1 },
+  { id: 2, name: 'Pátio com rampa', sub: 'Inspeção do local, buracos, rampa e rede elétrica', build: buildL2 },
+  { id: 3, name: 'Fachada com vento', sub: 'Carga, efeito vela e limite de 12,5 m/s', build: buildL3 },
+];
+
+/* ───────── fluxo ───────── */
+function loadLevel(id) {
+  if (world) { scene.remove(world); world.traverse(o => { o.geometry?.dispose?.(); }); }
+  world = new THREE.Group(); scene.add(world); seed = 7 + id * 13;
+  const def = LEVELS[id - 1]; L = def.build(); L.def = def; G.level = id;
+  MR = buildMachine(); world.add(MR.root);
+  resetMachine(L.start); G.inf = []; G.cool = {}; G.ev = {}; G.failed = null; G.t = 0; G.spots = []; $('#spots').innerHTML = ''; G.target = null; G.storm = null; G.load = { helper: false, tools: false, panels: 0 }; G.installed = 0; G.fp = false;
+  G.camYaw = 0.6; G.camPitch = 0.3; G.camDist = 8; if (L.targets) L.targets.forEach(t => { t.mk = workMarker(...t.marker); t.mk.visible = false; });
+  syncLoad();
+}
+function syncLoad() { MR.helper.visible = G.load.helper; MR.tools.visible = G.load.tools; MR.panelA.visible = G.load.panels >= 1; MR.panelB.visible = G.load.panels >= 2; }
+const loadKg = () => 85 + (G.load.helper ? 80 : 0) + (G.load.tools ? 25 : 0) + G.load.panels * 35;
+function showMenu() { G.mode = 'menu'; $('#hud').hidden = true; $('#sheet').hidden = true; $('#modal').hidden = true; $('#menu').hidden = false; G.spots = []; $('#spots').innerHTML = ''; $('#phases').innerHTML = ''; LEVELS.forEach(l => { const b = document.createElement('button'); b.className = 'phase'; const best = G.best[l.id]; b.innerHTML = `<b>${l.id}</b><div><strong>${l.name}</strong><span>${l.sub}</span></div><em class="num">${best != null ? best + ' pts' : 'novo'}</em>`; b.onclick = () => { snd.init(); snd.click(); startLevel(l.id); }; $('#phases').appendChild(b); }); if (G.level !== 1 || !world) { loadLevel(1); } S.estop = true; }
+function startLevel(id) { fade(() => { loadLevel(id); $('#menu').hidden = true; $('#hud').hidden = false; G.mode = 'brief'; drawHelp(); [brief1, brief2, brief3][id - 1](); }); }
+function hudMode(drive) { for (const id of ['#inst', '#lamps', '#help', '#wind']) $(id).hidden = !drive; }
+
+/* Fase 1 */
+function brief1() {
+  hudMode(false);
+  const pool = ITEMS.filter(i => i.def).map(i => i.k).sort(() => Math.random() - .5); const n = Math.random() < 0.2 ? 0 : 2 + (Math.random() < 0.5 ? 1 : 0); G.defects = new Set(pool.slice(0, n)); G.marks = {}; applyDefects(G.defects);
+  setObjs('Fase 1 · Galpão', 'Inspeção pré-uso', ['Verifique os 13 pontos da máquina', 'Decida: liberar ou bloquear', 'Faça os testes de função']);
+  modal({ kicker: 'Fase 1 · Galpão', title: 'Checklist antes do turno', html: `<p>Antes de cada turno, o operador faz a inspeção visual e os testes de função, seguindo o manual do fabricante. É exigência da NR-18.</p><ul><li>Clique em cada marcador amarelo, leia o que você vê e marque <b>Conforme</b> ou <b>Defeito</b>.</li><li>Arraste o mouse para girar a câmera em volta da máquina. A roda do mouse aproxima.</li><li>Com um único defeito, a máquina não pode operar.</li></ul>`, acts: [{ label: 'Começar a inspeção', primary: true, fn: () => { G.mode = 'play'; G.stage = 'inspect'; G.camDist = 5.2; G.camYaw = -1.0; G.camPitch = 0.25; makeSpots(ITEMS.map(i => ({ ...i, obj: MR.anchors[i.k] })), ['Conforme', 'Defeito']); } }] });
+}
+function makeSpots(list, labels) {
+  G.spots = list; G.spotLabels = labels; const box = $('#spots'); box.innerHTML = '';
+  list.forEach((it, i) => { const b = document.createElement('button'); b.textContent = i + 1; b.setAttribute('aria-label', it.n); b.onclick = () => openSpot(i); box.appendChild(b); it.el = b; it.mark = null; });
+  updSpotBtn();
+}
+function updSpotBtn() { const done = G.spots.filter(s => s.mark != null).length, b = $('#objb'); b.hidden = false; b.disabled = done < G.spots.length; b.textContent = done < G.spots.length ? `Verificados ${done} de ${G.spots.length}` : 'Concluir inspeção'; b.onclick = () => (G.level === 1 ? decide1() : endSite2()); }
+function openSpot(i) {
+  const it = G.spots[i], sh = $('#sheet'); snd.click();
+  const desc = G.level === 1 ? (G.defects.has(it.k) ? it.def : it.ok) : it.d;
+  sh.innerHTML = `<div class="kicker">Ponto ${i + 1} de ${G.spots.length}</div><h2>${it.n}</h2><p><b>O que você vê:</b> ${desc}</p>${G.level === 1 ? `<p class="ref">${it.ref}</p>` : ''}<div class="acts"><button class="btn primary" id="s-ok">${G.spotLabels[0]}</button><button class="btn danger" id="s-def">${G.spotLabels[1]}</button><button class="btn" id="s-x">Fechar</button></div>`;
+  sh.hidden = false; const set = v => { it.mark = v; it.el.className = v ? 'def' : 'ok'; it.el.textContent = v ? '✕' : '✓'; sh.hidden = true; updSpotBtn(); snd.beep(v ? 440 : 880, 0.08); };
+  $('#s-ok').onclick = () => set(false); $('#s-def').onclick = () => set(true); $('#s-x').onclick = () => sh.hidden = true; setTimeout(() => $('#s-ok').focus(), 30);
+}
+function decide1() {
+  const marked = G.spots.filter(s => s.mark).length;
+  modal({ kicker: 'Fim da inspeção visual', title: 'O que você faz com a máquina?', html: `<p>Você marcou <b>${marked}</b> ${marked === 1 ? 'defeito' : 'defeitos'} em 13 pontos.</p>`, acts: [
+    { label: 'Liberar a máquina para os testes de função', fn: () => result1(false) },
+    { label: 'Bloquear: tirar a chave, apertar a emergência, etiquetar e avisar o supervisor', fn: () => result1(true) }] });
+}
+function result1(blocked) {
+  const real = G.defects; let rows = '';
+  G.spots.forEach(s => { const isDef = real.has(s.k), right = isDef === s.mark; if (isDef && !s.mark) penalty('Defeito não encontrado: ' + s.n, s.ref, 12); if (!isDef && s.mark) penalty('Marcou defeito em item conforme: ' + s.n, 'Leia a descrição com atenção antes de reprovar um item.', 4); rows += `<tr><td>${s.n}</td><td>${s.mark ? 'Defeito' : 'Conforme'}</td><td class="${isDef ? 'tag-bad' : 'tag-ok'}">${isDef ? 'Defeito' : 'Conforme'}</td><td class="${right ? 'tag-ok' : 'tag-bad'}">${right ? '✓' : '✕'}</td></tr>`; });
+  let verdict;
+  if (real.size && !blocked) { penalty('Liberou uma máquina com defeito', 'IPAF: se houver falha que afete o uso seguro, isole a máquina, retire a chave, etiquete e avise o supervisor.', 25); verdict = 'A máquina tinha defeito e não podia ser liberada.'; }
+  else if (!real.size && blocked) { penalty('Bloqueou uma máquina sem defeito', 'Bloquear por engano é o erro mais seguro, mas para o serviço sem necessidade.', 6); verdict = 'A máquina estava em condições de uso.'; }
+  else verdict = real.size ? 'Decisão correta: máquina com defeito não opera.' : 'Decisão correta: a máquina estava em ordem.';
+  G.spots = []; $('#spots').innerHTML = ''; $('#objb').hidden = true; G.obj = 2; drawObjs();
+  modal({ kicker: 'Resultado da inspeção', title: verdict, html: `<table class="tbl"><thead><tr><th>Item</th><th>Você marcou</th><th>Estado real</th><th></th></tr></thead><tbody>${rows}</tbody></table>${real.size ? '<p>A manutenção corrigiu os defeitos e a inspeção visual foi refeita. Agora faltam os testes de função.</p>' : ''}`, acts: [{ label: 'Fazer os testes de função', primary: true, fn: tests1 }] });
+}
+function tests1() {
+  applyDefects(new Set()); G.stage = 'tests'; hudMode(true); $('#wind').hidden = true; G.camDist = 8; G.camYaw = 0.5; S.estop = true;
+  const k = (a, b) => G.pad ? b : a;
+  setObjs('Fase 1 · Galpão', 'Testes de função', [
+    `Solte a parada de emergência (${k('Espaço', '□')})`, `Toque a buzina (${k('H', 'L3')})`, `Tente subir sem o enable (${k('↑', 'R1')}): nada deve acontecer`,
+    `Segure o enable (${k('Shift', 'L2')}) e suba 60 cm`, 'Aperte a emergência e tente subir: nada deve acontecer',
+    `Solte a emergência e use a descida de emergência (${k('segure E', 'Touchpad')}) até recolher`, 'Suba acima de 1,5 m e confira o protetor de buraco',
+    'Ande 1 m com a plataforma elevada: a velocidade fica reduzida', 'Desça totalmente', 'Estacione na vaga amarela e aperte a emergência']);
+  G.steps = [() => !S.estop, () => G.ev.horn, () => G.ev.liftNoEnable, () => S.rise >= 0.6, () => G.ev.liftEstop, () => G.ev.emergLower && S.rise < 0.02 && !S.estop, () => S.rise > 1.5 && S.pothole > 0.95, () => (G.ev.raisedDrive || 0) >= 1, () => S.rise < 0.02, () => inPark() && S.estop && S.rise < 0.02];
+}
+const inPark = () => Math.hypot(S.x - L.park.x, S.z - L.park.z) < 1.3;
+
+/* Fase 2 */
+function brief2() {
+  hudMode(false); G.stage = 'site';
+  setObjs('Fase 2 · Pátio', 'Inspeção do local', ['Avalie os 7 pontos do pátio', 'Suba ao platô pela rampa adequada', 'Troque o refletor do galpão', 'Troque a luminária do poste', 'Estacione na vaga e aperte a emergência']);
+  modal({ kicker: 'Fase 2 · Pátio com rampa', title: 'Olhe o local antes de mover a máquina', html: `<p>Serviço: trocar um refletor e uma luminária no platô. Antes de levar a máquina, o operador percorre o local e identifica os riscos.</p><ul><li>Clique nos marcadores e diga se cada ponto <b>é um risco</b> ou <b>não é</b>.</li><li>Regra do local: talabarte preso antes de elevar.</li><li>A máquina sobe rampas de até 25% (14°), só recolhida.</li></ul>`, acts: [{ label: 'Inspecionar o local', primary: true, fn: () => { G.mode = 'play'; G.camDist = 36; G.camPitch = 0.75; G.camYaw = 0.25; makeSpots(SITE.map(s => ({ ...s, pos: new THREE.Vector3(...s.p) })), ['Não é risco', 'É um risco']); } }] });
+}
+function endSite2() {
+  let rows = ''; G.spots.forEach(s => { const right = s.risk === s.mark; if (s.risk && !s.mark) penalty('Risco do local não identificado: ' + s.n, s.ref, 8); if (!s.risk && s.mark) penalty('Apontou risco onde não havia: ' + s.n, s.ref, 3); rows += `<tr><td>${s.n}</td><td class="${right ? 'tag-ok' : 'tag-bad'}">${right ? '✓' : '✕'} ${s.risk ? 'Risco' : 'Sem risco'}</td><td>${s.ref}</td></tr>`; });
+  G.spots = []; $('#spots').innerHTML = ''; $('#objb').hidden = true; G.obj = 1; drawObjs();
+  modal({ kicker: 'Resultado da inspeção do local', title: 'Mapa de riscos do pátio', html: `<table class="tbl"><tbody>${rows}</tbody></table>`, acts: [{ label: 'Assumir o comando da máquina', primary: true, fn: () => { G.stage = 'drive'; $('#objt').textContent = 'Serviço no platô'; hudMode(true); G.camDist = 8.5; G.camPitch = 0.3; G.camYaw = 0; toast('Solte a emergência para ligar', 'Segure o enable para andar e subir.', ''); } }] });
+}
+/* Fase 3 */
+function brief3() {
+  hudMode(false); G.stage = 'drive';
+  setObjs('Fase 3 · Fachada', 'Instalar duas placas', ['Carregue a plataforma no palete', 'Instale a placa 1 (piso a 4,4 m)', 'Volte ao palete e carregue a placa 2', 'Instale a placa 2 (piso a 5,4 m)', 'Estacione na vaga e aperte a emergência']);
+  modal({ kicker: 'Fase 3 · Fachada com vento', title: 'Vento, carga e efeito vela', html: `<p>Serviço: fixar duas placas de 1,2 × 2,4 m na fachada. A previsão é de rajadas à tarde.</p><ul><li>Limite da máquina: <b>12,5 m/s</b>. Acima disso, desça e pare até o vento baixar.</li><li>O vento na altura é maior que no solo. Acompanhe o anemômetro e a biruta.</li><li>Uma placa na plataforma funciona como vela e reduz a estabilidade.</li><li>Capacidade: <b>227 kg</b> e 2 pessoas.</li></ul>`, acts: [{ label: 'Carregar a plataforma', primary: true, fn: () => { G.mode = 'play'; hudMode(true); loadUI(); } }] });
+}
+function loadUI() {
+  const left = 2 - G.installed; G.mode = 'paused'; G.loadShown = true;
+  const rows = [['helper', 'Ajudante', 80, G.load.helper], ['tools', 'Caixa de ferramentas e fixadores', 25, G.load.tools], ...Array.from({ length: left }, (_, i) => ['p' + i, `Placa de fachada ${G.installed + i + 1} (1,2 × 2,4 m)`, 35, G.load.panels > i])];
+  modal({ kicker: 'Palete de materiais', title: 'O que sobe na plataforma?', html: `<div class="loadrow"><input type="checkbox" checked disabled id="ld-op"><label for="ld-op">Operador</label><span class="num">85 kg</span></div>${rows.map(r => `<div class="loadrow"><input type="checkbox" id="ld-${r[0]}" data-kg="${r[2]}" ${r[3] ? 'checked' : ''}><label for="ld-${r[0]}">${r[1]}</label><span class="num">${r[2]} kg</span></div>`).join('')}<div class="loadrow"><span></span><b>Total</b><span class="loadtot num" id="ld-tot"></span></div><p class="note">Fixar uma placa deste tamanho exige duas pessoas e a caixa de ferramentas.</p>`,
+    acts: [{ label: 'Confirmar carga', primary: true, fn: () => { const q = id => $('#ld-' + id)?.checked; G.load.helper = !!q('helper'); G.load.tools = !!q('tools'); G.load.panels = (q('p0') ? 1 : 0) + (q('p1') ? 1 : 0); syncLoad(); L.stock.forEach((s, i) => s.visible = i < left - G.load.panels); G.mode = 'play'; if (G.obj === 0 || G.obj === 2) { if (G.load.panels > 0) nextObj(); } } }] });
+  const upd = () => { let t = 85; $('#mbox').querySelectorAll('input[data-kg]').forEach(i => { if (i.checked) t += +i.dataset.kg; }); const el = $('#ld-tot'); el.textContent = t + ' / 227 kg'; el.style.color = t > 227 ? 'var(--bad)' : 'var(--ok)'; };
+  $('#mbox').querySelectorAll('input').forEach(i => i.onchange = upd); upd();
+}
+
+/* ───────── relatório ───────── */
+function report() {
+  G.mode = 'report'; $('#sheet').hidden = true; $('#prompt').hidden = true; $('#tgt').hidden = true;
+  const pen = G.inf.reduce((a, i) => a + i.p, 0), score = G.failed ? 0 : Math.max(0, 100 - pen), pass = score >= 70;
+  if (!G.failed && (G.best[G.level] ?? -1) < score) { G.best[G.level] = score; try { localStorage.setItem('pemt-best', JSON.stringify(G.best)); } catch (e) { } }
+  const items = G.inf.map(i => { const d = i.id ? INF[i.id] : { t: i.custom, n: i.note }; return `<li><em>−${i.p}</em><b>${d.t}</b><span>${d.n}</span></li>`; }).join('') || '<li class="good"><b>Nenhuma infração</b><span>Operação conforme o manual e as normas.</span></li>';
+  const mm = Math.floor(G.t / 60), ss = Math.floor(G.t % 60).toString().padStart(2, '0');
+  modal({ kicker: `Relatório · Fase ${G.level} · ${L.def.name}`, title: G.failed ? 'Acidente: fase interrompida' : pass ? 'Operação aprovada' : 'Operação reprovada', html: `<div class="score"><div class="n num ${pass ? 'pass' : 'fail'}">${score}</div><div><b>pontos de 100</b><br><span class="note">Mínimo para aprovação: 70 · Tempo ${mm}:${ss}</span></div></div><ul class="inf">${items}</ul>`,
+    acts: [...(pass && G.level < 3 ? [{ label: 'Próxima fase', primary: true, fn: () => startLevel(G.level + 1) }] : []), { label: 'Repetir a fase', primary: !(pass && G.level < 3), fn: () => startLevel(G.level) }, { label: 'Menu', fn: () => fade(showMenu) }] });
+}
+function pause() { if (G.mode !== 'play') return; G.mode = 'paused'; modal({ kicker: 'Pausa', title: 'Jogo pausado', html: `<table class="keys"><tbody>${KEYS.map(r => `<tr><td>${r[0]}</td><td><kbd>${G.pad ? r[2] : r[1]}</kbd></td></tr>`).join('')}</tbody></table>`, acts: [{ label: 'Continuar', primary: true, fn: () => G.mode = 'play' }, { label: 'Repetir a fase', fn: () => startLevel(G.level) }, { label: 'Menu', fn: () => fade(showMenu) }] }); }
+
+/* ───────── simulação ───────── */
+function wheelsY(x, z, yaw) { const c = Math.cos(yaw), s = Math.sin(yaw), out = []; let i = 0; for (const [lx, lz] of [[0.36, 0.7], [-0.36, 0.7], [0.36, -0.7], [-0.36, -0.7]]) { const wx = x + lx * c + lz * s, wz = z - lx * s + lz * c; out.push(L.hAt(wx, wz) - L.mud(wx, wz) * (0.05 + 0.07 * ((i * 7 + 3) % 4) / 3)); i++; } return out; }
+function collide(x, z, yaw) { const s = Math.sin(yaw), c = Math.cos(yaw); for (const o of [-0.62, 0, 0.62]) { const px = x + s * o, pz = z + c * o; if (Math.abs(px) > L.bound || Math.abs(pz) > L.bound) return { wall: true }; for (const ci of L.obs.c) if (Math.hypot(px - ci.x, pz - ci.z) < ci.r + 0.5) return ci; for (const b of L.obs.b) if (px > b.x0 - 0.5 && px < b.x1 + 0.5 && pz > b.z0 - 0.5 && pz < b.z1 + 0.5) return b; } return null; }
+let alarmPh = 0, lastHint = 0;
+function hintEnable() { if (G.t - lastHint > 4) { lastHint = G.t; toast('Segure o enable', `Sem o enable (${G.pad ? 'L2 ou R2' : 'Shift'}) apertado, a máquina não anda nem sobe.`); } }
+function step(dt) {
+  G.t += dt; const s = S;
+  if (G.failed) { G.failed.t += dt; const k = Math.min(1, G.failed.t / 1.6); if (G.failed.id === 'tombamento') { s.tipZ = (G.failed.dir || 1) * k * k * 1.5; } s.v = 0; if (G.failed.t > 3) report(); return; }
+  const driving = G.stage === 'tests' || G.stage === 'drive';
+  if (!driving) { s.moving = false; return; }
+  if (edge('estop')) { s.estop = !s.estop; snd.click(); }
+  if (edge('speed')) { s.fast = !s.fast; snd.click(); }
+  if (edge('harness')) { s.harness = !s.harness; snd.click(); toast(s.harness ? 'Talabarte preso ao ponto de ancoragem' : 'Talabarte solto', '', s.harness ? 'good' : ''); }
+  if (edge('view')) G.fp = !G.fp;
+  if (I.horn) G.ev.horn = true;
+  // vento
+  const W = G.wind; let mean = L.baseWind;
+  if (G.storm) { const u = G.t - G.storm.t0; const env = sstep(0, 10, u) * (1 - sstep(30, 42, u)); mean = lerp(mean, G.storm.peak, env) + (u > 42 ? 1.8 : 0); }
+  W.g = Math.max(0, mean * (1 + 0.16 * Math.sin(G.t * 0.9) + 0.1 * Math.sin(G.t * 2.3 + 1) + 0.06 * Math.sin(G.t * 5.1)));
+  const floorH = SPEC.floor0 + s.rise; W.p = W.g * (1 + 0.035 * floorH); W.dir = 0.25 * Math.sin(G.t * 0.13);
+  const over = W.p > SPEC.wind, raised = s.rise > 0.3;
+  // inclinação
+  const wy = wheelsY(s.x, s.z, s.yaw), fr = (wy[0] + wy[1]) / 2, re = (wy[2] + wy[3]) / 2, le = (wy[0] + wy[2]) / 2, ri = (wy[1] + wy[3]) / 2;
+  const tp = Math.atan2(fr - re, SPEC.WB), tr = Math.atan2(le - ri, SPEC.TR);
+  s.pitch = lerp(s.pitch, tp, Math.min(1, dt * 8)); s.roll = lerp(s.roll, tr, Math.min(1, dt * 8)); s.y = lerp(s.y, (fr + re) / 2, Math.min(1, dt * 10));
+  const pitchD = s.pitch / DEG, rollD = s.roll / DEG; s.tiltDeg = Math.max(Math.abs(pitchD), Math.abs(rollD)); s.tiltAlarm = raised && s.tiltDeg > SPEC.tilt;
+  const kg = loadKg(), overload = kg > SPEC.cap; s.overAlarm = false;
+  // elevação
+  let lift = I.lift; s.descending = false;
+  if (lift !== 0) { if (s.estop) { G.ev.liftEstop = true; lift = 0; } else if (!I.enable) { G.ev.liftNoEnable = true; hintEnable(); lift = 0; } }
+  if (lift > 0) {
+    if (s.tiltDeg > SPEC.tilt) { infr('elevarInclinado', 10); s.tiltAlarm = true; }
+    else if (overload) { infr('sobrecarga', 12); s.overAlarm = true; }
+    else { if (over) infr('ventoSubir', 20); s.rise = Math.min(SPEC.riseMax, s.rise + 0.3 * dt); }
+  } else if (lift < 0 && s.rise > 0) { s.rise = Math.max(0, s.rise - 0.32 * dt); s.descending = true; }
+  if (I.emerg && s.rise > 0) { s.rise = Math.max(0, s.rise - 0.22 * dt); G.ev.emergLower = true; s.descSilent = true; } else s.descSilent = false;
+  s.pothole = clamp(s.pothole + (s.rise > 1.2 ? 1 : -1) * dt * 1.5, 0, 1);
+  if (s.rise < 0.1) s.harnessFlag = false; if (L.harness && s.rise > 1.0 && !s.harness && !s.harnessFlag) { s.harnessFlag = true; infr('talabarte', 1); }
+  // deslocamento
+  let drive = I.drive; if (drive !== 0 && (s.estop || !I.enable)) { if (!s.estop) hintEnable(); drive = 0; }
+  if (s.tiltAlarm) drive = 0;
+  let vmax = s.rise > 0.05 ? SPEC.vRaised : (s.fast ? SPEC.vFast : SPEC.vSlow); const mud = L.mud(s.x, s.z); vmax *= 1 - 0.5 * mud;
+  let tv = drive * vmax;
+  if (Math.abs(pitchD) > SPEC.grade + 0.5 && s.rise < 0.3) { if (tv * Math.sign(pitchD) > 0.01) infr('rampa', 10); tv = Math.min(tv * Math.sign(pitchD), -0.35) * Math.sign(pitchD); }
+  s.v += clamp(tv - s.v, -2.2 * dt, 2.2 * dt);
+  s.steer = lerp(s.steer, I.steer * 0.62, Math.min(1, dt * 5));
+  const nyaw = s.yaw + s.v * Math.tan(s.steer) / SPEC.WB * dt, nx = s.x + Math.sin(nyaw) * s.v * dt, nz = s.z + Math.cos(nyaw) * s.v * dt;
+  const hit = Math.abs(s.v) > 0.001 ? collide(nx, nz, nyaw) : null;
+  if (hit) { if (Math.abs(s.v) > 0.25) infr(hit.ped ? 'pedestre' : 'colisao', 4); s.v = 0; } else { if (s.rise > 1.2) G.ev.raisedDrive = (G.ev.raisedDrive || 0) + Math.abs(s.v) * dt; s.x = nx; s.z = nz; s.yaw = nyaw; s.spin += s.v * dt / 0.19; }
+  s.moving = Math.abs(s.v) > 0.02 || lift !== 0 || s.descending; s.blink += dt;
+  // buraco com a máquina recolhida
+  if (L.holes) { const c = Math.cos(s.yaw), sn = Math.sin(s.yaw); for (const [lx, lz] of [[0.36, 0.7], [-0.36, 0.7], [0.36, -0.7], [-0.36, -0.7]]) { const wx = s.x + lx * c + lz * sn, wz = s.z - lx * sn + lz * c; for (const [hx, hz, r] of L.holes) if (Math.hypot(wx - hx, wz - hz) < r * 0.7) infr('buraco', 8); } }
+  if (s.tiltAlarm && !(G.cool.tiltMsg > G.t)) { G.cool.tiltMsg = G.t + 12; toast('Alarme de inclinação', 'A máquina bloqueou a subida e o deslocamento. Desça a plataforma e leve a máquina para um piso firme e nivelado.', 'bad'); }
+  // estabilidade
+  const hf = s.rise / SPEC.riseMax, tipAng = lerp(22, 4.5, Math.pow(hf, 0.7)), sail = G.load.panels > 0 ? 2.3 : 1;
+  const rw = Math.pow(W.p / 20, 2) * hf * sail, rt = (raised ? s.tiltDeg / tipAng : 0); s.risk = rt + rw;
+  if (s.risk >= 1) { s.riskT += dt; if (s.riskT > 0.7) { G.failed = null; fail('tombamento'); G.failed.dir = Math.abs(rollD) > 1 ? Math.sign(rollD) : 1; } } else s.riskT = 0;
+  const sw = rw * 0.05 + (raised ? 0.004 : 0) * Math.abs(s.v); s.swayZ = sw * Math.sin(G.t * 2.1) + rw * 0.03; s.swayX = sw * 0.5 * Math.sin(G.t * 1.7 + 1);
+  // vento acima do limite com a plataforma elevada
+  if (raised && over && !s.descending && !I.emerg) { s.windT += dt; if (s.windT > 6) { infr('ventoElevado', 9); s.windT = 0; } } else if (!over) s.windT = Math.max(0, s.windT - dt * 0.4);
+  if (over && !G.windWarn && !(G.cool.windMsg > G.t)) { G.windWarn = true; G.cool.windMsg = G.t + 15; toast('Vento acima de 12,5 m/s', 'Desça a plataforma e pare a operação até o vento baixar.', 'bad'); snd.buzz(); } if (!over && W.p < 11) G.windWarn = false;
+  // rede elétrica
+  if (L.line) { const headY = s.y + floorH + 1.8, dx = Math.abs(s.x - L.line.x) - 0.9, dy = Math.max(0, L.line.y - headY); G.lineDist = Math.hypot(Math.max(0, dx), dy); if (s.rise > 0.5 && G.lineDist < 3.05) infr('rede', 8); if (G.lineDist < 0.5) fail('choque'); }
+  // pedestre
+  if (L.ped) { const p = L.ped, pc = L.pedC; p.userData.t = (p.userData.t || 0) + dt; const d = Math.hypot(s.x - pc.x, s.z - pc.z); if (I.horn && d < 9) p.userData.wait = 6; if (p.userData.wait > 0) { p.userData.wait -= dt; pc.x = lerp(pc.x, -5.5, dt * 0.8); } else { const u = (Math.sin(p.userData.t * 0.22) + 1) / 2; pc.x = lerp(pc.x, lerp(-2.5, 3.5, u), dt * 2); pc.z = lerp(-10.5, -21, (Math.sin(p.userData.t * 0.13 + 1) + 1) / 2); } p.position.set(pc.x, 1.2 + Math.abs(Math.sin(p.userData.t * 5)) * 0.03, pc.z); p.rotation.y = Math.sin(p.userData.t * 0.22) > 0 ? 1.57 : -1.57; if (d < 2.4 && Math.abs(s.v) > 0.15 && !(p.userData.wait > 0)) infr('pedestre', 8); }
+  // objetivos
+  if (G.stage === 'tests') { if (G.steps[G.obj] && G.steps[G.obj]()) { nextObj(); if (G.obj >= G.steps.length) setTimeout(report, 900); } }
+  else logic(dt);
+  // alarmes
+  const bpm = (s.tiltAlarm || s.overAlarm) ? 180 : (s.descending && !s.descSilent ? 60 : 0); if (bpm) { const p0 = alarmPh; alarmPh += dt * bpm / 60; if (Math.floor(alarmPh) !== Math.floor(p0)) snd.beep(bpm > 100 ? 1500 : 900, 0.09); }
+}
+function logic(dt) {
+  const s = S, floorH = SPEC.floor0 + s.rise; let tgt = null;
+  if (G.level === 2) { if (G.obj === 1 && s.y > 1.1 && s.z < -9) nextObj(); if (G.obj === 2) tgt = L.targets[0]; if (G.obj === 3) tgt = L.targets[1]; }
+  if (G.level === 3) { if (G.obj === 1) tgt = L.targets[0]; if (G.obj === 3) tgt = L.targets[1];
+    const inLoad = Math.hypot(s.x - L.loadZone.x, s.z - L.loadZone.z) < L.loadZone.r && s.rise < 0.05;
+    if (inLoad && Math.abs(s.v) < 0.05 && (G.obj === 0 || G.obj === 2 || edge('board')) && !G.loadShown) { G.loadShown = true; loadUI(); } if (!inLoad) G.loadShown = false;
+    if (inLoad && G.obj !== 0 && G.obj !== 2) showPrompt(`${G.pad ? 'Create' : 'C'}: alterar a carga`, 0);
+  }
+  L.targets?.forEach(t => t.mk.visible = t === tgt); G.target = tgt;
+  if (tgt) {
+    tgt.mk.userData.ring.rotation.y += dt * 2;
+    const d = Math.hypot(s.x - tgt.x, s.z - tgt.z), dh = floorH - tgt.h, okPos = d < (tgt.r || 1.5), okH = Math.abs(dh) < 0.35;
+    if (okPos && okH) {
+      const ready = G.level !== 3 || (G.load.panels > 0 && G.load.helper && G.load.tools);
+      if (!ready) showPrompt(G.load.panels === 0 ? 'Falta a placa na plataforma' : 'Faltam o ajudante e as ferramentas', 0);
+      else { if (I.work && !s.estop) s.work += dt / 4.5; else s.work = Math.max(0, s.work - dt * 0.4); showPrompt(`Segure ${G.pad ? '✕' : 'F'} para executar o serviço`, s.work);
+        if (s.work >= 1) { s.work = 0; toast('Serviço concluído', tgt.label, 'good'); if (G.level === 3) { L.frames[G.installed].visible = true; G.installed++; G.load.panels--; syncLoad(); if (!G.storm && G.installed === 1) { G.storm = { t0: G.t + 4, peak: 12.3 }; } } if (G.level === 2 && G.obj === 2) { /* lâmpada */ } nextObj(); } }
+    } else { s.work = 0; showPrompt(!okPos ? `${tgt.label}: aproxime a máquina (${fmt(d)} m)` : dh < 0 ? `Suba a plataforma até ${fmt(tgt.h)} m` : `Desça a plataforma até ${fmt(tgt.h)} m`, 0); }
+  } else if (!(G.level === 3 && G.loadShown === false && $('#prompt').dataset.keep)) {
+    const last = G.objs.length - 1;
+    if (G.obj === last) { const ok = inPark(); showPrompt(!ok ? 'Leve a máquina até a vaga amarela' : s.rise > 0.02 ? 'Recolha a plataforma' : 'Aperte a emergência para encerrar', 0); if (ok && s.rise < 0.02 && s.estop && Math.abs(s.v) < 0.02) { nextObj(); setTimeout(report, 900); G.stage = 'done'; } }
+    else if (G.level === 3 && (G.obj === 0 || G.obj === 2)) showPrompt('Leve a máquina recolhida até o palete', 0);
+    else if (G.level === 2 && G.obj === 1) showPrompt('Suba ao platô pela rampa adequada', 0);
+  }
+}
+let promptSet = false;
+function showPrompt(t, p) { promptSet = true; $('#prompt').hidden = false; $('#pt').textContent = t; $('#pbar').style.width = (p * 100) + '%'; $('#pbar').parentElement.hidden = !(p > 0); }
+
+/* ───────── câmera e HUD ───────── */
+const camT = new THREE.Vector3(), tmpV = new THREE.Vector3();
+function updateCamera(dt) {
+  G.camYaw -= I.cx * dt * 1.8; G.camPitch = clamp(G.camPitch + I.cy * dt * 1.2, -0.15, 1.35);
+  if (G.mode === 'menu') { G.camYaw += dt * 0.12; G.camPitch = 0.22; G.camDist = 6.5; }
+  const site = G.stage === 'site' && G.level === 2;
+  const floorH = SPEC.floor0 + S.rise; const tx = site ? 0 : S.x, ty = site ? 1 : S.y + (G.stage === 'inspect' || G.mode === 'menu' ? 1.0 : Math.max(1.2, floorH * 0.85 + 0.3)), tz = site ? -8 : S.z;
+  camT.lerp(tmpV.set(tx, ty, tz), Math.min(1, dt * 5));
+  if (G.fp && (G.stage === 'drive' || G.stage === 'tests')) { MR.pf.getWorldPosition(tmpV); const a = S.yaw + G.camYaw; camera.position.set(tmpV.x + Math.sin(S.yaw) * 0.3, tmpV.y + 1.65, tmpV.z + Math.cos(S.yaw) * 0.3); camera.lookAt(camera.position.x + Math.sin(a) * 5, camera.position.y - 5 * Math.tan(G.camPitch - 0.15), camera.position.z + Math.cos(a) * 5); MR.op.visible = false; }
+  else { MR.op.visible = true; const a = (site || G.stage === 'inspect' || G.mode === 'menu' ? 0 : S.yaw) + Math.PI + G.camYaw, cp = Math.cos(G.camPitch), d = G.camDist + (G.stage === 'drive' || G.stage === 'tests' ? S.rise * 0.7 : 0);
+    let cx = camT.x + Math.sin(a) * cp * d, cy = camT.y + Math.sin(G.camPitch) * d, cz = camT.z + Math.cos(a) * cp * d;
+    if (G.level === 1) { cx = clamp(cx, -21, 21); cz = clamp(cz, -15, 30); cy = Math.min(cy, 8.3); } if (L?.wall) cz = Math.max(cz, -8.6);
+    cy = Math.max(cy, (L ? L.hAt(cx, cz) : 0) + 0.4); camera.position.set(cx, cy, cz); camera.lookAt(camT); }
+  sun.target.position.copy(camT); sun.position.copy(camT).addScaledVector(sunDir, 60);
+}
+const ictx = $('#incl').getContext('2d');
+function drawIncl(pitchD, rollD) { const g = ictx, c = 92, R = 80, sc = R / 6; g.clearRect(0, 0, 184, 184); g.fillStyle = '#0c1116'; g.beginPath(); g.arc(c, c, R + 8, 0, 7); g.fill(); g.strokeStyle = '#3a4756'; g.lineWidth = 2; g.beginPath(); g.arc(c, c, R + 8, 0, 7); g.stroke(); g.strokeStyle = '#2b3642'; g.beginPath(); g.moveTo(c - R, c); g.lineTo(c + R, c); g.moveTo(c, c - R); g.lineTo(c, c + R); g.stroke(); g.strokeStyle = '#3ddc84'; g.lineWidth = 3; g.beginPath(); g.arc(c, c, 2 * sc, 0, 7); g.stroke(); let x = clamp(-rollD, -6, 6) * sc, y = clamp(pitchD, -6, 6) * sc; const m = Math.hypot(x, y); if (m > R) { x *= R / m; y *= R / m; } const bad = Math.max(Math.abs(pitchD), Math.abs(rollD)) > 2; g.fillStyle = bad ? '#ff4d42' : '#ffb81c'; g.beginPath(); g.arc(c + x, c + y, 11, 0, 7); g.fill(); g.fillStyle = '#9aa8b6'; g.font = '600 20px Barlow, sans-serif'; g.textAlign = 'center'; g.fillText('2°', c + 2 * sc + 16, c - 6); }
+const pv = new THREE.Vector3();
+function project(v, el) { pv.copy(v).project(camera); if (pv.z > 1 || pv.z < -1) { el.style.display = 'none'; return; } el.style.display = ''; const w = canvas.clientWidth, h = canvas.clientHeight; el.style.transform = `translate(${(pv.x * .5 + .5) * w}px,${(-pv.y * .5 + .5) * h}px)`; }
+function updateHUD() {
+  G.spots.forEach(s => { if (s.obj) s.obj.getWorldPosition(tmpV); else tmpV.copy(s.pos); project(tmpV, s.el); });
+  if ($('#hud').hidden) return; const s = S, W = G.wind;
+  if (!promptSet) $('#prompt').hidden = true; promptSet = false;
+  $('#gh').textContent = fmt(SPEC.floor0 + s.rise, 2); $('#gv').textContent = fmt(Math.abs(s.v) * 3.6); const kg = loadKg(); $('#gl').textContent = kg; $('#gl').style.color = kg > SPEC.cap ? 'var(--bad)' : ''; $('#gt').textContent = fmt(s.tiltDeg || 0); $('#gt').style.color = s.tiltDeg > 2 ? 'var(--bad)' : '';
+  const rk = $('#risk i'); rk.style.width = clamp(s.risk || 0, 0, 1) * 100 + '%'; rk.style.background = s.risk > 0.75 ? 'var(--bad)' : s.risk > 0.45 ? 'var(--amber)' : 'var(--ok)';
+  drawIncl((s.pitch || 0) / DEG, (s.roll || 0) / DEG);
+  const lamp = (id, on) => $(id).classList.toggle('on', !!on); lamp('#l-en', I.enable && !s.estop); lamp('#l-es', s.estop); lamp('#l-ti', s.tiltAlarm); lamp('#l-ph', s.pothole > 0.95); lamp('#l-ta', s.harness); lamp('#l-ov', s.overAlarm || loadKg() > SPEC.cap); lamp('#l-sp', !s.fast || s.rise > 0.05);
+  $('#wp').textContent = fmt(W.p); $('#wg').textContent = fmt(W.g); const wb = $('#wbar'); wb.style.width = clamp(W.p / 20, 0, 1) * 100 + '%'; wb.style.background = W.p > 12.5 ? 'var(--bad)' : W.p > 8 ? 'var(--amber)' : 'var(--ok)'; $('#wp').style.color = W.p > 12.5 ? 'var(--bad)' : W.p > 8 ? 'var(--amber)' : '';
+  const pl = $('#pl'); if (L?.line && G.lineDist < 7 && G.stage === 'drive') { pl.hidden = false; $('#pld').textContent = fmt(G.lineDist) + ' m'; $('#pld').style.color = G.lineDist < 3.05 ? 'var(--bad)' : 'var(--amber)'; } else pl.hidden = true;
+  const tg = $('#tgt'); if (G.target && G.stage === 'drive') { tg.hidden = false; tmpV.set(...G.target.marker); project(tmpV, tg); tg.textContent = `${G.target.label} · piso a ${fmt(G.target.h)} m`; } else tg.hidden = true;
+}
+function ambient(dt) {
+  if (!L) return; const W = G.wind;
+  if (L.sock) { L.sock.rotation.y = Math.PI / 2 + W.dir; L.sock.rotation.x = lerp(1.1, 0.02, clamp(W.g / 10, 0, 1)) + Math.sin(G.t * 9) * 0.03; L.flag.rotation.y = W.dir + Math.sin(G.t * 6) * 0.12 * clamp(W.g / 8, 0.2, 1.5); L.trees.forEach((t, i) => { t.rotation.z = -clamp(W.g / 14, 0, 1.2) * 0.14 * (1 + 0.5 * Math.sin(G.t * 2 + i)); });
+    const p = L.dust.geometry.attributes.position, sp = W.g * 0.8; for (let i = 0; i < p.count; i++) { let x = p.getX(i) + sp * dt * (0.7 + (i % 5) * 0.12); if (x > 25) x -= 50; p.setX(i, x); p.setY(i, (p.getY(i) + Math.sin(G.t * 3 + i) * dt * 0.6 + 9) % 9); } p.needsUpdate = true; L.dust.material.opacity = clamp((W.g - 5) / 8, 0, 0.8); }
+  snd.set(S.moving && !S.estop ? 1 : 0, G.mode === 'play' ? W.g : 0, I.horn && G.mode === 'play');
+}
+
+/* ───────── laço principal ───────── */
+let last = performance.now(), slowT = 0, lowQ = false;
+function frame(now) {
+  const raw = (now - last) / 1000, dt = Math.min(0.05, raw); last = now;
+  if (!lowQ) { slowT = raw > 0.045 ? slowT + raw : Math.max(0, slowT - raw); if (slowT > 3) { lowQ = true; renderer.setPixelRatio(1); bloom.enabled = false; sun.shadow.mapSize.set(1024, 1024); sun.shadow.map?.dispose(); sun.shadow.map = null; resize(); } }
+  pollInput();
+  if (edge('pause')) { if (G.mode === 'play') pause(); else if (G.mode === 'paused' && !$('#modal').hidden && $('#mbox h2')?.textContent === 'Jogo pausado') { $('#modal').hidden = true; G.mode = 'play'; } }
+  if (G.mode === 'play') step(dt);
+  if (MR) poseMachine(MR, S);
+  updateCamera(dt); ambient(dt); updateHUD(); edges.clear();
+  composer.render(); requestAnimationFrame(frame);
+}
+function boot() { makeTextures(); makeMaterials(); resize(); showMenu(); camT.set(S.x, 1, S.z); requestAnimationFrame(frame); }
+window.__pemt = { G, S, I, startLevel, keys, sim: (sec) => { for (let i = 0; i < sec * 20 && G.mode === 'play'; i++) { step(0.05); edges.clear(); } } };
+boot();
+</script>
