@@ -172,7 +172,7 @@ kbd{font-family:var(--body);font-weight:600;font-size:12.5px;background:#2e372d;
     <div id="lamps" class="card">
       <span class="lamp" id="l-en">Enable</span>
       <span class="lamp bad" id="l-es">Emergência</span>
-      <span class="lamp bad blink" id="l-ti">Inclinação LL</span>
+      <span class="lamp bad blink" id="l-ti">Inclinação</span>
       <span class="lamp" id="l-ph">Protetor de buraco</span>
       <span class="lamp" id="l-ta">Talabarte</span>
       <span class="lamp bad blink" id="l-ov">Sobrecarga</span>
@@ -269,7 +269,7 @@ const flatN = (() => { const c = document.createElement('canvas'); c.width = c.h
 function photoN(name, rep) { const t = texLoader.load('tex/' + name + '_n.jpg', undefined, undefined, () => { t.image = flatN; t.needsUpdate = true; }); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.repeat.set(rep[0], rep[1]); return t; }
 async function fetchBin(path) { try { const r = await fetch(path); if (r.ok) return await r.arrayBuffer(); } catch (e) { } const r = await fetch(path + '.b64.txt'); if (!r.ok) throw new Error('sem arquivo ' + path); const bin = atob((await r.text()).trim()), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
 const hdrCache = {}; let envTok = 0;
-function loadHDR(name) { const tok = ++envTok; const use = (e) => { if (tok === envTok) { scene.environment = e; hemi.intensity *= 0.45; } }; if (hdrCache[name]) return use(hdrCache[name]); fetchBin('tex/' + name + '.hdr').then((buf) => { const d = new RGBELoader().parse(buf), t = new THREE.DataTexture(d.data, d.width, d.height, THREE.RGBAFormat, d.type); t.colorSpace = THREE.LinearSRGBColorSpace; t.minFilter = t.magFilter = THREE.LinearFilter; t.flipY = true; t.mapping = THREE.EquirectangularReflectionMapping; t.needsUpdate = true; hdrCache[name] = pmrem.fromEquirectangular(t).texture; t.dispose(); use(hdrCache[name]); }).catch(() => { }); }
+function loadHDR(name) { const tok = ++envTok; const use = (e) => queueMicrotask(() => { if (tok === envTok) { scene.environment = e; hemi.intensity *= 0.45; } }); if (hdrCache[name]) return use(hdrCache[name]); fetchBin('tex/' + name + '.hdr').then((buf) => { const d = new RGBELoader().parse(buf), t = new THREE.DataTexture(d.data, d.width, d.height, THREE.RGBAFormat, d.type); t.colorSpace = THREE.LinearSRGBColorSpace; t.minFilter = t.magFilter = THREE.LinearFilter; t.flipY = true; t.mapping = THREE.EquirectangularReflectionMapping; t.needsUpdate = true; hdrCache[name] = pmrem.fromEquirectangular(t).texture; t.dispose(); use(hdrCache[name]); }).catch(() => { }); }
 function photo(name, fb, rep) { const t = texLoader.load('tex/' + name + '.jpg', undefined, undefined, () => { t.image = fb.image; t.needsUpdate = true; }); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; const r = rep || [fb.repeat.x, fb.repeat.y]; t.repeat.set(r[0], r[1]); return t; }
 function makeTextures() {
   T.asphalt = ctex(512, 512, (g, w, h) => { g.fillStyle = '#3b3e42'; g.fillRect(0, 0, w, h); speckle(g, w, h, 9000, ['#2a2c2f', '#55585d', '#6a6d70', '#1f2123']); }, [26, 26]);
@@ -347,7 +347,29 @@ function person(parent, x, z, vestMat = M.vest) {
   const har = new THREE.Group(); g.add(har);
   box(0.42, 0.04, 0.25, M.strap, 0, 0.86, 0, har, false);
   const s1 = box(0.05, 0.6, 0.25, M.strap, -0.1, 1.1, 0, har, false); s1.rotation.z = 0.18; const s2 = box(0.05, 0.6, 0.25, M.strap, 0.1, 1.1, 0, har, false); s2.rotation.z = -0.18;
-  g.userData.harness = har; g.userData.arms = [aL, aR]; return g;
+  g.userData.harness = har; g.userData.arms = [aL, aR]; g.userData.vest = vestMat; return g;
+}
+/* Máquina e operador modelados no Blender (models/lift.glb). Se o arquivo não carregar, ficam as formas simples. */
+let liftP = null; const EMPTY = new THREE.BufferGeometry();
+function useLift(R) {
+  liftP = liftP || fetchBin('models/lift.glb').then(buf => new Promise((res, rej) => gltfLoader.parse(buf, 'models/', g => res(g.scene), rej)));
+  liftP.then(sc => { try { upgradeMachine(R, sc); } catch (e) { console.warn('modelo da máquina', e); } }, () => { });
+}
+function liftPart(sc, name, vest) { const o = sc.getObjectByName(name); if (!o) throw new Error('peça ' + name); const c = o.clone(true); c.position.set(0, 0, 0); c.rotation.set(0, 0, 0); c.scale.set(1, 1, 1); c.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; const n = m.material.name; if (n === 'vest' && vest) m.material = vest; else if (M[n]) m.material = M[n]; } }); return c; }
+function hideMeshes(g, keep = []) { g.children.forEach(ch => { if (ch.isMesh && !keep.includes(ch)) ch.visible = false; }); }
+function upgradePerson(p, sc) {
+  const [aL, aR] = p.userData.arms; hideMeshes(p, [aL, aR]); p.add(liftPart(sc, 'op_body', p.userData.vest));
+  for (const a of [aL, aR]) { a.geometry = EMPTY; a.children.forEach(ch => ch.visible = false); a.add(liftPart(sc, 'op_arm', p.userData.vest)); }
+  const h = p.userData.harness; hideMeshes(h); h.add(liftPart(sc, 'op_harness'));
+}
+function upgradeMachine(R, sc) {
+  hideMeshes(R.tilt, [R.decal, R.decal2, R.beacon, ...R.ph]); R.tilt.add(liftPart(sc, 'chassis'));
+  hideMeshes(R.trayL); R.trayL.add(liftPart(sc, 'trayL')); hideMeshes(R.trayR); R.trayR.add(liftPart(sc, 'trayR'));
+  R.wheels.forEach(w => { hideMeshes(w.spin); const p = liftPart(sc, 'wheel'); if (w.pivot.position.x < 0) p.scale.x = -1; w.spin.add(p); });
+  R.arms.forEach(lv => { for (const [list, n] of [[lv.a, 'armA'], [lv.b, 'armB'], [lv.pins, 'pin']]) list.forEach(m => { m.geometry = EMPTY; const p = liftPart(sc, n); if (n === 'pin') p.rotation.z = -Math.PI / 2; m.add(p); }); });
+  hideMeshes(R.pf, [R.tools, R.panelA, R.panelB]); R.pf.add(liftPart(sc, 'platform'));
+  hideMeshes(R.gate); R.gate.add(liftPart(sc, 'gate'));
+  upgradePerson(R.op, sc); upgradePerson(R.helper, sc);
 }
 function buildMachine() {
   const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
@@ -367,7 +389,7 @@ function buildMachine() {
   // decalque de capacidade
   const dtex = signTex(['CAP. 227 kg · 2 PESSOAS', 'VENTO MÁX. 12,5 m/s'], '#f2f2ee', '#17171a', 512, 128);
   R.decal = mk(new THREE.PlaneGeometry(0.62, 0.155), new THREE.MeshStandardMaterial({ map: dtex, roughness: 0.5 }), 0.418, 0.47, 0.45, tilt, false); R.decal.rotation.y = Math.PI / 2;
-  const d2 = R.decal.clone(); d2.position.set(-0.418, 0.47, 0.45); d2.rotation.y = -Math.PI / 2; tilt.add(d2);
+  const d2 = R.decal.clone(); d2.position.set(-0.418, 0.47, 0.45); d2.rotation.y = -Math.PI / 2; tilt.add(d2); R.decal2 = d2;
   // comando de solo (traseira)
   box(0.3, 0.2, 0.05, M.dark, -0.2, 0.44, -0.965, tilt);
   cyl(0.03, 0.03, M.red, -0.27, 0.47, -1.0, tilt).rotation.x = Math.PI / 2;
@@ -438,6 +460,7 @@ function buildMachine() {
   // âncoras de inspeção
   anchor('docs', pf, 0.2, 0.85, 0.95); anchor('pneus', tilt, 0.5, 0.2, 0.7); anchor('bateria', tilt, -0.5, 0.42, -0.2); anchor('hidraulico', tilt, -0.5, 0.1, 0.35);
   anchor('mangueiras', tilt, 0.45, 0.62, -0.5); anchor('tesoura', tilt, 0.45, 0.78, 0.1); anchor('guarda', pf, 0, 0.9, -1.0); anchor('ancoragem', pf, 0.42, 0.15, 0.5);
+  useLift(R);
   anchor('decalques', tilt, 0.45, 0.47, 0.45); anchor('protetor', tilt, 0.4, 0.1, -0.25); anchor('bandejas', tilt, 0.45, 0.33, -0.05); anchor('piso', pf, -0.1, 0.25, -0.45); anchor('solo', tilt, -0.2, 0.5, -1.05);
   return R;
 }
@@ -506,7 +529,7 @@ function rumble(mag, ms) { try { for (const p of navigator.getGamepads()) p?.vib
 /* ───────── entrada ───────── */
 const keys = new Set(), edges = new Set(); const I = { drive: 0, steer: 0, lift: 0, enable: false, horn: false, work: false, emerg: false, cx: 0, cy: 0 };
 const KEYMAP = { Space: 'estop', KeyQ: 'speed', KeyT: 'harness', KeyV: 'view', KeyC: 'board', Escape: 'pause' };
-addEventListener('keydown', e => { if (e.repeat) return; G.pad = false; keys.add(e.code); if (KEYMAP[e.code]) edges.add(KEYMAP[e.code]); if ((G.mode === 'play' || G.mode === 'ctrl') && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code) && !(G.mode === 'play' && e.target instanceof HTMLButtonElement && e.code === 'Space' && !$('#modal').hidden)) e.preventDefault(); });
+addEventListener('keydown', e => { if (e.repeat) return; G.pad = false; keys.add(e.code); if (KEYMAP[e.code]) edges.add(KEYMAP[e.code]); const uiOpen = !$('#modal').hidden || !$('#sheet').hidden; if (((G.mode === 'play' && !uiOpen) || (G.mode === 'ctrl' && e.code !== 'Tab')) && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault(); });
 addEventListener('keyup', e => keys.delete(e.code)); addEventListener('blur', () => keys.clear());
 let drag = null;
 canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); snd.init(); });
@@ -533,7 +556,7 @@ function pollInput() {
   } else G.gpB = null;
   if (G.enMode === 'fix') { const held = I.enable; if (held && !G.enPrev) G.enLatch = !G.enLatch; G.enPrev = held; I.enable = G.enLatch; }
 }
-function uiButtons() { const c = !$('#modal').hidden ? $('#modal') : !$('#sheet').hidden ? $('#sheet') : !$('#menu').hidden ? $('#menu') : (G.spots.length ? $('#game') : null); return c ? [...c.querySelectorAll(c.id === 'game' ? '#spots button,#objb:not([hidden])' : 'button:not(:disabled)')] : []; }
+function uiButtons() { const c = !$('#modal').hidden ? $('#modal') : !$('#sheet').hidden ? $('#sheet') : !$('#menu').hidden ? $('#menu') : (G.spots.length ? $('#game') : null); return c ? [...c.querySelectorAll(c.id === 'game' ? '#spots button,#objb:not([hidden])' : 'button:not(:disabled),input:not(:disabled)')] : []; }
 const edge = n => edges.has(n);
 const K = (kb, ps) => `<b>${G.pad ? ps : kb}</b>`;
 
@@ -544,7 +567,7 @@ function setObjs(k, t, list) { G.objs = list.map(x => ({ text: x })); G.obj = 0;
 function drawObjs() { $('#objl').innerHTML = G.objs.map((o, i) => `<li class="${i < G.obj ? 'done' : i === G.obj ? 'cur' : ''}">${o.text}</li>`).join(''); }
 function nextObj() { G.obj++; G.ev = {}; drawObjs(); snd.ok(); }
 function fade(fn) { const f = $('#fade'); f.style.opacity = 1; setTimeout(() => { fn(); f.style.opacity = 0; }, 450); }
-const KEYS = [['Andar e virar', 'W A S D', 'Analógico esquerdo'], ['Enable (segurar)', 'Shift', 'L2 ou R2'], ['Subir / descer plataforma', '↑ / ↓', 'R1 / L1'], ['Parada de emergência', 'Espaço', '□'], ['Executar o serviço', 'F', '✕'], ['Talabarte', 'T', '△'], ['Buzina', 'H', 'L3'], ['Velocidade lenta / rápida', 'Q', '○'], ['Descida de emergência (segurar)', 'E', 'Touchpad'], ['Câmera', 'Arrastar o mouse, V', 'Analógico direito, R3'], ['Pausa', 'Esc', 'Options']];
+const KEYS = [['Andar e virar', 'W A S D', 'Analógico esquerdo'], ['Enable (segurar)', 'Shift', 'L2 ou R2'], ['Subir / descer plataforma', '↑ / ↓', 'R1 / L1'], ['Parada de emergência', 'Espaço', '□'], ['Executar o serviço', 'F', '✕'], ['Talabarte', 'T', '△'], ['Buzina', 'H', 'L3'], ['Velocidade lenta / rápida', 'Q', '○'], ['Descida de emergência (segurar)', 'E', 'Touchpad ou ↓ do direcional'], ['Câmera', 'Arrastar o mouse, V', 'Analógico direito, R3'], ['Pausa', 'Esc', 'Options']];
 $('#keys').innerHTML = KEYS.map(r => `<tr><td>${r[0]}</td><td><kbd>${r[1]}</kbd></td><td><kbd>${r[2]}</kbd></td></tr>`).join('');
 function drawHelp() { $('#help').innerHTML = [['W A S D', 'Analógico E', 'andar'], ['Shift', 'L2/R2', 'enable'], ['↑ ↓', 'R1 L1', 'plataforma'], ['Espaço', '□', 'emergência'], ['F', '✕', 'trabalhar'], ['T', '△', 'talabarte'], ['H', 'L3', 'buzina'], ['Q', '○', 'velocidade'], ['E', 'Touchpad', 'descida emerg.'], ['Esc', 'Options', 'pausa']].map(r => `${K(r[0], r[1])}<span>${r[2]}</span>`).join(''); }
 
@@ -552,7 +575,7 @@ function drawHelp() { $('#help').innerHTML = [['W A S D', 'Analógico E', 'andar
 function setSky(elev, az, turb = 6, ray = 1.6, exposure = 0.62, envI = 0.9, photoSky = null, skyTint = 1.15, hdr = 'day') {
   const sky = new Sky(); sky.scale.setScalar(450); const u = sky.material.uniforms; u.turbidity.value = turb; u.rayleigh.value = ray; u.mieCoefficient.value = 0.006; u.mieDirectionalG.value = 0.8;
   sunDir.setFromSphericalCoords(1, (90 - elev) * DEG, az * DEG); u.sunPosition.value.copy(sunDir);
-  const tmp = new THREE.Scene(); tmp.add(sky); const env = pmrem.fromScene(tmp, 0, 0.1, 1000).texture; scene.environment = env; loadHDR(hdr);
+  const tmp = new THREE.Scene(); tmp.add(sky); if (G.skyEnv) G.skyEnv.dispose(); const env = G.skyEnv = pmrem.fromScene(tmp, 0, 0.1, 1000).texture; scene.environment = env; loadHDR(hdr);
   const dome = new THREE.Mesh(new THREE.SphereGeometry(420, 48, 24, 0, Math.PI * 2, 0, Math.PI * 0.62), new THREE.MeshBasicMaterial({ map: photoSky || T.skyday, side: THREE.BackSide, fog: false, depthWrite: false, color: new THREE.Color(skyTint, skyTint, skyTint) })); dome.rotation.y = az * DEG + 2; dome.position.y = -6; world.add(dome);
   const gr = mk(new THREE.PlaneGeometry(700, 700), new THREE.MeshStandardMaterial({ color: 0x9aa88c, map: T.grass, normalMap: T.grassN, roughness: 1 }), 0, -0.08, 0, world, false); gr.rotation.x = -Math.PI / 2;
   renderer.toneMappingExposure = exposure; scene.environmentIntensity = envI; if ('environmentIntensity' in scene === false) { }
@@ -563,7 +586,7 @@ function ground(size, seg, hAt, colAt, mat) {
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals(); mat.vertexColors = true; const m = new THREE.Mesh(g, mat); m.receiveShadow = true; world.add(m); return m;
 }
 const gltfLoader = new GLTFLoader(), modelCache = {};
-function model(name, cb) { if (!modelCache[name]) modelCache[name] = fetchBin('models/' + name + '.glb').then(buf => new Promise((res, rej) => gltfLoader.parse(buf, 'models/', g => res(g.scene), rej))); modelCache[name].then((g) => { const c = g.clone(true); c.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); const h = new THREE.Group(); h.add(c); cb(h, c); }, () => { }); }
+function model(name, cb) { const w0 = world; if (!modelCache[name]) modelCache[name] = fetchBin('models/' + name + '.glb').then(buf => new Promise((res, rej) => gltfLoader.parse(buf, 'models/', g => res(g.scene), rej))); modelCache[name].then((g) => { if (world !== w0) return; const c = g.clone(true); c.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); const h = new THREE.Group(); h.add(c); cb(h, c); }, () => { }); }
 function fit(c, size) { const d = new THREE.Box3().setFromObject(c).getSize(new THREE.Vector3()); if (size.h) c.scale.multiplyScalar(size.h / d.y); else { if (d.z > d.x !== size.z > size.x) { c.rotation.y = Math.PI / 2; c.updateMatrixWorld(true); const e = new THREE.Box3().setFromObject(c).getSize(new THREE.Vector3()); d.copy(e); } const sc = Math.min(size.x / d.x, size.y / d.y, size.z / d.z) ; c.scale.multiplyScalar(sc); if (size.stretch) { c.updateMatrixWorld(true); const e = new THREE.Box3().setFromObject(c).getSize(new THREE.Vector3()); c.parent.scale.set(size.x / e.x, size.y / e.y, size.z / e.z); } } c.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(c), ctr = b.getCenter(new THREE.Vector3()); c.position.x -= ctr.x; c.position.z -= ctr.z; c.position.y -= b.min.y; }
 function cone(x, z, y = 0) { const g = new THREE.Group(); g.position.set(x, y, z); world.add(g); box(0.34, 0.03, 0.34, M.dark, 0, 0.015, 0, g); cyl(0.13, 0.5, M.cone, 0, 0.28, 0, g, 14, 0.03); cyl(0.095, 0.08, M.white, 0, 0.3, 0, g, 14, 0.075); model('cone', (h, c) => { fit(c, { h: 0.55 }); g.traverse(o => { if (o.isMesh) o.visible = false; }); g.add(h); }); return g; }
 function tree(x, z, s = 1, y = 0) { const g = new THREE.Group(); g.position.set(x, y, z); g.scale.setScalar(s); world.add(g); cyl(0.16, 2.4, M.trunk, 0, 1.2, 0, g, 8, 0.1); const top = new THREE.Group(); top.position.y = 2.4; g.add(top); mk(new THREE.IcosahedronGeometry(1.3, 1), M.leaf, 0, 0.9, 0, top); mk(new THREE.IcosahedronGeometry(0.9, 1), M.leaf, 0.6, 0.3, 0.3, top); mk(new THREE.IcosahedronGeometry(0.8, 1), M.leaf, -0.5, 0.5, -0.4, top); mk(new THREE.IcosahedronGeometry(0.75, 1), M.leaf2, 0.2, 1.6, -0.3, top); mk(new THREE.IcosahedronGeometry(0.7, 1), M.leaf2, -0.3, 0.2, 0.6, top); model('tree', (h, c) => { fit(c, { h: 5 }); g.traverse(o => { if (o.isMesh) o.visible = false; }); h.rotation.y = x * 1.7 + z; g.add(h); top.userData.model = h; }); return top; }
@@ -634,7 +657,7 @@ function buildL2() {
   const mudA = ctex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 20, 64, 64, 64); gr.addColorStop(0, '#fff'); gr.addColorStop(0.75, '#bbb'); gr.addColorStop(1, '#000'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, null, false);
   const mudM = mk(new THREE.CircleGeometry(1, 48), new THREE.MeshStandardMaterial({ map: T.mud, normalMap: T.mudN, normalScale: new THREE.Vector2(1.6, 1.6), alphaMap: mudA, transparent: true, roughness: 0.28, polygonOffset: true, polygonOffsetFactor: -3 }), -0.5, 1.215, -13.5, world, false); mudM.rotation.x = -Math.PI / 2; mudM.scale.set(4.6, 3.5, 1);
   const seg = (x0, x1) => { box(x1 - x0, 1.5, 0.35, wallM, (x0 + x1) / 2, 0.6, -8.0, world); obs.b.push({ x0, x1, z0: -8.4, z1: -7.5 }); };
-  seg(-30, -3.6); seg(-0.4, 5); seg(9, 30);
+  seg(-35, -3.6); seg(-0.4, 5); seg(9, 35);
   const curb = (x, z0, z1, top) => { const len = z0 - z1; const m = box(0.25, 0.35, Math.hypot(len, top), M.hazard, x, top / 2 + 0.17, (z0 + z1) / 2, world); m.rotation.x = Math.atan2(top, len); obs.b.push({ x0: x - 0.25, x1: x + 0.25, z0: z1, z1: z0 }); };
   curb(4.9, -2.5, -8, 1.2); curb(9.1, -2.5, -8, 1.2); curb(-3.7, -4.6, -8, 1.2); curb(-0.3, -4.6, -8, 1.2);
   sign(['22%'], 10.2, 1.4, -1.6, -0.3, 1.3, 0.6); sign(['35%'], -4.6, 1.4, -3.8, 0.3, 1.3, 0.6);
@@ -711,13 +734,13 @@ function loadLevel(id) {
   world = new THREE.Group(); scene.add(world); seed = 7 + id * 13;
   const def = LEVELS.find(l => l.id === id); L = def.build(); L.def = def; G.level = id;
   MR = buildMachine(); world.add(MR.root);
-  resetMachine(L.start); G.inf = []; G.cool = {}; G.ev = {}; G.failed = null; G.t = 0; G.spots = []; $('#spots').innerHTML = ''; G.tags = []; $('#tags').innerHTML = ''; G.target = null; G.storm = null; G.load = { helper: false, tools: false, panels: 0 }; G.installed = 0; G.fp = false; G.atStop = false; G.passStop = false;
+  resetMachine(L.start); G.inf = []; G.cool = {}; G.ev = {}; G.failed = null; G.t = 0; G.spots = []; $('#spots').innerHTML = ''; G.tags = []; $('#tags').innerHTML = ''; G.target = null; G.storm = null; G.load = { helper: false, tools: false, panels: 0 }; G.installed = 0; G.fp = false; G.atStop = false; G.passStop = false; $('#objb').hidden = true; $('#sheet').hidden = true; lastHint = -99; clearTimeout(G.repT); G.windWarn = false; G.loadShown = false; G.enLatch = false;
   G.camYaw = 0.6; G.camPitch = 0.3; G.camDist = 8; if (L.targets) L.targets.forEach(t => { t.mk = workMarker(...t.marker); t.mk.visible = false; t.pad = mk(new THREE.RingGeometry((t.r || 2.0) - 0.12, t.r || 2.0, 48), new THREE.MeshBasicMaterial({ color: 0xffb81c, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -6 }), t.x, L.hAt(t.x, t.z) + 0.03, t.z, world, false); t.pad.rotation.x = -Math.PI / 2; t.pad.visible = false; });
   syncLoad();
 }
 function syncLoad() { MR.helper.visible = G.load.helper; MR.tools.visible = G.load.tools; MR.panelA.visible = G.load.panels >= 1; MR.panelB.visible = G.load.panels >= 2; }
 const loadKg = () => 85 + (G.load.helper ? 80 : 0) + (G.load.tools ? 25 : 0) + G.load.panels * 35;
-function showMenu() { G.mode = 'menu'; $('#hud').hidden = true; $('#sheet').hidden = true; $('#modal').hidden = true; $('#menu').hidden = false; G.spots = []; $('#spots').innerHTML = ''; G.tags = []; $('#tags').innerHTML = ''; $('#phases').innerHTML = ''; LEVELS.forEach(l => { const b = document.createElement('button'); b.className = 'phase'; const best = G.best[l.id]; b.innerHTML = `<b>${l.id}</b><div><strong>${l.name}</strong><span>${l.sub}</span></div><em class="num">${l.id === 0 ? 'comece aqui' : best != null ? best + ' pts' : 'novo'}</em>`; b.onclick = () => { snd.init(); snd.click(); startLevel(l.id); }; $('#phases').appendChild(b); }); if (G.level !== 1 || !world) { loadLevel(1); } S.estop = true; }
+function showMenu() { clearTimeout(G.repT); G.mode = 'menu'; $('#hud').hidden = true; $('#sheet').hidden = true; $('#modal').hidden = true; $('#menu').hidden = false; G.spots = []; $('#spots').innerHTML = ''; G.tags = []; $('#tags').innerHTML = ''; $('#phases').innerHTML = ''; LEVELS.forEach(l => { const b = document.createElement('button'); b.className = 'phase'; const best = G.best[l.id]; b.innerHTML = `<b>${l.id}</b><div><strong>${l.name}</strong><span>${l.sub}</span></div><em class="num">${l.id === 0 ? 'comece aqui' : best != null ? best + ' pts' : 'novo'}</em>`; b.onclick = () => { snd.init(); snd.click(); startLevel(l.id); }; $('#phases').appendChild(b); }); if (G.level !== 1 || !world) { loadLevel(1); } S.estop = true; }
 function startLevel(id) { fade(() => { loadLevel(id); $('#menu').hidden = true; $('#hud').hidden = false; G.mode = 'brief'; drawHelp(); ({ 0: brief0, 1: brief1, 2: brief2, 3: brief3 })[id](); }); }
 function hudMode(drive) { for (const id of ['#inst', '#lamps', '#help', '#wind']) $(id).hidden = !drive; }
 
@@ -732,7 +755,7 @@ const ACTS = [
   { n: 'Prender o talabarte', kb: 'T', ps: '△', ids: ['c-tri'], codes: ['KeyT'], bt: [3] },
   { n: 'Velocidade lenta ou rápida', kb: 'Q', ps: '○', ids: ['c-cir'], codes: ['KeyQ'], bt: [1] },
   { n: 'Buzina', kb: 'H', ps: 'L3 (apertar o analógico)', ids: ['c-ls'], codes: ['KeyH'], bt: [10] },
-  { n: 'Descida de emergência', kb: 'E', ps: 'Touchpad', ids: ['c-tp'], codes: ['KeyE'], bt: [17] },
+  { n: 'Descida de emergência', kb: 'E', ps: 'Touchpad ou ↓ do direcional', ids: ['c-tp'], codes: ['KeyE'], bt: [17, 13] },
   { n: 'Câmera', kb: 'Mouse · V', ps: 'Analógico direito · R3', ids: ['c-rs'], codes: ['KeyV'], bt: [11], ax: [2, 3] },
   { n: 'Pausa', kb: 'Esc', ps: 'Options', ids: ['c-opt'], codes: ['Escape'], bt: [9] },
 ];
@@ -813,7 +836,7 @@ function openSpot(i) {
   sh.hidden = false; const set = v => { it.mark = v; it.el.className = v ? 'def' : 'ok'; it.el.textContent = v ? '✕' : '✓'; sh.hidden = true; updSpotBtn(); snd.beep(v ? 440 : 880, 0.08); };
   $('#s-ok').onclick = () => set(false); $('#s-def').onclick = () => set(true); $('#s-x').onclick = () => sh.hidden = true; setTimeout(() => $('#s-ok').focus(), 30);
 }
-function decide1() {
+function decide1() { $('#sheet').hidden = true;
   const marked = G.spots.filter(s => s.mark).length;
   modal({ kicker: 'Fim da inspeção visual', title: 'O que você faz com a máquina?', html: `<p>Você marcou <b>${marked}</b> ${marked === 1 ? 'defeito' : 'defeitos'} em 13 pontos.</p>`, acts: [
     { label: 'Liberar a máquina para os testes de função', fn: () => result1(false) },
@@ -835,9 +858,9 @@ function tests1() {
   setObjs('Fase 1 · Galpão', 'Testes de função', [
     `Solte a parada de emergência (${k('Espaço', '□')})`, `Toque a buzina (${k('H', 'L3')})`, `Tente subir sem o enable (${k('↑', 'R1')}): nada deve acontecer`,
     `Segure o enable (${k('Shift', 'L2')}) e suba 60 cm`, 'Aperte a emergência e tente subir: nada deve acontecer',
-    `Solte a emergência e use a descida de emergência (${k('segure E', 'Touchpad')}) até recolher`, 'Suba acima de 1,5 m e confira o protetor de buraco',
+    `Solte a emergência e use a descida de emergência (${k('segure E', 'Touchpad ou ↓ do direcional')}) até recolher`, 'Suba até o piso passar de 2,5 m e confira o protetor de buraco',
     'Ande 1 m com a plataforma elevada: a velocidade fica reduzida', 'Desça totalmente', 'Estacione na vaga amarela e aperte a emergência']);
-  G.steps = [() => !S.estop, () => G.ev.horn, () => G.ev.liftNoEnable, () => S.rise >= 0.6, () => G.ev.liftEstop, () => G.ev.emergLower && S.rise < 0.02 && !S.estop, () => S.rise > 1.5 && S.pothole > 0.95, () => (G.ev.raisedDrive || 0) >= 1, () => S.rise < 0.02, () => inPark() && S.estop && S.rise < 0.02];
+  G.steps = [() => !S.estop, () => G.ev.horn, () => G.ev.liftNoEnable, () => S.rise >= 0.6, () => G.ev.liftEstop, () => G.ev.emergLower && S.rise < 0.02 && !S.estop, () => SPEC.floor0 + S.rise > 2.5 && S.pothole > 0.95, () => (G.ev.raisedDrive || 0) >= 1, () => S.rise < 0.02, () => inPark() && S.estop && S.rise < 0.02];
 }
 const inPark = () => Math.hypot(S.x - L.park.x, S.z - L.park.z) < 1.3;
 
@@ -847,7 +870,7 @@ function brief2() {
   setObjs('Fase 2 · Pátio', 'Inspeção do local', ['Avalie os 7 pontos do pátio', 'Suba ao platô pela rampa adequada', 'Troque o refletor do galpão', 'Troque a luminária do poste', 'Estacione na vaga e aperte a emergência']);
   modal({ kicker: 'Fase 2 · Pátio com rampa', title: 'Olhe o local antes de mover a máquina', html: `<p>Serviço: trocar um refletor e uma luminária no platô. Antes de levar a máquina, o operador percorre o local e identifica os riscos.</p><ul><li>Clique nos marcadores e diga se cada ponto <b>é um risco</b> ou <b>não é</b>.</li><li>Regra do local: talabarte preso antes de elevar.</li><li>A máquina sobe rampas de até 25% (14°), só recolhida.</li></ul>`, acts: [{ label: 'Inspecionar o local', primary: true, fn: () => { G.mode = 'play'; G.camDist = 36; G.camPitch = 0.75; G.camYaw = 0.25; makeSpots(SITE.map(s => ({ ...s, pos: new THREE.Vector3(...s.p) })), ['Não é risco', 'É um risco']); } }] });
 }
-function endSite2() {
+function endSite2() { $('#sheet').hidden = true;
   let rows = ''; G.spots.forEach(s => { const right = s.risk === s.mark; if (s.risk && !s.mark) penalty('Risco do local não identificado: ' + s.n, s.ref, 8); if (!s.risk && s.mark) penalty('Apontou risco onde não havia: ' + s.n, s.ref, 3); rows += `<tr><td>${s.n}</td><td class="${right ? 'tag-ok' : 'tag-bad'}">${right ? '✓' : '✕'} ${s.risk ? 'Risco' : 'Sem risco'}</td><td>${s.ref}</td></tr>`; });
   G.spots = []; $('#spots').innerHTML = ''; $('#objb').hidden = true; G.obj = 1; drawObjs();
   modal({ kicker: 'Resultado da inspeção do local', title: 'Mapa de riscos do pátio', html: `<table class="tbl"><tbody>${rows}</tbody></table>`, acts: [{ label: 'Preencher a análise de risco (APR)', primary: true, fn: () => apr(() => { SITE.filter(x => x.risk && !x.n.startsWith('Pedestre')).forEach(x => { const el = document.createElement('span'); el.className = 'tag'; el.textContent = x.n; $('#tags').appendChild(el); G.tags.push({ pos: new THREE.Vector3(...x.p), el }); }); G.stage = 'drive'; $('#objt').textContent = 'Serviço no platô'; hudMode(true); G.camDist = 8.5; G.camPitch = 0.3; G.camYaw = 0; toast('Solte a emergência para ligar', 'Os riscos que você mapeou ficam sinalizados no pátio.', ''); }) }] });
@@ -878,7 +901,7 @@ function report() {
   modal({ kicker: `Relatório · Fase ${G.level} · ${L.def.name}`, title: G.failed ? 'Acidente: fase interrompida' : pass ? 'Operação aprovada' : 'Operação reprovada', html: `<div class="score"><div class="n num ${pass ? 'pass' : 'fail'}">${score}</div><div><b>pontos de 100</b><br><span class="note">Mínimo para aprovação: 70 · Tempo ${mm}:${ss}</span></div></div><ul class="inf">${items}</ul><p class="note">Labora Engenharia e SST · Material de apoio. Não substitui a capacitação de operador exigida pela NR-18 nem o manual do fabricante.</p>`,
     acts: [...(pass && G.level < 3 ? [{ label: 'Próxima fase', primary: true, fn: () => startLevel(G.level + 1) }] : []), { label: 'Repetir a fase', primary: !(pass && G.level < 3), fn: () => startLevel(G.level) }, { label: 'Menu', fn: () => fade(showMenu) }] });
 }
-function pause() { if (G.mode !== 'play') return; G.mode = 'paused'; modal({ kicker: 'Pausa', title: 'Jogo pausado', html: `<table class="keys"><tbody>${KEYS.map(r => `<tr><td>${r[0]}</td><td><kbd>${G.pad ? r[2] : r[1]}</kbd></td></tr>`).join('')}</tbody></table>`, acts: [{ label: 'Continuar', primary: true, fn: () => G.mode = 'play' }, { label: 'Repetir a fase', fn: () => startLevel(G.level) }, { label: 'Menu', fn: () => fade(showMenu) }] }); }
+function pause() { if (G.mode !== 'play' || !$('#modal').hidden) return; G.mode = 'paused'; modal({ kicker: 'Pausa', title: 'Jogo pausado', html: `<table class="keys"><tbody>${KEYS.map(r => `<tr><td>${r[0]}</td><td><kbd>${G.pad ? r[2] : r[1]}</kbd></td></tr>`).join('')}</tbody></table>`, acts: [{ label: 'Continuar', primary: true, fn: () => G.mode = 'play' }, { label: 'Repetir a fase', fn: () => startLevel(G.level) }, { label: 'Menu', fn: () => fade(showMenu) }] }); }
 
 /* ───────── simulação ───────── */
 function wheelsY(x, z, yaw) { const c = Math.cos(yaw), s = Math.sin(yaw), out = []; let i = 0; for (const [lx, lz] of [[0.36, 0.7], [-0.36, 0.7], [0.36, -0.7], [-0.36, -0.7]]) { const wx = x + lx * c + lz * s, wz = z - lx * s + lz * c; out.push(L.hAt(wx, wz) - L.mud(wx, wz) * (0.05 + 0.07 * ((i * 7 + 3) % 4) / 3)); i++; } return out; }
@@ -925,7 +948,7 @@ function step(dt) {
   if (s.tiltAlarm) drive = 0;
   let vmax = s.rise > 0.05 ? SPEC.vRaised : (s.fast ? SPEC.vFast : SPEC.vSlow); const mud = L.mud(s.x, s.z); vmax *= 1 - 0.5 * mud;
   let tv = drive * vmax;
-  if (Math.abs(pitchD) > SPEC.grade + 0.5 && s.rise < 0.3) { if (tv * Math.sign(pitchD) > 0.01) infr('rampa', 10); tv = Math.min(tv * Math.sign(pitchD), -0.35) * Math.sign(pitchD); }
+  if (Math.abs(pitchD) > SPEC.grade + 0.5 && s.rise < 0.3 && drive !== 0) { if (tv * Math.sign(pitchD) > 0.01) infr('rampa', 10); tv = Math.min(tv * Math.sign(pitchD), -0.35) * Math.sign(pitchD); }
   s.v += clamp(tv - s.v, -2.2 * dt, 2.2 * dt);
   s.steer = lerp(s.steer, I.steer * 0.62, Math.min(1, dt * 5));
   const nyaw = s.yaw + s.v * Math.tan(s.steer) / SPEC.WB * dt, nx = s.x + Math.sin(nyaw) * s.v * dt, nz = s.z + Math.cos(nyaw) * s.v * dt;
@@ -944,11 +967,11 @@ function step(dt) {
   if (raised && over && !s.descending && !I.emerg) { s.windT += dt; if (s.windT > 6) { infr('ventoElevado', 9); s.windT = 0; } } else if (!over) s.windT = Math.max(0, s.windT - dt * 0.4);
   if (over && !G.windWarn && !(G.cool.windMsg > G.t)) { G.windWarn = true; G.cool.windMsg = G.t + 15; toast('Vento acima de 12,5 m/s', 'Desça a plataforma e pare a operação até o vento baixar.', 'bad'); snd.buzz(); } if (!over && W.p < 11) G.windWarn = false;
   // rede elétrica
-  if (L.line) { const headY = s.y + floorH + 1.8, dx = Math.abs(s.x - L.line.x) - 0.9, dy = Math.max(0, L.line.y - headY); G.lineDist = Math.hypot(Math.max(0, dx), dy); if (s.rise > 0.5 && G.lineDist < 3.05) infr('rede', 8); if (G.lineDist < 0.5) fail('choque'); }
+  if (L.line) { const headY = s.y + floorH + 1.8, cx0 = Math.min(...[[0.41, 0.95], [-0.41, 0.95], [0.41, -0.95], [-0.41, -0.95]].map(([a, b]) => Math.abs(s.x + a * Math.cos(s.yaw) + b * Math.sin(s.yaw) - L.line.x))), dx = cx0 - 0.9, dy = Math.max(0, L.line.y - headY); G.lineDist = Math.hypot(Math.max(0, dx), dy); if (s.rise > 0.5 && G.lineDist < 3.05) infr('rede', 8); if (G.lineDist < 0.5) fail('choque'); }
   // pedestre
   if (L.ped) { const p = L.ped, pc = L.pedC; p.userData.t = (p.userData.t || 0) + dt; const d = Math.hypot(s.x - pc.x, s.z - pc.z); if (I.horn && d < 9) p.userData.wait = 6; if (p.userData.wait > 0) { p.userData.wait -= dt; pc.x = lerp(pc.x, -5.5, dt * 0.8); } else { const u = (Math.sin(p.userData.t * 0.22) + 1) / 2; pc.x = lerp(pc.x, lerp(-2.5, 3.5, u), dt * 2); pc.z = lerp(-10.5, -21, (Math.sin(p.userData.t * 0.13 + 1) + 1) / 2); } p.position.set(pc.x, 1.2 + Math.abs(Math.sin(p.userData.t * 5)) * 0.03, pc.z); p.rotation.y = Math.sin(p.userData.t * 0.22) > 0 ? 1.57 : -1.57; if (d < 2.4 && Math.abs(s.v) > 0.15 && !(p.userData.wait > 0)) infr('pedestre', 8); }
   // objetivos
-  if (G.stage === 'tests') { if (G.steps[G.obj] && G.steps[G.obj]()) { nextObj(); if (G.obj >= G.steps.length) setTimeout(report, 900); } }
+  if (G.stage === 'tests') { if (G.obj === 5 && S.rise < 0.02 && !G.ev.emergLower) showPrompt('Suba um pouco a plataforma para testar a descida de emergência', 0); if (G.steps[G.obj] && G.steps[G.obj]()) { nextObj(); if (G.obj >= G.steps.length) { G.stage = 'done'; G.repT = setTimeout(report, 900); } } }
   else logic(dt);
   // alarmes
   const bpm = (s.tiltAlarm || s.overAlarm) ? 180 : (s.descending && !s.descSilent ? 60 : 0); if (bpm) { const p0 = alarmPh; alarmPh += dt * bpm / 60; if (Math.floor(alarmPh) !== Math.floor(p0)) snd.beep(bpm > 100 ? 1500 : 900, 0.09); }
@@ -959,8 +982,8 @@ function logic(dt) {
   if (G.level === 2) { if (G.obj === 1 && s.y > 1.1 && s.z < -9) nextObj(); if (G.obj === 2) tgt = L.targets[0]; if (G.obj === 3) tgt = L.targets[1]; }
   if (G.level === 3) { if (G.obj === 1) tgt = L.targets[0]; if (G.obj === 3) tgt = L.targets[1];
     const inLoad = Math.hypot(s.x - L.loadZone.x, s.z - L.loadZone.z) < L.loadZone.r && s.rise < 0.05;
-    if (inLoad && Math.abs(s.v) < 0.05 && (G.obj === 0 || G.obj === 2 || edge('board')) && !G.loadShown) { G.loadShown = true; loadUI(); } if (!inLoad) G.loadShown = false;
-    if (inLoad && G.obj !== 0 && G.obj !== 2) showPrompt(`${G.pad ? 'Create' : 'C'}: alterar a carga`, 0);
+    if (inLoad && Math.abs(s.v) < 0.05 && (((G.obj === 0 || G.obj === 2) && !G.loadShown) || edge('board'))) { G.loadShown = true; loadUI(); } if (!inLoad) G.loadShown = false;
+    if (inLoad && (G.loadShown || (G.obj !== 0 && G.obj !== 2))) showPrompt(`${G.pad ? 'Create' : 'C'}: alterar a carga`, 0);
   }
   L.targets?.forEach(t => { t.mk.visible = t === tgt; t.pad.visible = false; }); G.target = tgt;
   if (tgt) {
@@ -975,7 +998,7 @@ function logic(dt) {
     } else { s.work = 0; s.working = false; if (okPos && okH) showPrompt('Solte o botão de subir para continuar', 0); else showPrompt(!okPos ? `${tgt.label}: aproxime a máquina (${fmt(d)} m)` : dh < 0 ? `Suba a plataforma até ${fmt(tgt.h)} m` : `Desça a plataforma até ${fmt(tgt.h)} m`, 0); }
   } else if (!(G.level === 3 && G.loadShown === false && $('#prompt').dataset.keep)) {
     const last = G.objs.length - 1;
-    if (G.obj === last) { const ok = inPark(); showPrompt(!ok ? 'Leve a máquina até a vaga amarela' : s.rise > 0.02 ? 'Recolha a plataforma' : 'Aperte a emergência para encerrar', 0); if (ok && s.rise < 0.02 && s.estop && Math.abs(s.v) < 0.02) { nextObj(); setTimeout(report, 900); G.stage = 'done'; } }
+    if (G.obj === last) { const ok = inPark(); showPrompt(!ok ? 'Leve a máquina até a vaga amarela' : s.rise > 0.02 ? 'Recolha a plataforma' : 'Aperte a emergência para encerrar', 0); if (ok && s.rise < 0.02 && s.estop && Math.abs(s.v) < 0.02) { nextObj(); G.repT = setTimeout(report, 900); G.stage = 'done'; } }
     else if (G.level === 3 && (G.obj === 0 || G.obj === 2)) showPrompt('Leve a máquina recolhida até o palete', 0);
     else if (G.level === 2 && G.obj === 1) showPrompt('Suba ao platô pela rampa adequada', 0);
   }

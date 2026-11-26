@@ -55,3 +55,23 @@ Revisão do simulador Operador PEMT (Labora), versão com treino de comandos e 3
 - Mapas de relevo gerados a partir das texturas (asfalto, piso, parede metálica, muro, lama, grama, caixote).
 - Modelos 3D gerados no Higgsfield e reduzidos para o jogo: contêiner, árvore, cone, palete com caixas, estante, empilhadeira e caminhonete. Se um modelo não carregar, o jogo usa a forma simples antiga.
 - A máquina e o operador continuam modelados por código, porque precisam de peças móveis.
+
+## 7. Máquina e operador no Blender e revisão de erros
+
+- A tesoura (chassi, bandejas, rodas, braços, pinos, plataforma, portão) e o operador (corpo, braços, cinto) foram modelados no Blender por script: `ferramentas/modelo_tesoura_blender.py` gera `models/lift.glb`. Para regerar: `blender -b --python ferramentas/modelo_tesoura_blender.py -- models/lift.glb`.
+- Revisão de código e teste automático das fases 1, 2 e 3 do início ao fim. Corrigido:
+  - Esc nas telas de resultado travava a fase.
+  - Com o controle não dava para marcar a carga na fase 3.
+  - O botão da inspeção e a ficha lateral passavam de uma fase para outra.
+  - Modelos de uma fase podiam aparecer na seguinte.
+  - A tecla C não reabria a carga no palete.
+  - O teclado ficava preso nos botões das telas (Tab).
+  - A distância da rede elétrica era medida do centro da máquina, e não do canto da plataforma.
+  - O aviso do enable sumia depois de reiniciar a fase.
+  - Textos dos testes de função não batiam com o que era conferido.
+  - O relatório podia abrir em cima do menu.
+  - Na fase 2, havia um trecho do platô sem muro.
+  - Na rampa íngreme, a máquina rolava sozinha mesmo parada.
+  - A iluminação mudava entre a primeira e as próximas visitas.
+  - A memória da placa de vídeo crescia a cada reinício.
+  - O alarme aparecia como "Inclinação LL".
