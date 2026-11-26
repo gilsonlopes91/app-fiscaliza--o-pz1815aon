@@ -371,38 +371,33 @@ function upgradeMachine(R, sc) {
   R.arms.forEach(lv => { for (const [list, n] of [[lv.a, 'armA'], [lv.b, 'armB'], [lv.pins, 'pin']]) list.forEach(m => { m.geometry = EMPTY; const p = liftPart(sc, n); if (n === 'pin') p.rotation.z = -Math.PI / 2; m.add(p); }); });
   hideMeshes(R.pf, [R.tools, R.panelA, R.panelB]); R.pf.add(liftPart(sc, 'platform'));
   hideMeshes(R.gate); R.gate.add(liftPart(sc, 'gate'));
-  upgradePerson(R.op, sc); upgradePerson(R.helper, sc); useWorker(R.op);
+  upgradePerson(R.op, sc); upgradePerson(R.helper, sc); useWorker(R.op); useWorker(R.helper, R.helper.userData.vest);
 }
-/* Operador realista (models/worker.glb, com esqueleto). Se não carregar, fica o operador do Blender. */
+/* Operador estilizado (models/worker2.glb): peças presas a um esqueleto, com animações gravadas no Blender. */
 let workerP = null;
-function useWorker(p) {
-  workerP = workerP || fetchBin('models/worker.glb').then(buf => new Promise((res, rej) => gltfLoader.parse(buf, 'models/', g => res(g.scene), rej)));
-  workerP.then(sc => { try {
-    const w = SkeletonUtils.clone(sc), bones = {};
-    w.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } if (o.isBone) bones[o.name] = o; });
-    if (!bones.upperarm_l || !bones.upperarm_r) return;
+function useWorker(p, vest) {
+  workerP = workerP || fetchBin('models/worker2.glb').then(buf => new Promise((res, rej) => gltfLoader.parse(buf, 'models/', g => res(g), rej)));
+  workerP.then(g => { try {
+    const w = g.scene.clone(true);
+    w.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (vest && o.material.name === 'vest') o.material = vest; } });
     p.children.forEach(ch => { if (ch !== p.userData.harness) ch.visible = false; }); p.userData.harness.children.forEach(ch => ch.visible = false);
     p.add(w);
-    const ua = [bones.upperarm_l, bones.upperarm_r], fa = [bones.forearm_l, bones.forearm_r].filter(Boolean);
-    p.userData.rig = { ua, fa, rest: new Map([...ua, ...fa].map(b => [b, b.quaternion.clone()])) };
-  } catch (e) { console.warn('operador realista', e); } }, () => { });
+    const mixer = new THREE.AnimationMixer(w), acts = {};
+    g.animations.forEach(c => { acts[c.name] = mixer.clipAction(c); });
+    if (!acts.idle) return;
+    if (acts.done) { acts.done.setLoop(THREE.LoopOnce, 1); acts.done.clampWhenFinished = true; }
+    acts.idle.play(); if (vest) mixer.setTime(2.3);
+    p.userData.anim = { mixer, acts, cur: 'idle', arm: w.getObjectByName('upperarm_r'), last: performance.now() / 1000 };
+    mixer.addEventListener('finished', () => { const a = p.userData.anim; if (a.cur === 'done') { a.cur = 'idle'; acts.idle.reset().fadeIn(0.35).play(); acts.done.fadeOut(0.35); } });
+  } catch (e) { console.warn('operador', e); } }, () => { });
 }
-const AX = new THREE.Vector3(1, 0, 0), AZ = new THREE.Vector3(0, 0, 1), rqA = new THREE.Quaternion(), rqB = new THREE.Quaternion(), rqC = new THREE.Quaternion(), rvA = new THREE.Vector3();
-function boneRot(p, b, rest, rots) {
-  b.quaternion.copy(rest); p.getWorldQuaternion(rqA); b.parent.updateWorldMatrix(true, false); b.parent.getWorldQuaternion(rqB).invert();
-  for (const [ax, ang] of rots) { rvA.copy(ax).applyQuaternion(rqA).applyQuaternion(rqB); b.quaternion.premultiply(rqC.setFromAxisAngle(rvA, ang)); }
-}
-const AY = new THREE.Vector3(0, 1, 0);
-function poseRig(p, rig, wa, tt) {
-  // parado: mãos na caixa de comando (à frente e à direita do operador); a mão direita acompanha o joystick
-  const joy = clamp(I.drive * 0.12 + I.lift * 0.08, -0.15, 0.15), breath = Math.sin(tt * 1.6) * 0.02, w = Math.sin(tt * 3.2);
-  rig.ua.forEach((b, i) => {
-    const sg = i === 0 ? 1 : -1;
-    const idle = { low: 0.5, fwd: -0.36 + breath + (i === 1 ? joy : 0), yaw: -0.28 };
-    const work = { low: 0.32, fwd: -1.3 + w * 0.09 * (i === 0 ? 1 : -1), yaw: -0.1 * sg };
-    boneRot(p, b, rig.rest.get(b), [[AZ, -sg * lerp(idle.low, work.low, wa)], [AX, lerp(idle.fwd, work.fwd, wa)], [AY, lerp(idle.yaw, work.yaw, wa)]]);
-  });
-  rig.fa.forEach((b, i) => boneRot(p, b, rig.rest.get(b), [[AX, lerp(-1.28 + (i === 1 ? joy * 0.6 : 0), -0.85 + Math.sin(tt * 3.2 + i * 2) * 0.18, wa)]]));
+const AX = new THREE.Vector3(1, 0, 0), rqA = new THREE.Quaternion(), rqB = new THREE.Quaternion(), rqC = new THREE.Quaternion(), rvA = new THREE.Vector3();
+function animPerson(p, working, cheer, joy, tt) {
+  const a = p.userData.anim; if (!a) return; const dt = Math.min(0.1, tt - a.last); a.last = tt;
+  let want = a.cur; if (cheer && a.acts.done) want = 'done'; else if (working && a.acts.work) want = 'work'; else if (a.cur !== 'done' || working) want = working ? 'work' : (a.cur === 'done' ? 'done' : 'idle');
+  if (want !== a.cur) { a.acts[want].reset().fadeIn(0.3).play(); a.acts[a.cur].fadeOut(0.3); a.cur = want; }
+  a.mixer.update(dt);
+  if (a.cur === 'idle' && joy && a.arm) { p.getWorldQuaternion(rqA); a.arm.parent.getWorldQuaternion(rqB).invert(); rvA.copy(AX).applyQuaternion(rqA).applyQuaternion(rqB); a.arm.quaternion.premultiply(rqC.setFromAxisAngle(rvA, joy)); }
 }
 function buildMachine() {
   const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
@@ -515,7 +510,7 @@ function poseMachine(R, s) {
   const py = lerp(0.14, 0.055, s.pothole); R.ph[0].position.y = py; R.ph[1].position.y = py;
   R.gate.rotation.y = s.gateOpen ? -1.9 : 0;
   const wa = s.wa || 0, tt = performance.now() / 1000; for (const pr of [R.op, R.helper]) { pr.userData.arms.forEach((a, i) => { a.rotation.x = lerp(-0.9, -2.5, wa) + Math.sin(tt * 9 + i * 3.1) * 0.3 * wa; a.position.y = lerp(1.12, 1.42, wa) + Math.sin(tt * 9 + i * 3.1) * 0.04 * wa; }); pr.position.y = 0.03 + Math.abs(Math.sin(tt * 4.5)) * 0.015 * wa; }
-  if (R.op.userData.rig) poseRig(R.op, R.op.userData.rig, wa, tt);
+  animPerson(R.op, s.working, s.cheer, clamp(-(I.drive * 0.1 + I.lift * 0.07), -0.12, 0.12), tt); animPerson(R.helper, s.working, s.cheer, 0, tt); s.cheer = false;
   R.op.rotation.y = lerp(R.op.rotation.y, wa > 0.05 ? (s.faceY || 0) : 0, 0.12); R.helper.rotation.y = lerp(R.helper.rotation.y, wa > 0.05 ? (s.faceY || 0) : 0.5, 0.12);
   R.lan.visible = s.harness; R.op.userData.harness.visible = s.harness;
   R.beacon.material = (s.moving && Math.floor(s.blink * 4) % 2 === 0) ? M.amberOn : M.lampOff;
@@ -1028,7 +1023,7 @@ function logic(dt) {
       const ready = G.level !== 3 || (G.load.panels > 0 && G.load.helper && G.load.tools);
       if (!ready) showPrompt(G.load.panels === 0 ? 'Falta a placa na plataforma' : 'Faltam o ajudante e as ferramentas', 0);
       else { if (I.work && !s.estop) s.working = true; if (I.drive || I.lift || s.estop) s.working = false; if (s.working) s.work += dt / 4; showPrompt(s.working ? 'Executando o serviço…' : s.estop ? 'Solte a emergência para trabalhar' : `Aperte ${G.pad ? '✕' : 'F'} para executar o serviço`, s.work);
-        if (s.work >= 1) { s.work = 0; toast('Serviço concluído', tgt.label, 'good'); if (G.level === 0) G.ev.worked = true; if (G.level === 3) { L.frames[G.installed].visible = true; G.installed++; G.load.panels--; syncLoad(); if (!G.storm && G.installed === 1) { G.storm = { t0: G.t + 4, peak: 12.3 }; } } if (tgt.lamp) tgt.lamp.material = M.lampOn; s.working = false; if (G.level !== 0) nextObj(); } }
+        if (s.work >= 1) { s.work = 0; toast('Serviço concluído', tgt.label, 'good'); if (G.level === 0) G.ev.worked = true; if (G.level === 3) { L.frames[G.installed].visible = true; G.installed++; G.load.panels--; syncLoad(); if (!G.storm && G.installed === 1) { G.storm = { t0: G.t + 4, peak: 12.3 }; } } if (tgt.lamp) tgt.lamp.material = M.lampOn; s.working = false; s.cheer = true; if (G.level !== 0) nextObj(); } }
     } else { s.work = 0; s.working = false; if (okPos && okH) showPrompt('Solte o botão de subir para continuar', 0); else showPrompt(!okPos ? `${tgt.label}: aproxime a máquina (${fmt(d)} m)` : dh < 0 ? `Suba a plataforma até ${fmt(tgt.h)} m` : `Desça a plataforma até ${fmt(tgt.h)} m`, 0); }
   } else if (!(G.level === 3 && G.loadShown === false && $('#prompt').dataset.keep)) {
     const last = G.objs.length - 1;

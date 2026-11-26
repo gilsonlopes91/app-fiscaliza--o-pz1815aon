@@ -106,8 +106,6 @@ for sz in (1, -1):
 for i in range(7): L.append(cube((0.03, 0.12, 0.012), (-0.27 + i * 0.09, 0.43, 0.932), DARK, 0.003))
 for sx in (1, -1): L.append(cube((0.045, 0.035, 1.72), (sx * 0.29, 0.592, 0), DARK, 0.006))
 # arcos dos para-lamas
-for sx in (1, -1):
-    for sz in (1, -1): L.append(cyl(0.245, 0.02, (sx * 0.38, 0.19, sz * 0.7), PAINTD, 'x', 32, r2=None))
 # comando de solo e descida de emergência
 L.append(cube((0.32, 0.22, 0.06), (-0.2, 0.44, -0.96), DARK, 0.012))
 L.append(cyl(0.032, 0.02, (-0.29, 0.47, -0.995), RED, 'z', 20)); L.append(sphere(0.03, (-0.29, 0.47, -1.005), RED, (1, 1, 0.5)))

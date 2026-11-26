@@ -81,3 +81,10 @@ Revisão do simulador Operador PEMT (Labora), versão com treino de comandos e 3
 - Foto gerada no Higgsfield e convertida em modelo 3D (Tripo, cerca de 10 créditos). O esqueleto foi colocado no Blender por script: `ferramentas/esqueleto_operador_blender.py` gera `models/worker.glb`.
 - No jogo, os braços se mexem pelo esqueleto durante o serviço. Se o arquivo não carregar, o jogo usa o operador do Blender.
 - O ajudante da fase 3 continua com o modelo do Blender e colete amarelo, para diferenciar do operador.
+
+## 9. Operador estilizado e animado
+
+- O operador realista foi trocado por um personagem estilizado (rosto simples, sem vale da estranheza), modelado no Blender: `ferramentas/operador_estilizado_blender.py` gera `models/worker2.glb`.
+- O cinturão é modelado peça por peça no corpo (cinto, suspensórios, fita peitoral, argola dorsal, laços das pernas).
+- Três animações gravadas no modelo: `idle` (mãos no comando, respira, olha em volta, troca o peso), `work` (mãos na altura do peito e do rosto) e `done` (joinha ao concluir o serviço). O ajudante da fase 3 usa o mesmo modelo, de colete amarelo.
+- As abas dos para-lamas, que atravessavam o chão junto às rodas, foram removidas.
