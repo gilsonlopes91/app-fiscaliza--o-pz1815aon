@@ -382,6 +382,7 @@ function useWorker(p, vest) {
     w.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (vest && o.material.name === 'vest') o.material = vest; } });
     p.children.forEach(ch => { if (ch !== p.userData.harness) ch.visible = false; }); p.userData.harness.children.forEach(ch => ch.visible = false);
     p.add(w);
+    p.userData.belt = []; w.traverse(o => { if (o.isMesh && o.material.name.startsWith('harness')) p.userData.belt.push(o); });
     const mixer = new THREE.AnimationMixer(w), acts = {};
     g.animations.forEach(c => { acts[c.name] = mixer.clipAction(c); });
     if (!acts.idle) return;
@@ -512,7 +513,7 @@ function poseMachine(R, s) {
   const wa = s.wa || 0, tt = performance.now() / 1000; for (const pr of [R.op, R.helper]) { pr.userData.arms.forEach((a, i) => { a.rotation.x = lerp(-0.9, -2.5, wa) + Math.sin(tt * 9 + i * 3.1) * 0.3 * wa; a.position.y = lerp(1.12, 1.42, wa) + Math.sin(tt * 9 + i * 3.1) * 0.04 * wa; }); pr.position.y = 0.03 + Math.abs(Math.sin(tt * 4.5)) * 0.015 * wa; }
   animPerson(R.op, s.working, s.cheer, clamp(-(I.drive * 0.1 + I.lift * 0.07), -0.12, 0.12), tt); animPerson(R.helper, s.working, s.cheer, 0, tt); s.cheer = false;
   R.op.rotation.y = lerp(R.op.rotation.y, wa > 0.05 ? (s.faceY || 0) : 0, 0.12); R.helper.rotation.y = lerp(R.helper.rotation.y, wa > 0.05 ? (s.faceY || 0) : 0.5, 0.12);
-  R.lan.visible = s.harness; R.op.userData.harness.visible = s.harness;
+  R.lan.visible = s.harness; R.op.userData.harness.visible = s.harness; for (const pr of [R.op, R.helper]) if (pr.userData.belt) for (const m of pr.userData.belt) m.visible = !!s.harness;
   R.beacon.material = (s.moving && Math.floor(s.blink * 4) % 2 === 0) ? M.amberOn : M.lampOff;
 }
 

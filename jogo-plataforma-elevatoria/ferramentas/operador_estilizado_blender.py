@@ -19,6 +19,7 @@ SHIRT = mat('shirt', (0.04, 0.07, 0.16), 0, 0.85); PANTS = mat('pants', (0.03, 0
 SKIN = mat('skin', (0.62, 0.36, 0.22), 0, 0.75); HELMET = mat('helmet', (0.93, 0.93, 0.9), 0, 0.3)
 STRAP = mat('strap', (0.015, 0.015, 0.015), 0, 0.85); BUCKLE = mat('buckle', (0.75, 0.76, 0.78), 0.9, 0.3)
 BOOT = mat('boot', (0.12, 0.06, 0.03), 0, 0.75); GLOVE = mat('glove', (0.7, 0.5, 0.2), 0, 0.8)
+HS = mat('harnessStrap', (0.015, 0.015, 0.015), 0, 0.85); HB = mat('harnessBuckle', (0.75, 0.76, 0.78), 0.9, 0.3); HR = mat('harnessRing', (0.9, 0.5, 0.0), 0.3, 0.45)
 EYE = mat('eye', (0.01, 0.01, 0.012), 0, 0.3); YEL = mat('ringYellow', (0.9, 0.5, 0.0), 0.3, 0.45)
 
 def G2B(x, y, z): return Vector((x, -z, y))
@@ -74,21 +75,21 @@ for sd in 'lr':
 P = {}
 # quadril: calça, cinto do cinturão com argolas laterais
 L = [cube((0.33, 0.2, 0.21), (0, 0.93, 0), PANTS, 0.07, 4)]
-L.append(cube((0.35, 0.05, 0.225), (0, 1.0, 0), STRAP, 0.012)); L.append(cube((0.06, 0.06, 0.012), (0, 1.0, 0.116), BUCKLE, 0.008))
+L.append(cube((0.35, 0.05, 0.225), (0, 1.0, 0), HS, 0.012)); L.append(cube((0.06, 0.06, 0.012), (0, 1.0, 0.116), HB, 0.008))
 for sg in (1, -1):
-    L.append(torus(0.024, 0.006, (sg * 0.18, 0.99, 0), YEL, 'x'))
-    for z in (0.1, -0.1): L.append(cube((0.04, 0.16, 0.012), (sg * 0.09, 0.9, z), STRAP, 0.004))
+    L.append(torus(0.024, 0.006, (sg * 0.18, 0.99, 0), HR, 'x'))
+    for z in (0.1, -0.1): L.append(cube((0.04, 0.16, 0.012), (sg * 0.09, 0.9, z), HS, 0.004))
 P['hips'] = part('hips', L)
 # tronco: camisa, colete com faixas, cinturão (suspensórios, fita peitoral, argola dorsal)
 L = [cube((0.36, 0.4, 0.21), (0, 1.21, 0), SHIRT, 0.085, 4)]
 L.append(cube((0.385, 0.36, 0.228), (0, 1.19, 0), VEST, 0.075, 4))
 for y in (1.09, 1.21): L.append(cube((0.39, 0.035, 0.232), (0, y, 0), REFL, 0.01, 2))
 for sg in (1, -1):
-    L.append(cube((0.05, 0.42, 0.244), (sg * 0.1, 1.2, 0), STRAP, 0.012))             # suspensório frente e costas
-    L.append(cube((0.055, 0.03, 0.2), (sg * 0.1, 1.405, 0), STRAP, 0.012))             # passa por cima do ombro
-    L.append(cube((0.058, 0.035, 0.012), (sg * 0.1, 1.3, 0.124), BUCKLE, 0.006))
-L.append(cube((0.25, 0.04, 0.012), (0, 1.27, 0.122), STRAP, 0.006)); L.append(cube((0.05, 0.05, 0.014), (0, 1.27, 0.128), BUCKLE, 0.008))
-L.append(cube((0.25, 0.04, 0.012), (0, 1.3, -0.122), STRAP, 0.006)); L.append(torus(0.03, 0.007, (0, 1.3, -0.135), BUCKLE, 'z'))
+    L.append(cube((0.05, 0.42, 0.244), (sg * 0.1, 1.2, 0), HS, 0.012))             # suspensório frente e costas
+    L.append(cube((0.055, 0.03, 0.2), (sg * 0.1, 1.405, 0), HS, 0.012))             # passa por cima do ombro
+    L.append(cube((0.058, 0.035, 0.012), (sg * 0.1, 1.3, 0.124), HB, 0.006))
+L.append(cube((0.25, 0.04, 0.012), (0, 1.27, 0.122), HS, 0.006)); L.append(cube((0.05, 0.05, 0.014), (0, 1.27, 0.128), HB, 0.008))
+L.append(cube((0.25, 0.04, 0.012), (0, 1.3, -0.122), HS, 0.006)); L.append(torus(0.03, 0.007, (0, 1.3, -0.135), HB, 'z'))
 for sg in (1, -1): L.append(sphere(0.06, (sg * (SX - 0.012), 1.365, 0), SHIRT, seg=18))
 L.append(cyl(0.05, 0.08, (0, 1.42, 0), SKIN, 'y', 16))
 L.append(torus(0.058, 0.014, (0, 1.4, 0), SHIRT, 'y', (1, 1, 1.05)))
@@ -108,7 +109,6 @@ bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.delete(type='VERT'); bpy.ops.
 sol = hm.modifiers.new('s', 'SOLIDIFY'); sol.thickness = 0.008; L.append(hm)
 L.append(cyl(0.153, 0.012, (0, 1.602, 0), HELMET, 'y', 32))
 L.append(cube((0.2, 0.012, 0.11), (0, 1.602, 0.13), HELMET, 0.005))
-L.append(cube((0.022, 0.06, 0.28), (0, 1.715, 0), HELMET, 0.01))
 L.append(cube((0.03, 0.012, 0.03), (0, 1.435, 0.07), STRAP, 0.004))
 P['head'] = part('head', L)
 for sd, sg in (('l', 1), ('r', -1)):
@@ -119,7 +119,7 @@ for sd, sg in (('l', 1), ('r', -1)):
     P['hand_' + sd] = part('hand_' + sd, L)
     lx = sg * 0.09
     L = capsule(0.082, 0.52, 0.88, lx, PANTS, r2=0.086)
-    L.append(torus(0.088, 0.016, (lx, 0.8, 0), STRAP, 'y')); L.append(cube((0.035, 0.035, 0.012), (lx + sg * 0.03, 0.8, 0.093), BUCKLE, 0.005))
+    L.append(torus(0.088, 0.016, (lx, 0.8, 0), HS, 'y')); L.append(cube((0.035, 0.035, 0.012), (lx + sg * 0.03, 0.8, 0.093), HB, 0.005))
     P['thigh_' + sd] = part('thigh_' + sd, L)
     P['shin_' + sd] = part('shin_' + sd, capsule(0.07, 0.13, 0.5, lx, PANTS, r2=0.078))
     L = [cube((0.125, 0.11, 0.25), (lx, 0.055, 0.04), BOOT, 0.04, 4), cube((0.13, 0.025, 0.26), (lx, 0.0125, 0.04), STRAP, 0.008)]
