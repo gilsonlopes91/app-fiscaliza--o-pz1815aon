@@ -75,3 +75,9 @@ Revisão do simulador Operador PEMT (Labora), versão com treino de comandos e 3
   - A iluminação mudava entre a primeira e as próximas visitas.
   - A memória da placa de vídeo crescia a cada reinício.
   - O alarme aparecia como "Inclinação LL".
+
+## 8. Operador realista
+
+- Foto gerada no Higgsfield e convertida em modelo 3D (Tripo, cerca de 10 créditos). O esqueleto foi colocado no Blender por script: `ferramentas/esqueleto_operador_blender.py` gera `models/worker.glb`.
+- No jogo, os braços se mexem pelo esqueleto durante o serviço. Se o arquivo não carregar, o jogo usa o operador do Blender.
+- O ajudante da fase 3 continua com o modelo do Blender e colete amarelo, para diferenciar do operador.

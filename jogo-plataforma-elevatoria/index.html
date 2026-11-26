@@ -222,6 +222,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const $ = s => document.querySelector(s);
 window.addEventListener('error', e => { const el = $('#err'); el.hidden = false; el.textContent = 'Erro: ' + (e.message || e); });
@@ -370,7 +371,30 @@ function upgradeMachine(R, sc) {
   R.arms.forEach(lv => { for (const [list, n] of [[lv.a, 'armA'], [lv.b, 'armB'], [lv.pins, 'pin']]) list.forEach(m => { m.geometry = EMPTY; const p = liftPart(sc, n); if (n === 'pin') p.rotation.z = -Math.PI / 2; m.add(p); }); });
   hideMeshes(R.pf, [R.tools, R.panelA, R.panelB]); R.pf.add(liftPart(sc, 'platform'));
   hideMeshes(R.gate); R.gate.add(liftPart(sc, 'gate'));
-  upgradePerson(R.op, sc); upgradePerson(R.helper, sc);
+  upgradePerson(R.op, sc); upgradePerson(R.helper, sc); useWorker(R.op);
+}
+/* Operador realista (models/worker.glb, com esqueleto). Se não carregar, fica o operador do Blender. */
+let workerP = null;
+function useWorker(p) {
+  workerP = workerP || fetchBin('models/worker.glb').then(buf => new Promise((res, rej) => gltfLoader.parse(buf, 'models/', g => res(g.scene), rej)));
+  workerP.then(sc => { try {
+    const w = SkeletonUtils.clone(sc), bones = {};
+    w.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } if (o.isBone) bones[o.name] = o; });
+    if (!bones.upperarm_l || !bones.upperarm_r) return;
+    p.children.forEach(ch => { if (ch !== p.userData.harness) ch.visible = false; }); p.userData.harness.children.forEach(ch => ch.visible = false);
+    p.add(w);
+    const ua = [bones.upperarm_l, bones.upperarm_r], fa = [bones.forearm_l, bones.forearm_r].filter(Boolean);
+    p.userData.rig = { ua, fa, rest: new Map([...ua, ...fa].map(b => [b, b.quaternion.clone()])) };
+  } catch (e) { console.warn('operador realista', e); } }, () => { });
+}
+const AX = new THREE.Vector3(1, 0, 0), AZ = new THREE.Vector3(0, 0, 1), rqA = new THREE.Quaternion(), rqB = new THREE.Quaternion(), rqC = new THREE.Quaternion(), rvA = new THREE.Vector3();
+function boneRot(p, b, rest, rots) {
+  b.quaternion.copy(rest); p.getWorldQuaternion(rqA); b.parent.updateWorldMatrix(true, false); b.parent.getWorldQuaternion(rqB).invert();
+  for (const [ax, ang] of rots) { rvA.copy(ax).applyQuaternion(rqA).applyQuaternion(rqB); b.quaternion.premultiply(rqC.setFromAxisAngle(rvA, ang)); }
+}
+function poseRig(p, rig, wa, tt) {
+  rig.ua.forEach((b, i) => { const sg = i === 0 ? 1 : -1; boneRot(p, b, rig.rest.get(b), [[AZ, -sg * 0.45 * (1 - wa)], [AX, -2.45 * wa + Math.sin(tt * 9 + i * 3.1) * 0.22 * wa]]); });
+  rig.fa.forEach((b, i) => boneRot(p, b, rig.rest.get(b), [[AX, -0.15 - 0.55 * wa + Math.sin(tt * 9 + i * 3.1 + 1) * 0.3 * wa]]));
 }
 function buildMachine() {
   const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
@@ -483,6 +507,7 @@ function poseMachine(R, s) {
   const py = lerp(0.14, 0.055, s.pothole); R.ph[0].position.y = py; R.ph[1].position.y = py;
   R.gate.rotation.y = s.gateOpen ? -1.9 : 0;
   const wa = s.wa || 0, tt = performance.now() / 1000; for (const pr of [R.op, R.helper]) { pr.userData.arms.forEach((a, i) => { a.rotation.x = lerp(-0.9, -2.5, wa) + Math.sin(tt * 9 + i * 3.1) * 0.3 * wa; a.position.y = lerp(1.12, 1.42, wa) + Math.sin(tt * 9 + i * 3.1) * 0.04 * wa; }); pr.position.y = 0.03 + Math.abs(Math.sin(tt * 4.5)) * 0.015 * wa; }
+  if (R.op.userData.rig) poseRig(R.op, R.op.userData.rig, wa, tt);
   R.op.rotation.y = lerp(R.op.rotation.y, wa > 0.05 ? (s.faceY || 0) : 0, 0.12); R.helper.rotation.y = lerp(R.helper.rotation.y, wa > 0.05 ? (s.faceY || 0) : 0.5, 0.12);
   R.lan.visible = s.harness; R.op.userData.harness.visible = s.harness;
   R.beacon.material = (s.moving && Math.floor(s.blink * 4) % 2 === 0) ? M.amberOn : M.lampOff;
