@@ -191,7 +191,7 @@ kbd{font-family:var(--body);font-weight:600;font-size:12.5px;background:#2e372d;
   <div id="menu">
     <div class="col">
       <div class="brand"><svg viewBox="485 485 1030 1030" aria-hidden="true"><g fill="none" stroke="#6C8845" stroke-width="115"><polygon points="718,543 1282,543 1457,718 1457,1282 1282,1457 718,1457 543,1282 543,718"/><path d="M1049,543 543,1049M1457,951 951,1457M1255,746 746,1255"/></g></svg><div><b>LABORA</b><small>Engenharia e SST</small></div></div>
-      <div><div class="kicker">Simulador de treinamento · NR-18 · NR-35 · IPAF</div>
+      <div><div class="kicker">Simulador de treinamento · NR-18 · NR-35</div>
         <h1>Operador <span>PEMT</span></h1></div>
       <div class="stripe"></div>
       <p class="note" style="font-size:15px;color:var(--fg)">Opere uma plataforma elevatória tipo tesoura com as regras do manual do fabricante: checklist antes do turno, piso nivelado, carga, talabarte e limite de vento de 12,5 m/s.</p>
@@ -392,9 +392,17 @@ function boneRot(p, b, rest, rots) {
   b.quaternion.copy(rest); p.getWorldQuaternion(rqA); b.parent.updateWorldMatrix(true, false); b.parent.getWorldQuaternion(rqB).invert();
   for (const [ax, ang] of rots) { rvA.copy(ax).applyQuaternion(rqA).applyQuaternion(rqB); b.quaternion.premultiply(rqC.setFromAxisAngle(rvA, ang)); }
 }
+const AY = new THREE.Vector3(0, 1, 0);
 function poseRig(p, rig, wa, tt) {
-  rig.ua.forEach((b, i) => { const sg = i === 0 ? 1 : -1; boneRot(p, b, rig.rest.get(b), [[AZ, -sg * 0.45 * (1 - wa)], [AX, -2.45 * wa + Math.sin(tt * 9 + i * 3.1) * 0.22 * wa]]); });
-  rig.fa.forEach((b, i) => boneRot(p, b, rig.rest.get(b), [[AX, -0.15 - 0.55 * wa + Math.sin(tt * 9 + i * 3.1 + 1) * 0.3 * wa]]));
+  // parado: mãos na caixa de comando (à frente e à direita do operador); a mão direita acompanha o joystick
+  const joy = clamp(I.drive * 0.12 + I.lift * 0.08, -0.15, 0.15), breath = Math.sin(tt * 1.6) * 0.02, w = Math.sin(tt * 3.2);
+  rig.ua.forEach((b, i) => {
+    const sg = i === 0 ? 1 : -1;
+    const idle = { low: 0.5, fwd: -0.36 + breath + (i === 1 ? joy : 0), yaw: -0.28 };
+    const work = { low: 0.32, fwd: -1.3 + w * 0.09 * (i === 0 ? 1 : -1), yaw: -0.1 * sg };
+    boneRot(p, b, rig.rest.get(b), [[AZ, -sg * lerp(idle.low, work.low, wa)], [AX, lerp(idle.fwd, work.fwd, wa)], [AY, lerp(idle.yaw, work.yaw, wa)]]);
+  });
+  rig.fa.forEach((b, i) => boneRot(p, b, rig.rest.get(b), [[AX, lerp(-1.28 + (i === 1 ? joy * 0.6 : 0), -0.85 + Math.sin(tt * 3.2 + i * 2) * 0.18, wa)]]));
 }
 function buildMachine() {
   const root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
@@ -624,19 +632,19 @@ function skyline(n, rad, y = 0) { for (let i = 0; i < n; i++) { const a = i / n 
 
 /* ───────── FASE 1: galpão ───────── */
 const ITEMS = [
-  { k: 'docs', n: 'Documentação', ok: 'O manual do operador está na caixa da plataforma e o número de série confere com a placa. A etiqueta de inspeção periódica vence daqui a 5 meses.', def: 'O manual está na caixa, mas a etiqueta de inspeção periódica venceu há 3 meses.', ref: 'IPAF itens 1 e 2: inspeção periódica em dia e manual do fabricante na máquina.' },
-  { k: 'pneus', n: 'Rodas e pneus', ok: 'Os quatro pneus maciços estão íntegros, sem cortes, e as porcas estão apertadas.', def: 'O pneu dianteiro esquerdo tem um corte fundo na lateral e está achatado.', ref: 'IPAF itens 4 a 6: sem cortes, rachaduras ou aros danificados.', fx: 'tire' },
-  { k: 'bateria', n: 'Baterias', ok: 'Terminais limpos e apertados, nível de eletrólito correto e plugue do carregador em bom estado.', def: 'Um dos cabos está solto e o terminal tem crosta de corrosão esverdeada.', ref: 'IPAF item 9: eletrólito, conexões, terminais e plugue.' },
-  { k: 'hidraulico', n: 'Sistema hidráulico', ok: 'O nível de óleo está na marca e o piso embaixo da máquina está seco.', def: 'Há uma poça de óleo no piso, embaixo do chassi, e o nível do reservatório está abaixo da marca.', ref: 'IPAF itens 10 e 11. Não opere com vazamento: o jato de óleo sob pressão perfura a pele.', fx: 'puddle' },
-  { k: 'mangueiras', n: 'Mangueiras e cabos', ok: 'Mangueiras e cabos presos nas abraçadeiras, sem cortes nem ressecamento.', def: 'A mangueira do cilindro está ressecada e tem uma fissura perto da conexão.', ref: 'IPAF itens 12 e 13: sem cortes, fissuras ou imperfeições.' },
-  { k: 'tesoura', n: 'Estrutura da tesoura', ok: 'Braços alinhados, soldas sem trincas, todos os pinos com seus retentores.', def: 'Um pino de articulação está sem o anel retentor e já saiu alguns milímetros do lugar.', ref: 'IPAF itens 17 a 19: sem trincas de solda, pinos e retentores no lugar.' },
-  { k: 'guarda', n: 'Guarda-corpo e portão', ok: 'Guarda-corpos firmes e aparafusados. O portão fecha sozinho e trava.', def: 'O portão de entrada não fecha: a trava está quebrada e ele fica aberto.', ref: 'IPAF item 22. O portão deve estar fechado antes de operar.', fx: 'gate' },
-  { k: 'ancoragem', n: 'Pontos de ancoragem', ok: 'Os dois olhais de ancoragem do talabarte estão firmes, sem trincas nem deformação.', def: null, ref: 'IPAF item 23: pontos de fixação do cinto e talabarte.' },
-  { k: 'decalques', n: 'Decalques e placa de carga', ok: 'A placa mostra capacidade de 227 kg, 2 pessoas e vento máximo de 12,5 m/s. Todos os decalques estão legíveis.', def: 'O decalque de capacidade e vento máximo foi arrancado deste lado da máquina.', ref: 'IPAF itens 26 a 28: carga, vento máximo e número de pessoas legíveis.', fx: 'decal' },
-  { k: 'protetor', n: 'Protetor de buraco', ok: 'As barras do protetor estão retas e livres para descer.', def: 'A barra do protetor de buraco está empenada e presa: não vai descer quando a plataforma subir.', ref: 'IPAF item 39. Sem o protetor, a máquina não pode andar elevada.' },
+  { k: 'docs', n: 'Documentação', ok: 'O manual do operador está na caixa da plataforma e o número de série confere com a placa. A etiqueta de inspeção periódica vence daqui a 5 meses.', def: 'O manual está na caixa, mas a etiqueta de inspeção periódica venceu há 3 meses.', ref: 'Checklist pré-uso, itens 1 e 2: inspeção periódica em dia e manual do fabricante na máquina.' },
+  { k: 'pneus', n: 'Rodas e pneus', ok: 'Os quatro pneus maciços estão íntegros, sem cortes, e as porcas estão apertadas.', def: 'O pneu dianteiro esquerdo tem um corte fundo na lateral e está achatado.', ref: 'Checklist pré-uso, itens 4 a 6: sem cortes, rachaduras ou aros danificados.', fx: 'tire' },
+  { k: 'bateria', n: 'Baterias', ok: 'Terminais limpos e apertados, nível de eletrólito correto e plugue do carregador em bom estado.', def: 'Um dos cabos está solto e o terminal tem crosta de corrosão esverdeada.', ref: 'Checklist pré-uso, item 9: eletrólito, conexões, terminais e plugue.' },
+  { k: 'hidraulico', n: 'Sistema hidráulico', ok: 'O nível de óleo está na marca e o piso embaixo da máquina está seco.', def: 'Há uma poça de óleo no piso, embaixo do chassi, e o nível do reservatório está abaixo da marca.', ref: 'Checklist pré-uso, itens 10 e 11. Não opere com vazamento: o jato de óleo sob pressão perfura a pele.', fx: 'puddle' },
+  { k: 'mangueiras', n: 'Mangueiras e cabos', ok: 'Mangueiras e cabos presos nas abraçadeiras, sem cortes nem ressecamento.', def: 'A mangueira do cilindro está ressecada e tem uma fissura perto da conexão.', ref: 'Checklist pré-uso, itens 12 e 13: sem cortes, fissuras ou imperfeições.' },
+  { k: 'tesoura', n: 'Estrutura da tesoura', ok: 'Braços alinhados, soldas sem trincas, todos os pinos com seus retentores.', def: 'Um pino de articulação está sem o anel retentor e já saiu alguns milímetros do lugar.', ref: 'Checklist pré-uso, itens 17 a 19: sem trincas de solda, pinos e retentores no lugar.' },
+  { k: 'guarda', n: 'Guarda-corpo e portão', ok: 'Guarda-corpos firmes e aparafusados. O portão fecha sozinho e trava.', def: 'O portão de entrada não fecha: a trava está quebrada e ele fica aberto.', ref: 'Checklist pré-uso, item 22. O portão deve estar fechado antes de operar.', fx: 'gate' },
+  { k: 'ancoragem', n: 'Pontos de ancoragem', ok: 'Os dois olhais de ancoragem do talabarte estão firmes, sem trincas nem deformação.', def: null, ref: 'Checklist pré-uso, item 23: pontos de fixação do cinto e talabarte.' },
+  { k: 'decalques', n: 'Decalques e placa de carga', ok: 'A placa mostra capacidade de 227 kg, 2 pessoas e vento máximo de 12,5 m/s. Todos os decalques estão legíveis.', def: 'O decalque de capacidade e vento máximo foi arrancado deste lado da máquina.', ref: 'Checklist pré-uso, itens 26 a 28: carga, vento máximo e número de pessoas legíveis.', fx: 'decal' },
+  { k: 'protetor', n: 'Protetor de buraco', ok: 'As barras do protetor estão retas e livres para descer.', def: 'A barra do protetor de buraco está empenada e presa: não vai descer quando a plataforma subir.', ref: 'Checklist pré-uso, item 39. Sem o protetor, a máquina não pode andar elevada.' },
   { k: 'bandejas', n: 'Bandejas do chassi', ok: 'As duas bandejas estão fechadas e travadas.', def: 'A bandeja lateral está destravada e entreaberta.', ref: 'Manual: bandejas fechadas e travadas antes de elevar ou andar. As baterias fazem parte do contrapeso.', fx: 'tray' },
-  { k: 'piso', n: 'Piso da plataforma', ok: 'Piso limpo e seco, sem ferramentas soltas.', def: 'Há restos de madeira, uma caixa solta e uma mancha de óleo no piso da plataforma.', ref: 'IPAF item 24: plataforma livre de lixo, detritos e obstruções.', fx: 'debris' },
-  { k: 'solo', n: 'Comando de solo', ok: 'Chave de três posições, botão de emergência e manopla de descida de emergência presentes e identificados. O funcionamento será conferido nos testes de função.', def: null, ref: 'IPAF itens 29 a 31: parada e descida de emergência totalmente funcionais.' },
+  { k: 'piso', n: 'Piso da plataforma', ok: 'Piso limpo e seco, sem ferramentas soltas.', def: 'Há restos de madeira, uma caixa solta e uma mancha de óleo no piso da plataforma.', ref: 'Checklist pré-uso, item 24: plataforma livre de lixo, detritos e obstruções.', fx: 'debris' },
+  { k: 'solo', n: 'Comando de solo', ok: 'Chave de três posições, botão de emergência e manopla de descida de emergência presentes e identificados. O funcionamento será conferido nos testes de função.', def: null, ref: 'Checklist pré-uso, itens 29 a 31: parada e descida de emergência totalmente funcionais.' },
 ];
 function applyDefects(set) { MR.wheels[0].spin.scale.set(1, set.has('pneus') ? 0.8 : 1, 1); MR.puddle.visible = set.has('hidraulico'); S.gateOpen = set.has('guarda'); MR.decal.visible = !set.has('decalques'); MR.trayL.rotation.z = set.has('bandejas') ? -0.5 : 0; MR.debris.visible = set.has('piso'); }
 function buildL1() {
@@ -826,7 +834,7 @@ const APRS = {
     { r: 'Sobrecarga da plataforma', o: ['Somar pessoas, ferramentas e material e ficar abaixo de 227 kg', 'Carregar tudo: o sensor avisa se passar', 'Subir três pessoas para o serviço render'], w: 'O sensor é a última barreira, não o planejamento. Máximo de 2 pessoas.' },
     { r: 'Queda de materiais sobre quem passa embaixo', o: ['Isolar a área abaixo com cones e fita', 'Avisar gritando quando alguém passar', 'Não é preciso: o serviço é rápido'], w: 'A área sob a plataforma deve estar isolada e sinalizada.' },
     FALL,
-    { r: 'Pane com a plataforma elevada', o: ['Plano de resgate e pessoa no solo treinada na descida de emergência', 'Passar da plataforma para a janela do prédio', 'Descer pela tesoura'], w: 'NR-35 e IPAF: plano de resgate e pessoa de resgate no solo identificada.' }],
+    { r: 'Pane com a plataforma elevada', o: ['Plano de resgate e pessoa no solo treinada na descida de emergência', 'Passar da plataforma para a janela do prédio', 'Descer pela tesoura'], w: 'NR-35: plano de resgate e pessoa de resgate no solo identificada.' }],
 };
 function apr(next) {
   const list = APRS[G.level]; G.mode = 'paused';
@@ -872,7 +880,7 @@ function result1(blocked) {
   const real = G.defects; let rows = '';
   G.spots.forEach(s => { const isDef = real.has(s.k), right = isDef === s.mark; if (isDef && !s.mark) penalty('Defeito não encontrado: ' + s.n, s.ref, 12); if (!isDef && s.mark) penalty('Marcou defeito em item conforme: ' + s.n, 'Leia a descrição com atenção antes de reprovar um item.', 4); rows += `<tr><td>${s.n}</td><td>${s.mark ? 'Defeito' : 'Conforme'}</td><td class="${isDef ? 'tag-bad' : 'tag-ok'}">${isDef ? 'Defeito' : 'Conforme'}</td><td class="${right ? 'tag-ok' : 'tag-bad'}">${right ? '✓' : '✕'}</td></tr>`; });
   let verdict;
-  if (real.size && !blocked) { penalty('Liberou uma máquina com defeito', 'IPAF: se houver falha que afete o uso seguro, isole a máquina, retire a chave, etiquete e avise o supervisor.', 25); verdict = 'A máquina tinha defeito e não podia ser liberada.'; }
+  if (real.size && !blocked) { penalty('Liberou uma máquina com defeito', 'Boa prática: se houver falha que afete o uso seguro, isole a máquina, retire a chave, etiquete e avise o supervisor.', 25); verdict = 'A máquina tinha defeito e não podia ser liberada.'; }
   else if (!real.size && blocked) { penalty('Bloqueou uma máquina sem defeito', 'Bloquear por engano é o erro mais seguro, mas para o serviço sem necessidade.', 6); verdict = 'A máquina estava em condições de uso.'; }
   else verdict = real.size ? 'Decisão correta: máquina com defeito não opera.' : 'Decisão correta: a máquina estava em ordem.';
   G.spots = []; $('#spots').innerHTML = ''; $('#objb').hidden = true; G.obj = 2; drawObjs();
@@ -1039,7 +1047,7 @@ function updateCamera(dt) {
   if (G.mode === 'menu') { G.camYaw += dt * 0.12; G.camPitch = 0.22; G.camDist = 6.5; }
   const site = G.stage === 'site' && G.level === 2;
   const floorH = SPEC.floor0 + S.rise; const tx = site ? 0 : S.x, ty = site ? 1 : S.y + (G.stage === 'inspect' || G.mode === 'menu' ? 1.0 : Math.max(1.2, floorH * 0.85 + 0.3)), tz = site ? -8 : S.z;
-  camT.lerp(tmpV.set(tx, ty, tz), Math.min(1, dt * 5));
+  camT.lerp(tmpV.set(tx, ty, tz), Math.min(1, dt * 5)); if (G.debugCam) camT.copy(G.debugCam);
   if (G.fp && (G.stage === 'drive' || G.stage === 'tests')) { MR.pf.getWorldPosition(tmpV); const a = S.yaw + G.camYaw; camera.position.set(tmpV.x + Math.sin(S.yaw) * 0.3, tmpV.y + 1.65, tmpV.z + Math.cos(S.yaw) * 0.3); camera.lookAt(camera.position.x + Math.sin(a) * 5, camera.position.y - 5 * Math.tan(G.camPitch - 0.15), camera.position.z + Math.cos(a) * 5); MR.op.visible = false; }
   else { MR.op.visible = true; const a = (site || G.stage === 'inspect' || G.mode === 'menu' ? 0 : S.yaw) + Math.PI + G.camYaw, cp = Math.cos(G.camPitch), d = G.camDist + (G.stage === 'drive' || G.stage === 'tests' ? S.rise * 0.7 : 0);
     let cx = camT.x + Math.sin(a) * cp * d, cy = camT.y + Math.sin(G.camPitch) * d, cz = camT.z + Math.cos(a) * cp * d;
