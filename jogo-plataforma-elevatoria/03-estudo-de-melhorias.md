@@ -48,3 +48,10 @@ Revisão do simulador Operador PEMT (Labora), versão com treino de comandos e 3
 - Falha de máquina no meio do serviço, com resgate pelo comando de solo.
 - Modelos 3D mais detalhados.
 - Controles de toque para tablet.
+
+## 6. Atualização do gráfico
+
+- Luz de ambiente fotográfica (HDRI do Poly Haven, licença CC0) nas três fases.
+- Mapas de relevo gerados a partir das texturas (asfalto, piso, parede metálica, muro, lama, grama, caixote).
+- Modelos 3D gerados no Higgsfield e reduzidos para o jogo: contêiner, árvore, cone, palete com caixas, estante, empilhadeira e caminhonete. Se um modelo não carregar, o jogo usa a forma simples antiga.
+- A máquina e o operador continuam modelados por código, porque precisam de peças móveis.
