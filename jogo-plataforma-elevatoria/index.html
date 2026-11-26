@@ -637,7 +637,7 @@ function buildL2() {
   seg(-30, -3.6); seg(-0.4, 5); seg(9, 30);
   const curb = (x, z0, z1, top) => { const len = z0 - z1; const m = box(0.25, 0.35, Math.hypot(len, top), M.hazard, x, top / 2 + 0.17, (z0 + z1) / 2, world); m.rotation.x = Math.atan2(top, len); obs.b.push({ x0: x - 0.25, x1: x + 0.25, z0: z1, z1: z0 }); };
   curb(4.9, -2.5, -8, 1.2); curb(9.1, -2.5, -8, 1.2); curb(-3.7, -4.6, -8, 1.2); curb(-0.3, -4.6, -8, 1.2);
-  sign(['RAMPA 22%', 'SÓ RECOLHIDA'], 10.2, 1.4, -1.6, -0.3); sign(['RAMPA 35%'], -4.6, 1.4, -3.8, 0.3, 1.3, 0.6, '#d9281c', '#ffffff');
+  sign(['22%'], 10.2, 1.4, -1.6, -0.3, 1.3, 0.6); sign(['35%'], -4.6, 1.4, -3.8, 0.3, 1.3, 0.6);
   // galpão no platô, com refletor (ponto de trabalho 1)
   box(12, 6.5, 8, new THREE.MeshStandardMaterial({ map: T.metalWall, normalMap: T.metalN, normalScale: new THREE.Vector2(0.7, 0.7), metalness: 0.45, roughness: 0.55 }), 12, 1.2 + 3.25, -21, world); box(12.6, 0.3, 8.6, M.dark, 12, 7.85, -21, world);
   obs.b.push({ x0: 5.6, x1: 18.4, z0: -25.4, z1: -16.6 });
@@ -664,8 +664,8 @@ function buildL2() {
 }
 const SITE = [
   { n: 'Buraco no asfalto', p: [6.6, 0.6, 2.5], risk: true, d: 'Um buraco de quase 2 m de largura no caminho da rampa. Os cones estão caídos ao redor.', ref: 'Buracos e desníveis são a principal causa de tombamento. Desvie sempre, mesmo com a plataforma recolhida.' },
-  { n: 'Rampa curta de 35%', p: [-2, 1.4, -6.2], risk: true, d: 'Uma rampa curta e íngreme logo à frente, com placa de 35%.', ref: 'A tesoura sobe até 25% (14°), recolhida. Esta rampa passa do limite.' },
-  { n: 'Rampa longa de 22%', p: [7, 1.4, -5.2], risk: false, d: 'Rampa de concreto com guias laterais e placa de 22%, só para máquina recolhida.', ref: 'Dentro do limite de 25% da máquina. É o acesso correto, desde que com a plataforma recolhida.' },
+  { n: 'Rampa curta de 35%', p: [-2, 1.4, -6.2], risk: true, d: 'Uma rampa curta e íngreme logo à frente. A placa indica 35% de inclinação.', ref: 'A tesoura sobe até 25% (14°), recolhida. Esta rampa passa do limite.' },
+  { n: 'Rampa longa de 22%', p: [7, 1.4, -5.2], risk: false, d: 'Rampa de concreto com guias laterais. A placa indica 22% de inclinação.', ref: 'Dentro do limite de 25% da máquina. É o acesso correto, desde que com a plataforma recolhida.' },
   { n: 'Solo de terra molhada', p: [-0.5, 1.8, -13.5], risk: true, d: 'Uma mancha de terra mole e úmida no meio do platô, entre os dois pontos de trabalho.', ref: 'Piso instável: as rodas afundam de forma desigual e a máquina inclina. Nunca eleve sobre solo mole.' },
   { n: 'Rede elétrica aérea', p: [-12, 9, -12], risk: true, d: 'Três cabos de 13,8 kV passam a cerca de 4 m do poste da luminária.', ref: 'Distância mínima de 3,05 m. Posicione a máquina do lado oposto à rede.' },
   { n: 'Pedestre circulando', p: [-2, 3.2, -11], risk: true, d: 'Uma pessoa sem relação com o serviço anda pela área de manobra.', ref: 'Isole a área. Com gente por perto: pare e use a buzina.' },
